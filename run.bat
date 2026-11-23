@@ -1,11 +1,11 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 title Enterprise Financial Consolidation Portal
 cd /d "%~dp0"
 
 echo ============================================================
 echo    ENTERPRISE FINANCIAL CONSOLIDATION PORTAL (Ind AS 110)
-echo    Built on LangGraph & Google Gemini | 100%% Formula Provenance
+echo    Built on LangGraph and Google Gemini - 100%% Formulas
 echo ============================================================
 echo.
 
@@ -20,17 +20,17 @@ if exist "%~dp0.venv\Scripts\python.exe" (
 )
 
 echo [OK] Python Engine: %PY_EXE%
-echo [OK] Opening browser at: http://127.0.0.1:8000
+echo [OK] Launching Portal: http://127.0.0.1:8000
 echo.
 
-:: Automatically open default browser after 2 seconds
-start /b cmd /c "timeout /t 2 /nobreak >nul && start http://127.0.0.1:8000"
+:: Launch browser in background after 2 seconds via PowerShell
+start "" powershell -windowstyle hidden -command "Start-Sleep -Seconds 2; Start-Process 'http://127.0.0.1:8000'"
 
-:: Launch Web Portal
+:: Launch Web Server
 "%PY_EXE%" run_portal.py
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
-    echo [ERROR] Application exited with error code %ERRORLEVEL%.
+    echo [ERROR] Application exited with code %ERRORLEVEL%.
     pause
 )
