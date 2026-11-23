@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class RawTBRow(BaseModel):
     """Raw input row from an entity Trial Balance submission."""
     account_code: str
-    account_description: str
+    account_description: str = ""
     debit: Optional[float] = None
     credit: Optional[float] = None
     amount: Optional[float] = None  # Signed amount if single-column format

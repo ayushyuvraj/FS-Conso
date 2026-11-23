@@ -4,14 +4,41 @@ Extracts real master data from Conso.xlsx and constructs the 4-entity conglomera
 """
 
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 import openpyxl
 import pandas as pd
 
+from fs_conso.core.file_parser import FlexibleTBParser
 from fs_conso.models.coa import AccountClassification, ChartOfAccounts, COAItem, RollUpOperator
 from fs_conso.models.entity import EntityHierarchy, LegalEntity
 from fs_conso.models.fx import FXRateEntry, FXRateTable
 from fs_conso.models.trial_balance import RawTBRow, RawTrialBalance
+
+# Expose TrialBalanceLoader for multi-format file ingestion
+TrialBalanceLoader = FlexibleTBParser
+
+
+def load_trial_balance(
+    file_path_or_bytes: Union[Path, str, bytes],
+    entity_code: str,
+    period: str = "31-Mar-2024",
+    currency: str = "INR",
+    filename: Optional[str] = None,
+    sheet_name: Optional[str] = None,
+    duplicate_policy: str = "keep"
+) -> RawTrialBalance:
+    """Loads and parses raw trial balance from any Excel or CSV file."""
+    fname = filename or (str(file_path_or_bytes) if isinstance(file_path_or_bytes, (str, Path)) else "upload.xlsx")
+    return FlexibleTBParser.parse_file(
+        file_path_or_bytes=file_path_or_bytes,
+        filename=fname,
+        entity_code=entity_code,
+        period=period,
+        currency=currency,
+        sheet_name=sheet_name,
+        duplicate_policy=duplicate_policy
+    )
+
 
 class ConsoMasterLoader:
     """Extracts master data from the reference Conso.xlsx file."""

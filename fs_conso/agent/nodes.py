@@ -25,6 +25,10 @@ def _log_event(state: ConsolidationState, stage: str, agent: str, action: str, s
 
 def validator_node(state: ConsolidationState) -> ConsolidationState:
     """Validator Agent: Enforces debit=credit equality, blank!=zero, period checks."""
+    # Reset blocked flags for new pipeline invocation
+    state.is_blocked = False
+    state.error_message = None
+
     # Mandatory API Key check gate
     if not config.validate_api_key_strict():
         state.is_blocked = True

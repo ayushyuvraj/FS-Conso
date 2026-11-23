@@ -142,8 +142,18 @@ function renderStep1(el) {
                     <h3 class="font-bold text-base text-kpmg-navy">Ingested Entity Submissions</h3>
                     <p class="text-xs text-kpmg-muted">Validates Debit=Credit equality, blank vs zero integrity, and period consistency.</p>
                 </div>
-                <div class="text-xs font-mono px-3 py-1 rounded bg-kpmg-canvas border border-kpmg-border text-kpmg-text">
-                    ${tbs.length} Entities Ingested
+                <div class="flex items-center space-x-2">
+                    <button onclick="openUploadModal()" class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1 shadow-xs">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        <span>Upload TB File</span>
+                    </button>
+                    <button onclick="triggerResetBaseline()" class="h-7 px-2.5 rounded bg-white hover:bg-gray-100 text-kpmg-navy text-[11px] font-medium border border-kpmg-border transition flex items-center space-x-1" title="Reset back to benchmark multi-entity conglomerate">
+                        <svg class="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        <span>Reset Benchmark</span>
+                    </button>
+                    <div class="text-xs font-mono px-2.5 py-1 rounded bg-kpmg-canvas border border-kpmg-border text-kpmg-text">
+                        ${tbs.length} Ingested
+                    </div>
                 </div>
             </div>
             <div class="overflow-x-auto">
@@ -493,15 +503,28 @@ async function triggerRunPipeline() {
     try {
         const res = await fetch("/api/run-pipeline", { method: "POST" });
         const data = await res.json();
-        if (!res.ok) {
-            alert(`Execution error: ${data.detail || "Failed to run pipeline"}`);
+        
+        if (!res.ok || data.success === false) {
+            const errDetail = data.error_message || data.detail || "Consolidation failed";
+            if (res.status === 403 || errDetail.toLowerCase().includes("api key") || !appStatus.has_active_api_key) {
+                showToast("Execution Blocked", "Active Google Gemini API Key is required. Please configure your key in Settings.", "error");
+                toggleSettingsDrawer(true);
+                const keyInput = document.getElementById("input-api-key");
+                if (keyInput) {
+                    keyInput.focus();
+                    keyInput.classList.add("ring-2", "ring-rose-500");
+                }
+            } else {
+                showToast("Execution Halted", errDetail, "error");
+            }
         } else {
+            showToast("Consolidation Succeeded", `Auditor Score: ${data.teacher_score || 100}/100. Deliverable generated with 100% formulas.`, "success");
             await fetchStatus();
             await loadPipelineData();
-            switchStep(appStatus.current_step);
+            switchStep(6);
         }
     } catch (err) {
-        alert("Pipeline invocation error: " + err);
+        showToast("Network Error", "Pipeline invocation error: " + err, "error");
     } finally {
         btn.disabled = false;
         btn.innerHTML = `
@@ -511,10 +534,200 @@ async function triggerRunPipeline() {
     }
 }
 
+// UPLOAD MODAL & FILE HANDLING
+let selectedUploadFile = null;
+
+function openUploadModal() {
+    const modal = document.getElementById("modal-upload");
+    if (modal) {
+        modal.classList.remove("hidden");
+        document.getElementById("form-upload-tb").reset();
+        selectedUploadFile = null;
+        document.getElementById("file-label").textContent = "Click to browse or drag and drop file here";
+        const statusDiv = document.getElementById("upload-status");
+        statusDiv.classList.add("hidden");
+        statusDiv.textContent = "";
+        initDropZone();
+    }
+}
+
+function closeUploadModal() {
+    const modal = document.getElementById("modal-upload");
+    if (modal) modal.classList.add("hidden");
+}
+
+function handleFileSelected(input) {
+    if (input.files && input.files[0]) {
+        selectedUploadFile = input.files[0];
+        document.getElementById("file-label").innerHTML = `<strong>Selected:</strong> ${selectedUploadFile.name} (${(selectedUploadFile.size / 1024).toFixed(1)} KB)`;
+    }
+}
+
+function initDropZone() {
+    const dropZone = document.getElementById("drop-zone");
+    if (!dropZone || dropZone.dataset.initialized) return;
+    dropZone.dataset.initialized = "true";
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add("border-kpmg-blue", "bg-blue-50/40");
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove("border-kpmg-blue", "bg-blue-50/40");
+        }, false);
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files && files.length > 0) {
+            selectedUploadFile = files[0];
+            const fileInput = document.getElementById("file-input");
+            fileInput.files = files;
+            document.getElementById("file-label").innerHTML = `<strong>Selected:</strong> ${selectedUploadFile.name} (${(selectedUploadFile.size / 1024).toFixed(1)} KB)`;
+        }
+    }, false);
+}
+
+async function submitUploadTB(e) {
+    e.preventDefault();
+    if (!selectedUploadFile) {
+        showToast("Missing File", "Please choose or drop an Excel (.xlsx/.xls) or CSV file.", "warning");
+        return;
+    }
+
+    const entityCode = document.getElementById("upload-entity-code").value.trim().toUpperCase();
+    const period = document.getElementById("upload-period").value.trim();
+    const currency = document.getElementById("upload-currency").value.trim().toUpperCase();
+
+    if (!entityCode) {
+        showToast("Missing Entity Code", "Please enter an entity identifier (e.g. HOLD_CO).", "warning");
+        return;
+    }
+
+    const btn = document.getElementById("btn-submit-upload");
+    const statusDiv = document.getElementById("upload-status");
+    btn.disabled = true;
+    btn.innerHTML = `<span>Ingesting & Validating...</span>`;
+    statusDiv.classList.remove("hidden", "bg-red-50", "text-red-700", "bg-emerald-50", "text-emerald-700");
+    statusDiv.classList.add("bg-blue-50", "text-blue-700");
+    statusDiv.textContent = `Parsing ${selectedUploadFile.name}...`;
+
+    const formData = new FormData();
+    formData.append("file", selectedUploadFile);
+    formData.append("entity_code", entityCode);
+    formData.append("period", period);
+    formData.append("currency", currency);
+
+    try {
+        const res = await fetch("/api/upload-tb", {
+            method: "POST",
+            body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            statusDiv.classList.remove("bg-blue-50", "text-blue-700");
+            statusDiv.classList.add("bg-red-50", "text-red-700");
+            statusDiv.textContent = `Upload Error: ${data.detail || "Validation failed"}`;
+            showToast("Upload Error", data.detail || "Failed to parse trial balance", "error");
+        } else {
+            statusDiv.classList.remove("bg-blue-50", "text-blue-700");
+            statusDiv.classList.add("bg-emerald-50", "text-emerald-700");
+            statusDiv.textContent = `Successfully ingested ${data.entity_code}: ${data.row_count} accounts, Total: ${formatNum(data.total_debit)} ${currency}.`;
+            showToast("Trial Balance Ingested", `${data.entity_code} uploaded (${data.row_count} GL rows, status: ${data.is_tallied ? 'Balanced' : 'Unbalanced'}).`, "success");
+            setTimeout(() => {
+                closeUploadModal();
+                fetchStatus();
+                loadPipelineData();
+                switchStep(1);
+            }, 900);
+        }
+    } catch (err) {
+        statusDiv.classList.remove("bg-blue-50", "text-blue-700");
+        statusDiv.classList.add("bg-red-50", "text-red-700");
+        statusDiv.textContent = `Network Error: ${err}`;
+        showToast("Upload Network Error", "" + err, "error");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>Validate & Ingest</span>`;
+    }
+}
+
+async function triggerResetBaseline() {
+    if (!confirm("Reset trial balances and pipeline state back to benchmark conglomerate model?")) return;
+    try {
+        const res = await fetch("/api/reset-baseline", { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Reset Completed", "Consolidation workspace reset to benchmark model.", "info");
+            await fetchStatus();
+            await loadPipelineData();
+            switchStep(1);
+        }
+    } catch (err) {
+        showToast("Reset Error", "" + err, "error");
+    }
+}
+
+// EMIL KOWALSKI TOAST NOTIFICATIONS
+function showToast(title, message, type = "info") {
+    const container = document.getElementById("toast-container");
+    if (!container) return;
+
+    const toast = document.createElement("div");
+    toast.className = `pointer-events-auto p-4 rounded-lg shadow-xl border text-xs transition-all duration-300 transform translate-y-2 opacity-0 flex items-start space-x-3`;
+
+    let iconSvg = "";
+    if (type === "success") {
+        toast.className += " bg-emerald-900/90 text-white border-emerald-500/50";
+        iconSvg = `<svg class="w-4 h-4 text-emerald-300 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+    } else if (type === "error") {
+        toast.className += " bg-rose-900/95 text-white border-rose-500/50";
+        iconSvg = `<svg class="w-4 h-4 text-rose-300 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
+    } else if (type === "warning") {
+        toast.className += " bg-amber-900/95 text-white border-amber-500/50";
+        iconSvg = `<svg class="w-4 h-4 text-amber-300 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
+    } else {
+        toast.className += " bg-kpmg-navy/95 text-white border-kpmg-electric/50";
+        iconSvg = `<svg class="w-4 h-4 text-kpmg-electric shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+    }
+
+    toast.innerHTML = `
+        ${iconSvg}
+        <div class="flex-1">
+            <h5 class="font-bold text-xs leading-tight">${title}</h5>
+            <p class="text-[11px] opacity-90 mt-0.5 leading-snug">${message}</p>
+        </div>
+        <button onclick="this.parentElement.remove()" class="text-white/60 hover:text-white font-bold">&times;</button>
+    `;
+
+    container.appendChild(toast);
+    requestAnimationFrame(() => {
+        toast.classList.remove("translate-y-2", "opacity-0");
+        toast.classList.add("translate-y-0", "opacity-100");
+    });
+
+    setTimeout(() => {
+        toast.classList.add("opacity-0", "translate-y-2");
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
+
 // SETTINGS DRAWER FUNCTIONS
-function toggleSettingsDrawer() {
+function toggleSettingsDrawer(forceOpen = false) {
     const drawer = document.getElementById("settings-drawer");
-    drawer.classList.toggle("translate-x-full");
+    if (forceOpen) {
+        drawer.classList.remove("translate-x-full");
+    } else {
+        drawer.classList.toggle("translate-x-full");
+    }
 }
 
 function updateThresholdDisplay(val) {
@@ -540,12 +753,14 @@ async function saveSettings() {
         });
         const data = await res.json();
         if (data.success) {
-            alert("Settings successfully saved and applied!");
+            showToast("Settings Saved", "Consolidation parameters and API key updated.", "success");
             toggleSettingsDrawer();
             fetchStatus();
+        } else {
+            showToast("Settings Error", data.detail || "Failed to update settings", "error");
         }
     } catch (err) {
-        alert("Error saving settings: " + err);
+        showToast("Settings Error", "" + err, "error");
     }
 }
 

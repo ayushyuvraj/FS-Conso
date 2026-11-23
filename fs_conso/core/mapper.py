@@ -1,6 +1,7 @@
 """Chart of Accounts (COA) standardization & AI mapping engine."""
 
 import json
+import re
 from typing import Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
 
@@ -81,7 +82,8 @@ Return ONLY valid JSON matching this schema:
             data = json.loads(text)
             return data.get("group_account_code"), float(data.get("confidence", 0.0)), data.get("reasoning", "")
         except Exception as e:
-            return None, 0.0, f"Gemini error: {e}"
+            err_msg = re.sub(r"AIza[0-9A-Za-z_-]{15,}", "AIzaSy[REDACTED]", str(e))
+            return None, 0.0, f"Gemini error: {err_msg}"
 
     def standardize_trial_balance(
         self,
