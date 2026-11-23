@@ -23,7 +23,7 @@ def generate_benchmark_dataset(target_dir: Path) -> None:
         RawTBRow(account_code="A210101", account_description="Equity Share Capital", debit=0.0, credit=15000000.0),
         RawTBRow(account_code="A220101", account_description="Retained Earnings", debit=0.0, credit=4550000.0),
         RawTBRow(account_code="320300", account_description="Trade Payables", debit=0.0, credit=3000000.0),
-        RawTBRow(account_code="REV_OPS", account_description="Revenue from Hospital Management", debit=0.0, credit=8000000.0),
+        RawTBRow(account_code="REV_OPS", account_description="Revenue from Operating Management", debit=0.0, credit=8000000.0),
         RawTBRow(account_code="EXP_EMP", account_description="Employee Benefits Expense", debit=6000000.0, credit=0.0),
     ]
     df_p = pd.DataFrame([
@@ -32,7 +32,7 @@ def generate_benchmark_dataset(target_dir: Path) -> None:
     ])
     df_p.to_excel(target_dir / "TB_Company_P.xlsx", index=False)
 
-    # 2. Company S1 (INR) - Hospital Operations (100% Owned)
+    # 2. Company S1 (INR) - Operating Services Sub 1 (100% Owned)
     rows_s1 = [
         RawTBRow(account_code="A110103", account_description="Plant & Machinery", debit=8000000.0, credit=0.0),
         RawTBRow(account_code="11001", account_description="Cash (Local Code)", debit=1500000.0, credit=0.0),

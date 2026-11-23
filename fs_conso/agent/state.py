@@ -1,4 +1,4 @@
-"""LangGraph state schema for consolidation pipeline."""
+"""LangGraph state schema for consolidation pipeline with deep agent tracing."""
 
 from typing import Annotated, Any, Dict, List, Optional
 from pydantic import BaseModel, Field
@@ -10,6 +10,23 @@ from fs_conso.core.translator import TranslatedTrialBalance
 from fs_conso.core.validator import ValidationResult
 from fs_conso.models.trial_balance import RawTrialBalance, StandardizedTrialBalance
 
+
+class AgentNodeTrace(BaseModel):
+    """Deep execution telemetry captured for a LangGraph agent node run."""
+    node_id: str
+    agent_role: str
+    status: str = "SUCCESS"  # "SUCCESS", "BLOCKED", "FAILED", "WARNING"
+    start_time: str
+    end_time: str
+    execution_time_ms: float
+    input_summary: Dict[str, Any] = Field(default_factory=dict)
+    output_summary: Dict[str, Any] = Field(default_factory=dict)
+    decisions_count: int = 0
+    ai_calls: List[Dict[str, Any]] = Field(default_factory=list)
+    state_mutations: List[str] = Field(default_factory=list)
+    details: Optional[str] = None
+
+
 class ConsolidationState(BaseModel):
     """Execution state passed through the LangGraph consolidation graph."""
     # Pipeline data
@@ -20,15 +37,17 @@ class ConsolidationState(BaseModel):
     translated_tbs: List[TranslatedTrialBalance] = Field(default_factory=list)
     elimination_result: Optional[EliminationResult] = None
     consolidated_tb: Optional[ConsolidatedTrialBalance] = None
+    financial_statements: Dict[str, Any] = Field(default_factory=dict)
     output_excel_path: Optional[str] = None
 
     # Stepper and gating state
-    current_step: int = 1  # 1: Ingestion, 2: Mapping, 3: Translation, 4: Eliminations, 5: Consolidation, 6: Statements & Audit
+    current_step: int = 1  # 1: Ingestion, 2: Mapping, 3: Translation, 4: Eliminations, 5: Consolidation, 6: Statements, 7: Audit
     completed_steps: List[int] = Field(default_factory=list)
     is_blocked: bool = False
     error_message: Optional[str] = None
 
-    # Teacher self-evaluation & audit
+    # Teacher self-evaluation & audit telemetry
     teacher_score: float = 0.0
     teacher_evaluation: Dict[str, Any] = Field(default_factory=dict)
     audit_trail: List[Dict[str, Any]] = Field(default_factory=list)
+    agent_traces: List[AgentNodeTrace] = Field(default_factory=list)

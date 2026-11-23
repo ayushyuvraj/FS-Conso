@@ -5,7 +5,9 @@ Zero simulations: all operations execute real accounting and agent workflows.
 """
 
 import asyncio
+import csv
 import io
+import json
 import math
 import os
 import re
@@ -22,8 +24,10 @@ from fs_conso.agent.graph import build_consolidation_graph
 from fs_conso.agent.state import ConsolidationState
 from fs_conso.config import config
 from fs_conso.core.file_parser import FlexibleTBParser
+from fs_conso.core.lineage_tracker import LineageTracker
 from fs_conso.core.loader import ConsoMasterLoader
 from fs_conso.core.sample_generator import generate_benchmark_dataset, load_benchmark_raw_tbs
+from fs_conso.core.statement_builder import FinancialStatementBuilder
 from fs_conso.core.validator import TBValidator
 
 app = FastAPI(
@@ -125,6 +129,7 @@ async def get_status():
         "is_blocked": session.state.is_blocked if session.state else False,
         "error_message": sanitize_error_message(session.state.error_message) if session.state and session.state.error_message else None,
         "teacher_score": session.state.teacher_score if session.state else 0.0,
+        "total_agent_traces": len(session.state.agent_traces) if session.state else 0,
     }
 
 # 3. Input Validation Models with Strict Finite / Non-NaN Bounds
@@ -441,8 +446,137 @@ async def get_pipeline_data():
             {**ev, "details": sanitize_error_message(ev.get("details", ""))}
             for ev in st.audit_trail
         ],
-        "teacher_evaluation": st.teacher_evaluation
+        "teacher_evaluation": st.teacher_evaluation,
+        "agent_traces": [t.dict() for t in st.agent_traces]
     }
+
+@app.get("/api/agent-traces")
+async def get_agent_traces():
+    """Returns real LangGraph runtime execution traces with node latencies and sanitized state deltas."""
+    if not session.state:
+        session.initialize_baseline()
+    sanitized_traces = []
+    for t in session.state.agent_traces:
+        td = t.dict()
+        td["input_summary"] = sanitize_error_message(td.get("input_summary", ""))
+        td["output_summary"] = sanitize_error_message(td.get("output_summary", ""))
+        td["details"] = sanitize_error_message(td.get("details", ""))
+        sanitized_traces.append(td)
+    return {
+        "traces": sanitized_traces,
+        "total_nodes_executed": len(sanitized_traces),
+        "total_latency_ms": round(sum(t.execution_time_ms for t in session.state.agent_traces), 2)
+    }
+
+@app.get("/api/financial-statements")
+async def get_financial_statements():
+    """Returns structured IND AS Consolidated Balance Sheet & P&L matrices."""
+    if not session.state:
+        session.initialize_baseline()
+    if not session.state.consolidated_tb:
+        return {
+            "success": False,
+            "message": "Consolidation not executed yet. Run consolidation pipeline to generate statements.",
+            "balance_sheet": None,
+            "profit_and_loss": None
+        }
+
+    bs = FinancialStatementBuilder.build_balance_sheet(session.state.consolidated_tb)
+    pl = FinancialStatementBuilder.build_profit_and_loss(session.state.consolidated_tb)
+    return {
+        "success": True,
+        "period": session.state.consolidated_tb.period,
+        "currency": session.state.consolidated_tb.currency,
+        "balance_sheet": bs,
+        "profit_and_loss": pl
+    }
+
+@app.get("/api/lineage")
+async def get_cell_lineage_empty():
+    """Handles lineage requests with empty query gracefully."""
+    return {
+        "success": False,
+        "found": False,
+        "query": "",
+        "message": "Query parameter required to trace lineage. Example: /api/lineage/Cash"
+    }
+
+@app.get("/api/lineage/{query:path}")
+async def get_cell_lineage(query: str):
+    """Traces cell formula lineage backward from Statement line to Raw Client TB."""
+    if not session.state:
+        session.initialize_baseline()
+    return LineageTracker.trace_account(query, session.state)
+
+def sanitize_csv_cell(val: Any) -> str:
+    """Neutralizes formula injection characters (=, +, -, @, |, %, \\t, \\r) including leading whitespace."""
+    if val is None:
+        return ""
+    s = str(val)
+    s_clean = s.lstrip()
+    if s_clean and s_clean[0] in ("=", "+", "-", "@", "|", "%", "\t", "\r"):
+        return f"'{s}"
+    return s
+
+@app.get("/api/audit-trail/export")
+async def export_audit_trail(format: str = "json"):
+    """Exports full audit trail and agent traces as downloadable JSON or CSV with formula defense."""
+    if not session.state:
+        session.initialize_baseline()
+
+    audit_data = [
+        {**ev, "details": sanitize_error_message(ev.get("details", ""))}
+        for ev in session.state.audit_trail
+    ]
+
+    sanitized_traces = []
+    for t in session.state.agent_traces:
+        td = t.dict()
+        td["input_summary"] = sanitize_error_message(td.get("input_summary", ""))
+        td["output_summary"] = sanitize_error_message(td.get("output_summary", ""))
+        td["details"] = sanitize_error_message(td.get("details", ""))
+        sanitized_traces.append(td)
+
+    if format.lower() == "csv":
+        import codecs
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=["timestamp", "stage", "agent", "action", "status", "details"])
+        writer.writeheader()
+        for row in audit_data:
+            writer.writerow({
+                "timestamp": sanitize_csv_cell(row.get("timestamp", "")),
+                "stage": sanitize_csv_cell(row.get("stage", "")),
+                "agent": sanitize_csv_cell(row.get("agent", "")),
+                "action": sanitize_csv_cell(row.get("action", "")),
+                "status": sanitize_csv_cell(row.get("status", "")),
+                "details": sanitize_csv_cell(row.get("details", ""))
+            })
+        csv_bytes = codecs.BOM_UTF8 + output.getvalue().encode("utf-8")
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": 'attachment; filename="Consolidation_Audit_Trail.csv"',
+                "Cache-Control": "no-cache, no-store, must-revalidate"
+            }
+        )
+    else:
+        json_str = json.dumps({
+            "period": config.current_period,
+            "reporting_currency": config.reporting_currency,
+            "teacher_score": session.state.teacher_score,
+            "teacher_evaluation": session.state.teacher_evaluation,
+            "audit_trail": audit_data,
+            "agent_traces": sanitized_traces
+        }, indent=2)
+        return Response(
+            content=json_str.encode("utf-8"),
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Content-Disposition": 'attachment; filename="Consolidation_Audit_Trail.json"',
+                "Cache-Control": "no-cache, no-store, must-revalidate"
+            }
+        )
 
 @app.get("/api/export-excel")
 async def export_excel():

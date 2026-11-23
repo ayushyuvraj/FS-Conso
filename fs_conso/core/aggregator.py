@@ -16,6 +16,30 @@ class ConsolidatedTBRow(BaseModel):
     adjustments: float = 0.0
     consolidated_total: float = 0.0
 
+    def __init__(self, **data):
+        if "entity_translated_amounts" in data and "entity_balances" not in data:
+            data["entity_balances"] = data["entity_translated_amounts"]
+        if "consolidated_net" in data and "consolidated_total" not in data:
+            data["consolidated_total"] = data["consolidated_net"]
+        if "eliminations_total" in data and "eliminations" not in data:
+            data["eliminations"] = data["eliminations_total"]
+        super().__init__(**data)
+
+    @property
+    def entity_translated_amounts(self) -> Dict[str, float]:
+        return self.entity_balances
+
+    @property
+    def eliminations_total(self) -> float:
+        return self.eliminations
+
+    @property
+    def consolidated_net(self) -> float:
+        return self.consolidated_total
+
+# Alias for compatibility
+ConsolidatedRow = ConsolidatedTBRow
+
 class ConsolidatedTrialBalance(BaseModel):
     period: str
     currency: str = "INR"

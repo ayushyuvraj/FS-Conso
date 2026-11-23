@@ -55,8 +55,8 @@ class AppConfig(BaseModel):
         if any(c in cleaned for c in ["\r", "\n", "\0", "\t"]):
             raise ValueError("API Key contains illegal control or newline characters.")
 
-        if not cleaned.startswith("AIzaSy") and not API_KEY_REGEX.match(cleaned):
-            raise ValueError("Invalid Google Gemini API Key format. Must start with 'AIzaSy'.")
+        if not API_KEY_REGEX.match(cleaned):
+            raise ValueError("Invalid Google Gemini API Key format. Must match standard pattern 'AIzaSy...'.")
 
         self.gemini_api_key = cleaned
         os.environ["GEMINI_API_KEY"] = cleaned
@@ -68,7 +68,7 @@ class AppConfig(BaseModel):
             return False
         if any(c in key for c in ["\r", "\n", "\0", "\t"]):
             return False
-        return bool(API_KEY_REGEX.match(key)) or (key.startswith("AIzaSy") and len(key) >= 20)
+        return bool(API_KEY_REGEX.match(key))
 
     def require_active_api_key(self) -> None:
         """Raises a hard RuntimeError if API key is absent, blocking execution."""

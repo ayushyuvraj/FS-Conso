@@ -117,7 +117,7 @@ class ConsoMasterLoader:
         # Row 6: Company S2, 90%
         # Row 7: Company S3, 80%
         subs = [
-            ("Company_S1", "Hospital Operations Sub 1", "INR", 1.0),
+            ("Company_S1", "Operating Services Sub 1", "INR", 1.0),
             ("Company_S2", "Diagnostic Equipment Sub 2", "USD", 0.9),
             ("Company_S3", "Specialty Pharmacy Sub 3", "SGD", 0.8),
         ]
