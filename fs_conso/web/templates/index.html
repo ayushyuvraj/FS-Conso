@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Financial Consolidation Portal</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        kpmg: {
+                            navy: '#001D48',
+                            blue: '#00338D',
+                            electric: '#0091DA',
+                            canvas: '#F4F5F7',
+                            surface: '#FFFFFF',
+                            border: '#E2E8F0',
+                            text: '#0F172A',
+                            muted: '#64748B'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Menlo', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="bg-kpmg-canvas text-kpmg-text font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- 1. Morph-Stable Top Navigation Bar -->
+    <header class="h-16 bg-kpmg-navy text-white px-6 flex items-center justify-between border-b border-kpmg-border sticky top-0 z-40 shadow-sm">
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2">
+                <span class="w-7 h-7 rounded bg-kpmg-blue flex items-center justify-center font-bold text-sm tracking-wider">FS</span>
+                <span class="font-bold text-base tracking-tight">Enterprise Consolidation</span>
+            </div>
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-white/10 text-white/80 font-mono">Ind AS 110</span>
+        </div>
+
+        <!-- Central Status & Period Display -->
+        <div class="hidden md:flex items-center space-x-6 text-xs text-white/80">
+            <div>Period: <strong class="text-white font-mono" id="disp-period">31-Mar-2024</strong></div>
+            <div>Reporting: <strong class="text-white font-mono" id="disp-curr">INR</strong></div>
+            <div id="badge-teacher" class="hidden items-center space-x-1.5 px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 font-mono text-xs border border-emerald-500/30">
+                <span>Auditor Score:</span>
+                <strong id="disp-teacher-score">100/100</strong>
+            </div>
+        </div>
+
+        <!-- Header Actions: API Key Status + Settings Drawer Trigger -->
+        <div class="flex items-center space-x-3">
+            <div id="key-pill" class="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition" onclick="toggleSettingsDrawer()">
+                <span class="w-2 h-2 rounded-full" id="key-dot"></span>
+                <span id="key-label">API Key</span>
+            </div>
+            <button onclick="toggleSettingsDrawer()" class="h-9 px-3.5 rounded bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition flex items-center space-x-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                <span>Settings</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- 2. Gated 6-Step Primary Stepper Bar (Morph Geometry Stable) -->
+    <nav class="bg-white border-b border-kpmg-border px-6 py-3 sticky top-16 z-30 shadow-xs">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-2 md:space-x-4 w-full">
+                <!-- Step 1: Ingestion -->
+                <div id="step-btn-1" onclick="switchStep(1)" class="step-tab active flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-pointer">
+                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">1</span>
+                    <span>Ingestion</span>
+                </div>
+                <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+
+                <!-- Step 2: Mapping -->
+                <div id="step-btn-2" onclick="switchStep(2)" class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">2</span>
+                    <span>Mapping</span>
+                </div>
+                <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+
+                <!-- Step 3: Translation -->
+                <div id="step-btn-3" onclick="switchStep(3)" class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">3</span>
+                    <span>Translation</span>
+                </div>
+                <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+
+                <!-- Step 4: Eliminations -->
+                <div id="step-btn-4" onclick="switchStep(4)" class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">4</span>
+                    <span>Eliminations</span>
+                </div>
+                <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+
+                <!-- Step 5: Consolidation -->
+                <div id="step-btn-5" onclick="switchStep(5)" class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">5</span>
+                    <span>Consolidation</span>
+                </div>
+                <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+
+                <!-- Step 6: Statements & Audit -->
+                <div id="step-btn-6" onclick="switchStep(6)" class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">6</span>
+                    <span>Statements</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 3. Sub-Bar Action Strip (Constant Size, Zero Layout Shift) -->
+    <div class="bg-kpmg-canvas border-b border-kpmg-border px-6 py-2">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <div id="sub-step-label" class="text-xs font-medium text-kpmg-muted flex items-center space-x-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-kpmg-blue"></span>
+                <span id="sub-step-text">Ingestion: Standalone Trial Balances</span>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button id="btn-run" onclick="triggerRunPipeline()" class="h-8 px-4 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition shadow-xs flex items-center space-x-1.5">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span>Execute Consolidation</span>
+                </button>
+                <a id="btn-export" href="/api/export-excel" class="h-8 px-4 rounded bg-white hover:bg-gray-50 text-kpmg-navy text-xs font-semibold border border-kpmg-border transition shadow-xs flex items-center space-x-1.5">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    <span>Download Excel (100% Formulas)</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Main Stage / Viewport (Anchored Geometry) -->
+    <main class="flex-1 max-w-6xl w-full mx-auto p-6">
+
+        <!-- Mandatory API Key Blocking Banner (Shown if no active key) -->
+        <div id="banner-api-key-blocked" class="hidden mb-6 p-4 rounded bg-red-50 border border-red-200 text-red-900 text-xs">
+            <div class="flex items-start justify-between">
+                <div>
+                    <h4 class="font-bold text-sm mb-1">Execution Blocked: Active Google Gemini API Key Required</h4>
+                    <p class="text-red-700">An active Google Gemini API key is a mandatory prerequisite to run the consolidation engine and map accounts. Please configure your key in Settings.</p>
+                </div>
+                <button onclick="toggleSettingsDrawer()" class="h-8 px-3 rounded bg-red-600 hover:bg-red-700 text-white font-medium transition text-xs">
+                    Configure Key
+                </button>
+            </div>
+        </div>
+
+        <!-- Dynamic Step Containers -->
+        <div id="step-content" class="bg-white rounded border border-kpmg-border p-6 shadow-xs min-h-[460px]">
+            <!-- Content loaded dynamically via app.js -->
+            <div class="flex items-center justify-center h-64 text-kpmg-muted text-sm">
+                Loading consolidation workspace...
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 5. Settings Drawer (Configurable AI Threshold, Tolerances, API Key) -->
+    <div id="settings-drawer" class="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl border-l border-kpmg-border z-50 transform translate-x-full transition-transform duration-300 flex flex-col">
+        <div class="h-16 px-6 bg-kpmg-navy text-white flex items-center justify-between border-b border-kpmg-border">
+            <div class="font-bold text-sm">Consolidation Settings</div>
+            <button onclick="toggleSettingsDrawer()" class="text-white/60 hover:text-white text-lg font-bold">&times;</button>
+        </div>
+
+        <div class="p-6 space-y-6 flex-1 overflow-y-auto text-xs">
+            <!-- Google Gemini API Key Input -->
+            <div class="space-y-2">
+                <label class="font-bold text-kpmg-text block">Google Gemini API Key (Mandatory)</label>
+                <input id="input-api-key" type="password" placeholder="AIzaSy..." class="w-full h-9 px-3 rounded border border-kpmg-border font-mono text-xs focus:ring-2 focus:ring-kpmg-electric focus:outline-none">
+                <p class="text-[11px] text-kpmg-muted">Execution will strictly halt if an active API key is not present.</p>
+            </div>
+
+            <div class="border-t border-kpmg-border pt-4 space-y-4">
+                <!-- AI Confidence Threshold (Dynamic Slider 0-100%) -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="font-bold text-kpmg-text">AI Confidence Threshold</label>
+                        <span id="disp-threshold-val" class="font-mono font-bold text-kpmg-blue text-sm">85%</span>
+                    </div>
+                    <input id="slider-threshold" type="range" min="0" max="100" value="85" step="1" oninput="updateThresholdDisplay(this.value)" class="w-full cursor-pointer accent-kpmg-blue">
+                    <p class="text-[11px] text-kpmg-muted mt-1">Unmapped GL accounts with confidence below this threshold are routed to human review.</p>
+                </div>
+
+                <!-- Intercompany Dual Tolerances -->
+                <div class="space-y-3 pt-2">
+                    <label class="font-bold text-kpmg-text block">Intercompany Matching Tolerances</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <span class="text-[11px] text-kpmg-muted block mb-1">Absolute (₹)</span>
+                            <input id="input-abs-tol" type="number" value="10000" class="w-full h-8 px-2 rounded border border-kpmg-border font-mono text-xs">
+                        </div>
+                        <div>
+                            <span class="text-[11px] text-kpmg-muted block mb-1">Percentage (%)</span>
+                            <input id="input-pct-tol" type="number" value="1.0" step="0.1" class="w-full h-8 px-2 rounded border border-kpmg-border font-mono text-xs">
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-kpmg-muted">Variances within tolerance auto-clear to IC Variance (Amber); variances above flag as exceptions (Red).</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-6 border-t border-kpmg-border bg-gray-50 flex space-x-3">
+            <button onclick="saveSettings()" class="flex-1 h-9 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition">
+                Save & Apply Settings
+            </button>
+            <button onclick="toggleSettingsDrawer()" class="px-4 h-9 rounded bg-white border border-kpmg-border text-kpmg-text text-xs font-medium hover:bg-gray-100 transition">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <!-- Floating Formula Inspector Popover -->
+    <div id="formula-popover" class="hidden fixed bg-kpmg-navy text-white p-3 rounded shadow-xl text-xs z-50 pointer-events-none max-w-sm border border-kpmg-electric/40">
+        <div class="text-[10px] text-kpmg-electric uppercase tracking-wider font-bold mb-1">Formula Provenance</div>
+        <div id="formula-expr" class="font-mono text-emerald-300 font-bold break-all"></div>
+        <div id="formula-origin" class="text-[11px] text-white/70 mt-1"></div>
+    </div>
+
+    <!-- App Scripts -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
