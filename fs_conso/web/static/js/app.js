@@ -299,8 +299,6 @@ function renderHeaderStatus() {
     const headerCompany = document.getElementById("header-active-company-name");
     const sidebarEntityBadge = document.getElementById("sidebar-entity-badge");
     const miniCompanyCode = document.getElementById("sidebar-mini-company-code");
-    const sidebarStepBadge = document.getElementById("badge-sidebar-step");
-    const sidebarObsBadge = document.getElementById("badge-sidebar-observability");
 
     const compName = appStatus.active_company_name || "Company P Healthcare Corp";
     if (headerCompany) headerCompany.textContent = compName;
@@ -311,9 +309,6 @@ function renderHeaderStatus() {
     if (sidebarEntityBadge) {
         const count = appStatus.all_entities ? appStatus.all_entities.length : 4;
         sidebarEntityBadge.textContent = `${count} Entities`;
-    }
-    if (sidebarStepBadge) {
-        sidebarStepBadge.textContent = `Step ${activeStep}/6`;
     }
 
     if (keyDot && keyLabel && keyPill) {
@@ -348,7 +343,6 @@ function renderHeaderStatus() {
     };
 
     updateObsEl(badgeObs);
-    updateObsEl(sidebarObsBadge);
 }
 
 function renderPrerequisiteBanner() {
