@@ -635,7 +635,7 @@ function renderStep1(el) {
                 ${escapeHtml(tb.entity_code)}
                 ${tb.is_prior_period ? '<span class="ml-1 px-1.5 py-0.2 rounded text-[9px] bg-slate-200 text-slate-700 font-mono">PRIOR</span>' : ''}
             </td>
-            <td class="py-2 px-3 text-xs"><span class="px-2 py-0.5 rounded bg-gray-100 font-mono text-[11px]">${escapeHtml(tb.currency)}</span></td>
+            <td class="text-center py-2 px-3 text-xs"><span class="px-2 py-0.5 rounded bg-gray-100 font-mono text-[11px]">${escapeHtml(tb.currency)}</span></td>
             <td class="num-cell py-2 px-3 text-xs font-mono">${tb.row_count}</td>
             <td class="num-cell py-2 px-3 text-xs font-mono">${formatNum(tb.total_debit)}</td>
             <td class="num-cell py-2 px-3 text-xs font-mono">${formatNum(tb.total_credit)}</td>
@@ -673,13 +673,13 @@ function renderStep1(el) {
                 <table class="fin-table">
                     <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
                         <tr>
-                            <th>Entity Code</th>
-                            <th>Currency</th>
-                            <th class="num-cell">GL Accounts</th>
-                            <th class="num-cell">Total Debits</th>
-                            <th class="num-cell">Total Credits</th>
-                            <th class="num-cell">Signed Balance</th>
-                            <th class="text-center">Validation Status</th>
+                            <th class="min-w-[150px]">Entity Code</th>
+                            <th class="text-center w-24">Currency</th>
+                            <th class="num-cell w-32">GL Accounts</th>
+                            <th class="num-cell w-44">Total Debits</th>
+                            <th class="num-cell w-44">Total Credits</th>
+                            <th class="num-cell w-36">Signed Balance</th>
+                            <th class="text-center w-40">Validation Status</th>
                         </tr>
                     </thead>
                     <tbody>${rowsHtml || '<tr><td colspan="7" class="p-8 text-center text-kpmg-muted">No trial balances ingested yet. Upload files above.</td></tr>'}</tbody>
@@ -2023,6 +2023,16 @@ function initTableColumnResizers(root) {
                 resizer.classList.add("resizing");
                 document.body.classList.add("table-col-resizing");
 
+                // Lock table to fixed layout on drag start so columns size predictably
+                if (table.style.tableLayout !== "fixed") {
+                    const allThs = table.querySelectorAll("thead th");
+                    allThs.forEach(h => {
+                        const w = Math.round(h.getBoundingClientRect().width);
+                        h.style.width = `${w}px`;
+                    });
+                    table.style.tableLayout = "fixed";
+                }
+
                 const startX = e.clientX;
                 const startWidth = th.getBoundingClientRect().width;
 
@@ -2044,12 +2054,16 @@ function initTableColumnResizers(root) {
                 document.addEventListener("mouseup", onMouseUp);
             });
 
-            // Double-click resets to default auto-adjust
+            // Double-click resets all columns back to natural auto-adjust
             resizer.addEventListener("dblclick", (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                th.style.width = "";
-                th.style.minWidth = "";
+                const allThs = table.querySelectorAll("thead th");
+                allThs.forEach(h => {
+                    h.style.width = "";
+                    h.style.minWidth = "";
+                });
+                table.style.tableLayout = "auto";
             });
         });
     });
