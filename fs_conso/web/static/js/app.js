@@ -984,11 +984,32 @@ function renderStep7(el) {
 // PIPELINE EXECUTION TRIGGER
 async function triggerRunPipeline() {
     const btn = document.getElementById("btn-run");
+    const subStepText = document.getElementById("sub-step-text");
+    const originalSubText = subStepText ? subStepText.textContent : "";
     btn.disabled = true;
     btn.innerHTML = `
         <svg class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
-        <span>Running Agents...</span>
+        <span>Starting Agents...</span>
     `;
+
+    let isFinished = false;
+    const progressInterval = setInterval(async () => {
+        if (isFinished) return;
+        try {
+            const stRes = await fetch("/api/status");
+            const st = await stRes.json();
+            if (st.is_running && st.current_stage) {
+                const stageShort = st.current_stage.length > 30 ? st.current_stage.slice(0, 30) + '...' : st.current_stage;
+                btn.innerHTML = `
+                    <svg class="w-3.5 h-3.5 animate-spin text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                    <span>${stageShort}</span>
+                `;
+                if (subStepText) {
+                    subStepText.textContent = `Running: ${st.current_stage}`;
+                }
+            }
+        } catch (_) {}
+    }, 300);
 
     try {
         const res = await fetch("/api/run-pipeline", { method: "POST" });
@@ -1018,11 +1039,16 @@ async function triggerRunPipeline() {
     } catch (err) {
         showToast("Network Error", "Pipeline invocation error: " + err, "error");
     } finally {
+        isFinished = true;
+        clearInterval(progressInterval);
         btn.disabled = false;
         btn.innerHTML = `
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
             <span>Execute Consolidation</span>
         `;
+        if (subStepText && originalSubText) {
+            subStepText.textContent = originalSubText;
+        }
     }
 }
 

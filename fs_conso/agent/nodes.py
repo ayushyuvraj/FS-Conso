@@ -35,6 +35,8 @@ def validator_node(state: ConsolidationState) -> ConsolidationState:
     state.is_blocked = False
     state.error_message = None
     state.agent_traces = []
+    state.current_node = "validator"
+    state.current_stage = "Validating Standalone Entity Trial Balances..."
 
     # Mandatory API Key check gate
     if not config.validate_api_key_strict():
@@ -122,6 +124,9 @@ def mapper_node(state: ConsolidationState) -> ConsolidationState:
     if state.is_blocked:
         return state
 
+    state.current_node = "mapper"
+    state.current_stage = "Standardizing Accounts with Chart of Accounts & AI..."
+
     t0 = time.perf_counter()
     start_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
@@ -145,7 +150,7 @@ def mapper_node(state: ConsolidationState) -> ConsolidationState:
     elapsed_ms = round((t1 - t0) * 1000, 2)
     end_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
-    exact_count = len([d for d in all_decisions if d.method in ("HISTORICAL_RULE", "HEURISTIC_EXACT")])
+    exact_count = len([d for d in all_decisions if d.method in ("HISTORICAL_RULE", "DIRECT_CODE_MATCH", "HEURISTIC_EXACT", "ACCOUNTING_SYNONYM")])
     ai_count = len([d for d in all_decisions if d.method == "GEMINI_AI"])
     ai_samples = [
         {
@@ -197,6 +202,9 @@ def translator_node(state: ConsolidationState) -> ConsolidationState:
     """FX Translation Agent: Converts foreign currencies to INR and plugs FCTR."""
     if state.is_blocked:
         return state
+
+    state.current_node = "translator"
+    state.current_stage = "Translating Currencies & Balancing FCTR (Ind AS 21)..."
 
     t0 = time.perf_counter()
     start_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -256,6 +264,9 @@ def elimination_node(state: ConsolidationState) -> ConsolidationState:
     if state.is_blocked:
         return state
 
+    state.current_node = "elimination"
+    state.current_stage = "Matching Intercompany Balances & Computing Tolerances..."
+
     t0 = time.perf_counter()
     start_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
@@ -310,6 +321,9 @@ def aggregator_node(state: ConsolidationState) -> ConsolidationState:
     """Consolidation Aggregator Agent: Compiles unified Consolidated TB."""
     if state.is_blocked:
         return state
+
+    state.current_node = "aggregator"
+    state.current_stage = "Compiling Consolidated Trial Balance & Statements..."
 
     t0 = time.perf_counter()
     start_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -370,6 +384,9 @@ def excel_builder_node(state: ConsolidationState) -> ConsolidationState:
     """Formula Builder Agent: Writes 100% formula-linked Excel deliverable."""
     if state.is_blocked or not state.consolidated_tb:
         return state
+
+    state.current_node = "excel_builder"
+    state.current_stage = "Building 100% Formula-Linked Excel Deliverable..."
 
     t0 = time.perf_counter()
     start_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]

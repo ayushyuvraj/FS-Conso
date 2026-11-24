@@ -154,10 +154,12 @@ class ConsoMasterLoader:
         # Hardcode baseline known rules from Steps sheet
         # Sub 1: 11001 -> 120400 (Cash), 21001 -> 320300 (Payables)
         # Sub 2: CASH01 -> 120400, PAY01 -> 320300
+        # Sub 3: CASH01 -> 120400
         mappings[("Company_S1", "11001")] = "120400"
         mappings[("Company_S1", "21001")] = "320300"
         mappings[("Company_S2", "CASH01")] = "120400"
         mappings[("Company_S2", "PAY01")] = "320300"
+        mappings[("Company_S3", "CASH01")] = "120400"
         
         wb.close()
         return mappings

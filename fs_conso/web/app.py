@@ -79,6 +79,9 @@ class SessionManager:
     def __init__(self):
         self.state: Optional[ConsolidationState] = None
         self.graph = build_consolidation_graph()
+        self.is_running: bool = False
+        self.current_stage: Optional[str] = None
+        self.current_node: Optional[str] = None
         self.initialize_baseline()
 
     def initialize_baseline(self):
@@ -93,6 +96,9 @@ class SessionManager:
             is_blocked=False,
             error_message=None
         )
+        self.is_running = False
+        self.current_stage = None
+        self.current_node = None
 
     def reset(self):
         """Completely restores pristine baseline state."""
@@ -130,6 +136,9 @@ async def get_status():
         "error_message": sanitize_error_message(session.state.error_message) if session.state and session.state.error_message else None,
         "teacher_score": session.state.teacher_score if session.state else 0.0,
         "total_agent_traces": len(session.state.agent_traces) if session.state else 0,
+        "is_running": session.is_running,
+        "current_stage": session.current_stage or (session.state.current_stage if session.state else None),
+        "current_node": session.current_node or (session.state.current_node if session.state else None),
     }
 
 # 3. Input Validation Models with Strict Finite / Non-NaN Bounds
@@ -367,18 +376,28 @@ async def run_pipeline():
         if not session.state or not session.state.raw_tbs:
             session.initialize_baseline()
 
-        # Clear prior transient block
+        # Clear prior transient block and flag active run
         session.state.is_blocked = False
         session.state.error_message = None
+        session.is_running = True
+        session.current_stage = "Initiating multi-agent consolidation..."
+        session.current_node = "validator"
 
         try:
-            result = session.graph.invoke(session.state)
+            # Execute synchronous LangGraph engine in worker threadpool to keep event loop responsive
+            result = await asyncio.to_thread(session.graph.invoke, session.state)
             session.state = ConsolidationState(**result)
+            session.current_stage = "Consolidation complete."
+            session.current_node = None
         except Exception as exc:
             err_msg = sanitize_error_message(str(exc))
             session.state.is_blocked = True
             session.state.error_message = f"Agent Execution Error: {err_msg}"
+            session.current_stage = f"Execution failed: {err_msg}"
+            session.current_node = None
             raise HTTPException(status_code=500, detail=f"Consolidation pipeline failed: {err_msg}")
+        finally:
+            session.is_running = False
 
     return {
         "success": not session.state.is_blocked,

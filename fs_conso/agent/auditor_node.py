@@ -118,6 +118,9 @@ class StrictTeacherAuditor:
 
 def auditor_node(state: ConsolidationState) -> ConsolidationState:
     """Auditor Agent Node: Applies strict teacher grading and telemetry."""
+    state.current_node = "auditor"
+    state.current_stage = "Executing Strict Teacher Quality Audit..."
+
     t0 = time.perf_counter()
     start_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 

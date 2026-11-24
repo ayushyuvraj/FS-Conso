@@ -45,6 +45,8 @@ class ConsolidationState(BaseModel):
     completed_steps: List[int] = Field(default_factory=list)
     is_blocked: bool = False
     error_message: Optional[str] = None
+    current_stage: Optional[str] = None
+    current_node: Optional[str] = None
 
     # Teacher self-evaluation & audit telemetry
     teacher_score: float = 0.0
