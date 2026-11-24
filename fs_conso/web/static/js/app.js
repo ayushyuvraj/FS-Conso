@@ -736,7 +736,7 @@ function renderStep2(el) {
                             <th class="text-center">Status</th>
                         </tr>
                     </thead>
-                    <tbody>${rowsHtml || '<tr><td colspan="7" class="p-8 text-center text-kpmg-muted">Run pipeline to compute COA alignments.</td></tr>'}</tbody>
+                    <tbody>${rowsHtml || '<tr><td colspan="7" class="p-8 text-center text-kpmg-muted">Run consolidation to compute COA alignments.</td></tr>'}</tbody>
                 </table>
             </div>
         </div>
@@ -793,7 +793,7 @@ function renderStep3(el) {
                 <h3 class="font-bold text-base text-kpmg-navy">Foreign Currency Translation (Ind AS 21)</h3>
                 <p class="text-xs text-kpmg-muted">Closing rates for Balance Sheet, Average rates for P&L, Historical for Equity, with automated FCTR plug.</p>
             </div>
-            ${sections || '<div class="p-8 text-center text-kpmg-muted">Run pipeline to view foreign currency translation.</div>'}
+            ${sections || '<div class="p-8 text-center text-kpmg-muted">Run consolidation to view foreign currency translation.</div>'}
         </div>
     `;
 }
@@ -802,7 +802,7 @@ function renderStep3(el) {
 function renderStep4(el) {
     const elim = pipelineData.eliminations;
     if (!elim || !elim.pairs) {
-        el.innerHTML = `<div class="p-8 text-center text-kpmg-muted">Run the consolidation pipeline to view intercompany eliminations.</div>`;
+        el.innerHTML = `<div class="p-8 text-center text-kpmg-muted">Run consolidation to view intercompany eliminations.</div>`;
         return;
     }
 
@@ -1470,7 +1470,7 @@ function renderObservabilityConsole() {
                 <div class="flex items-center space-x-3">
                     <svg class="w-5 h-5 text-amber-600 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
                     <div>
-                        <h4 class="font-bold text-sm">Pipeline Execution in Progress...</h4>
+                        <h4 class="font-bold text-sm">Consolidation Execution in Progress...</h4>
                         <p class="text-xs text-amber-800">Current Node: <span class="font-mono font-bold">${appStatus.current_node || 'Orchestrator'}</span> &bull; Stage: ${appStatus.current_stage || 'Processing'}</p>
                     </div>
                 </div>
@@ -1486,7 +1486,7 @@ function renderObservabilityConsole() {
                     <div class="flex items-start space-x-3">
                         <svg class="w-5 h-5 text-red-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
                         <div>
-                            <h4 class="font-bold text-sm text-red-900">Pipeline Halted at Node: <span class="font-mono bg-red-100 px-1.5 py-0.5 rounded text-red-800">${escapeHtml(haltedNode || 'validator')}</span></h4>
+                            <h4 class="font-bold text-sm text-red-900">Consolidation Halted at Node: <span class="font-mono bg-red-100 px-1.5 py-0.5 rounded text-red-800">${escapeHtml(haltedNode || 'validator')}</span></h4>
                             <p class="text-xs text-red-700 mt-0.5">Stage: <strong>${escapeHtml(pipelineData.halted_stage || appStatus.halted_stage || 'Validation Gate')}</strong></p>
                         </div>
                     </div>
@@ -1623,20 +1623,17 @@ function renderObservabilityConsole() {
         <div class="space-y-6">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-kpmg-border pb-4">
                 <div>
-                    <h2 class="text-lg font-bold text-kpmg-navy flex items-center space-x-2">
-                        <span>Consolidation Observability & Audit Console</span>
-                        <span class="text-xs font-normal px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-mono font-bold">Real-time Telemetry</span>
-                    </h2>
-                    <p class="text-xs text-kpmg-muted mt-0.5">Real-time stage tracking, AI token expenditure, LangGraph DAG latencies, cell lineage provenance, and immutable Ind AS audit trail.</p>
+                    <h2 class="text-xl font-bold text-kpmg-navy">Audit</h2>
+                    <p class="text-xs text-kpmg-muted mt-0.5">Real-time stage tracking, AI token expenditure, cell lineage provenance, and immutable Ind AS audit trail.</p>
                 </div>
                 <div class="flex items-center space-x-2">
                     <button onclick="switchSection('RUN')" class="h-8 px-3 rounded bg-white hover:bg-gray-100 border border-kpmg-border text-kpmg-navy text-xs font-semibold transition flex items-center space-x-1 shadow-xs">
                         <svg class="w-3.5 h-3.5 text-kpmg-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                        <span>View Pipeline</span>
+                        <span>Consolidation</span>
                     </button>
                     <button onclick="triggerRunPipeline()" class="h-8 px-3.5 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition flex items-center space-x-1 shadow-xs">
                         <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path></svg>
-                        <span>Execute Run</span>
+                        <span>Run Consolidation</span>
                     </button>
                 </div>
             </div>
@@ -1683,7 +1680,7 @@ function renderObservabilityConsole() {
             <div class="space-y-3">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                        <h4 class="font-bold text-sm text-kpmg-navy">Observability & Agent Execution Audit Trail</h4>
+                        <h4 class="font-bold text-sm text-kpmg-navy">Audit Trail</h4>
                         <p class="text-xs text-kpmg-muted">Immutable, timestamped event log recording every validation, mapping, translation, and elimination decision.</p>
                     </div>
                     <div class="flex items-center space-x-2">

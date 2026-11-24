@@ -139,9 +139,9 @@
 
         <!-- Primary 3-Option Navigation List -->
         <nav class="flex-1 p-2 space-y-1.5 overflow-y-auto overflow-x-hidden">
-            <!-- Option 1: Company Profile & Workspace -->
+            <!-- Option 1: Company Profile -->
             <button id="nav-item-companies" onclick="switchNavSection('COMPANIES')" 
-                data-tooltip="Company Profile & Perimeter"
+                data-tooltip="Company Profile"
                 class="sidebar-nav-item w-full h-11 px-3 rounded-lg text-xs font-medium flex items-center text-slate-700 transition">
                 <div class="sidebar-icon-box flex-shrink-0 w-6 h-6 flex items-center justify-center text-slate-400 mr-3">
                     <svg class="w-5 h-5 nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -149,16 +149,13 @@
                     </svg>
                 </div>
                 <div class="sidebar-label flex-1 flex items-center justify-between text-left">
-                    <div class="flex flex-col">
-                        <span class="font-semibold text-slate-800">Company Profile</span>
-                        <span class="text-[10px] text-slate-400">COA, FX & Perimeter</span>
-                    </div>
+                    <span class="font-semibold text-slate-800 text-sm">Company Profile</span>
                 </div>
             </button>
 
-            <!-- Option 2: Consolidation Pipeline -->
+            <!-- Option 2: Consolidation -->
             <button id="nav-item-pipeline" onclick="switchNavSection('PIPELINE')" 
-                data-tooltip="Consolidation Pipeline (6 Steps)"
+                data-tooltip="Consolidation"
                 class="sidebar-nav-item active w-full h-11 px-3 rounded-lg text-xs font-medium flex items-center text-slate-700 transition">
                 <div class="sidebar-icon-box flex-shrink-0 w-6 h-6 flex items-center justify-center text-kpmg-blue mr-3">
                     <svg class="w-5 h-5 nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -166,16 +163,13 @@
                     </svg>
                 </div>
                 <div class="sidebar-label flex-1 flex items-center justify-between text-left">
-                    <div class="flex flex-col">
-                        <span class="font-semibold text-kpmg-blue">Pipeline</span>
-                        <span class="text-[10px] text-slate-400">6-Stage Consolidation</span>
-                    </div>
+                    <span class="font-semibold text-kpmg-blue text-sm">Consolidation</span>
                 </div>
             </button>
 
-            <!-- Option 3: Observability & Audit -->
+            <!-- Option 3: Audit -->
             <button id="nav-item-audit" onclick="switchNavSection('AUDIT')" 
-                data-tooltip="Observability & Audit"
+                data-tooltip="Audit"
                 class="sidebar-nav-item w-full h-11 px-3 rounded-lg text-xs font-medium flex items-center text-slate-700 transition">
                 <div class="sidebar-icon-box flex-shrink-0 w-6 h-6 flex items-center justify-center text-slate-400 mr-3">
                     <svg class="w-5 h-5 nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -183,10 +177,7 @@
                     </svg>
                 </div>
                 <div class="sidebar-label flex-1 flex items-center justify-between text-left">
-                    <div class="flex flex-col">
-                        <span class="font-semibold text-slate-800">Observability & Audit</span>
-                        <span class="text-[10px] text-slate-400">Telemetry & Lineage</span>
-                    </div>
+                    <span class="font-semibold text-slate-800 text-sm">Audit</span>
                 </div>
             </button>
 
@@ -198,7 +189,7 @@
                         <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                         </svg>
-                        <span>Run Pipeline</span>
+                        <span>Run Consolidation</span>
                     </button>
                     <button onclick="openBatchUploadModal()" class="w-full h-8 px-3 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-kpmg-navy border border-slate-200 text-xs font-medium transition flex items-center justify-center space-x-1.5 btn-tactile">
                         <svg class="w-3.5 h-3.5 text-kpmg-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -343,20 +334,21 @@
             </div>
         </div>
 
-        <!-- Section B: Audit & Observability Console (Live Telemetry, Full Width) -->
+        <!-- Section B: Audit (Live Telemetry, Full Width) -->
         <div id="view-observability" class="hidden space-y-6 w-full">
             <div class="flex items-center justify-center h-64 text-kpmg-muted text-sm">
-                Loading Observability Console...
+                Loading Audit Console...
             </div>
         </div>
 
-        <!-- Section C: Company Profile & Workspace Management (Full Width, Zero Outer Box) -->
+        <!-- Section C: Company Profile (Full Width, Zero Outer Box) -->
         <div id="view-companies" class="hidden space-y-6 w-full">
             <div class="space-y-6 w-full">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-kpmg-border pb-4 gap-3">
                     <div>
                         <div class="flex items-center space-x-3">
-                            <h2 class="text-xl font-bold text-kpmg-text" id="company-profile-title">Company Profile & Perimeter</h2>
+                            <h2 class="text-xl font-bold text-kpmg-navy">Company Profile</h2>
+                            <span id="company-profile-title" class="font-semibold text-sm text-slate-600 bg-slate-100 px-2 py-0.5 rounded">C1 (client_1)</span>
                             <span id="company-profile-badge" class="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Active</span>
                         </div>
                         <p class="text-xs text-kpmg-muted mt-1" id="company-profile-desc">Multi-entity consolidation scope, legal entities, ownership percentages, and Chart of Accounts structure.</p>
