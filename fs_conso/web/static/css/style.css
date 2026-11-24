@@ -194,3 +194,88 @@ body {
     backdrop-filter: blur(8px);
     transition: opacity 0.3s ease;
 }
+
+/* Collapsible Luxury Left Sidebar Navigation */
+#sidebar-nav {
+    width: 16rem; /* 256px */
+    transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#sidebar-nav.collapsed {
+    width: 4.5rem; /* 72px */
+}
+
+#sidebar-nav.collapsed .sidebar-label,
+#sidebar-nav.collapsed .sidebar-expanded-only {
+    display: none !important;
+}
+
+#sidebar-nav.collapsed .sidebar-nav-item {
+    justify-content: center;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+
+#sidebar-nav.collapsed .sidebar-nav-item .sidebar-icon-box {
+    margin-right: 0;
+}
+
+#sidebar-nav.collapsed .sidebar-collapsed-only {
+    display: flex !important;
+}
+
+.sidebar-collapsed-only {
+    display: none !important;
+}
+
+/* Main Content responsive offset */
+#main-layout-container {
+    transition: margin-left 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    margin-left: 16rem;
+}
+
+#main-layout-container.sidebar-collapsed {
+    margin-left: 4.5rem;
+}
+
+/* Sidebar Nav Item Micro-Interactions */
+.sidebar-nav-item {
+    position: relative;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.sidebar-nav-item:hover:not(.active) {
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #FFFFFF;
+}
+
+.sidebar-nav-item.active {
+    background: linear-gradient(90deg, rgba(0, 51, 141, 0.4) 0%, rgba(0, 29, 72, 0.3) 100%);
+    color: #FFFFFF;
+    border-left: 3px solid var(--kinpaku-gold);
+}
+
+.sidebar-nav-item.active .nav-icon {
+    color: var(--kinpaku-gold);
+}
+
+/* Tooltip on collapsed state hover */
+#sidebar-nav.collapsed .sidebar-nav-item:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: #0B0F17;
+    color: #FFFFFF;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 60;
+    pointer-events: none;
+}
+

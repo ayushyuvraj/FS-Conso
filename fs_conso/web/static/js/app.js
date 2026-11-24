@@ -8,11 +8,14 @@ let appStatus = {};
 let pipelineData = {};
 let activeStep = 1;
 let activeSection = 'RUN'; // 'RUN' or 'AUDIT'
+let activeNavSection = 'PIPELINE'; // 'COMPANIES', 'PIPELINE', or 'AUDIT'
+let sidebarCollapsed = false;
 let availableCompanies = [];
 let pendingHITLItems = [];
 let collapseEntityColumns = false;
 
 document.addEventListener("DOMContentLoaded", async () => {
+    initSidebar();
     await fetchCompanies();
     await fetchStatus();
     await syncCachedApiKeyIfAvailable();
@@ -20,6 +23,56 @@ document.addEventListener("DOMContentLoaded", async () => {
     initDropZone();
     initBatchDropZone();
 });
+
+function initSidebar() {
+    try {
+        const saved = localStorage.getItem("fs_conso_sidebar_collapsed");
+        if (saved === "true") {
+            sidebarCollapsed = true;
+            applySidebarState();
+        }
+    } catch (_) { }
+
+    // Global keyboard shortcut: Ctrl+B or Cmd+B to toggle sidebar
+    document.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && (e.key === "b" || e.key === "B")) {
+            e.preventDefault();
+            toggleSidebar();
+        }
+    });
+}
+
+function toggleSidebar() {
+    sidebarCollapsed = !sidebarCollapsed;
+    applySidebarState();
+    try {
+        localStorage.setItem("fs_conso_sidebar_collapsed", sidebarCollapsed ? "true" : "false");
+    } catch (_) { }
+}
+
+function applySidebarState() {
+    const sidebar = document.getElementById("sidebar-nav");
+    const mainLayout = document.getElementById("main-layout-container");
+    const chevron = document.getElementById("icon-collapse-chevron");
+
+    if (sidebar) {
+        if (sidebarCollapsed) {
+            sidebar.classList.add("collapsed");
+        } else {
+            sidebar.classList.remove("collapsed");
+        }
+    }
+    if (mainLayout) {
+        if (sidebarCollapsed) {
+            mainLayout.classList.add("sidebar-collapsed");
+        } else {
+            mainLayout.classList.remove("sidebar-collapsed");
+        }
+    }
+    if (chevron) {
+        chevron.style.transform = sidebarCollapsed ? "rotate(180deg)" : "rotate(0deg)";
+    }
+}
 
 async function syncCachedApiKeyIfAvailable() {
     try {
@@ -74,10 +127,15 @@ async function handleCompanySwitch(companyId) {
         if (data.success) {
             statementsData = null;
             currentLineageTrace = null;
+            await fetchCompanies();
             await fetchStatus();
             await loadPipelineData();
             showToast("Company Switched", `Active workspace is now ${appStatus.active_company_name || companyId}.`, "success");
-            switchStep(1);
+            if (activeNavSection === 'COMPANIES') {
+                renderCompanyWorkspace();
+            } else {
+                switchStep(1);
+            }
         } else {
             showToast("Switch Failed", data.detail || "Could not switch company workspace.", "error");
         }
@@ -147,7 +205,11 @@ async function triggerLoadDemo() {
             await fetchStatus();
             await loadPipelineData();
             showToast("Demo Loaded", "Reference Company P Healthcare loaded.", "success");
-            switchStep(1);
+            if (activeNavSection === 'COMPANIES') {
+                renderCompanyWorkspace();
+            } else {
+                switchStep(1);
+            }
         }
     } catch (err) {
         showToast("Demo Load Error", "" + err, "error");
@@ -171,7 +233,9 @@ async function loadPipelineData() {
     try {
         const res = await fetch("/api/pipeline-data");
         pipelineData = await res.json();
-        if (activeSection === 'RUN') {
+        if (activeNavSection === 'COMPANIES') {
+            renderCompanyWorkspace();
+        } else if (activeNavSection === 'PIPELINE') {
             renderActiveStepContent();
         } else {
             renderObservabilityConsole();
@@ -196,6 +260,27 @@ function renderHeaderStatus() {
         dispCurr.textContent = appStatus.reporting_currency;
     }
 
+    // Active Company Titles & Badges
+    const headerCompany = document.getElementById("header-active-company-name");
+    const sidebarEntityBadge = document.getElementById("sidebar-entity-badge");
+    const miniCompanyCode = document.getElementById("sidebar-mini-company-code");
+    const sidebarStepBadge = document.getElementById("badge-sidebar-step");
+    const sidebarObsBadge = document.getElementById("badge-sidebar-observability");
+
+    const compName = appStatus.active_company_name || "Company P Healthcare Corp";
+    if (headerCompany) headerCompany.textContent = compName;
+    if (miniCompanyCode) {
+        const initials = compName.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+        miniCompanyCode.textContent = initials || "CP";
+    }
+    if (sidebarEntityBadge) {
+        const count = appStatus.all_entities ? appStatus.all_entities.length : 4;
+        sidebarEntityBadge.textContent = `${count} Entities`;
+    }
+    if (sidebarStepBadge) {
+        sidebarStepBadge.textContent = `Step ${activeStep}/6`;
+    }
+
     if (keyDot && keyLabel && keyPill) {
         if (appStatus.has_active_api_key) {
             keyDot.className = "w-2 h-2 rounded-full bg-emerald-400";
@@ -208,21 +293,25 @@ function renderHeaderStatus() {
         }
     }
 
-    if (badgeObs) {
+    const updateObsEl = (el) => {
+        if (!el) return;
         if (appStatus.is_running) {
-            badgeObs.textContent = "Running...";
-            badgeObs.className = "ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-500/30 text-amber-300 font-bold animate-pulse";
+            el.textContent = "Running...";
+            el.className = "px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-500/30 text-amber-300 font-bold animate-pulse";
         } else if (appStatus.is_blocked || appStatus.halted_node) {
-            badgeObs.textContent = `Halted: ${appStatus.halted_node || 'Gate'}`;
-            badgeObs.className = "ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-rose-500/30 text-rose-300 font-bold";
+            el.textContent = `Halted: ${appStatus.halted_node || 'Gate'}`;
+            el.className = "px-1.5 py-0.5 rounded text-[10px] font-mono bg-rose-500/30 text-rose-300 font-bold";
         } else if (appStatus.teacher_score > 0) {
-            badgeObs.textContent = `${appStatus.teacher_score}/100`;
-            badgeObs.className = "ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/30 text-emerald-300 font-bold";
+            el.textContent = `${appStatus.teacher_score}/100`;
+            el.className = "px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/30 text-emerald-300 font-bold";
         } else {
-            badgeObs.textContent = "Live";
-            badgeObs.className = "ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-500/30 text-slate-300 font-bold";
+            el.textContent = "Live";
+            el.className = "px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-500/30 text-slate-300 font-bold";
         }
-    }
+    };
+
+    updateObsEl(badgeObs);
+    updateObsEl(sidebarObsBadge);
 }
 
 function renderPrerequisiteBanner() {
@@ -255,38 +344,204 @@ function renderHITLBadge() {
     }
 }
 
-function switchSection(section) {
-    activeSection = section;
-    const btnRun = document.getElementById("nav-btn-run");
-    const btnAudit = document.getElementById("nav-btn-audit");
-    const stepperContainer = document.getElementById("pipeline-stepper-container");
-    const viewRun = document.getElementById("view-pipeline-run") || document.getElementById("view-run");
-    const viewAudit = document.getElementById("view-observability");
+function switchNavSection(section) {
+    activeNavSection = section;
+    activeSection = (section === 'AUDIT') ? 'AUDIT' : 'RUN';
 
-    if (section === 'RUN') {
-        if (btnRun) {
-            btnRun.className = "h-8 px-3.5 rounded text-xs font-semibold transition flex items-center space-x-2 bg-white text-slate-900 shadow-sm";
-        }
-        if (btnAudit) {
-            btnAudit.className = "h-8 px-3.5 rounded text-xs font-semibold transition flex items-center space-x-2 text-white/80 hover:text-white hover:bg-white/10";
-        }
-        if (stepperContainer) stepperContainer.classList.remove("hidden");
-        if (viewRun) viewRun.classList.remove("hidden");
-        if (viewAudit) viewAudit.classList.add("hidden");
+    const itemCompanies = document.getElementById("nav-item-companies");
+    const itemPipeline = document.getElementById("nav-item-pipeline");
+    const itemAudit = document.getElementById("nav-item-audit");
+
+    [itemCompanies, itemPipeline, itemAudit].forEach(el => el?.classList.remove("active"));
+
+    if (section === 'COMPANIES') {
+        itemCompanies?.classList.add("active");
+    } else if (section === 'PIPELINE') {
+        itemPipeline?.classList.add("active");
+    } else if (section === 'AUDIT') {
+        itemAudit?.classList.add("active");
+    }
+
+    const viewCompanies = document.getElementById("view-companies");
+    const viewPipeline = document.getElementById("view-pipeline-run");
+    const viewAudit = document.getElementById("view-observability");
+    const stepperContainer = document.getElementById("pipeline-stepper-container");
+
+    if (section === 'COMPANIES') {
+        viewCompanies?.classList.remove("hidden");
+        viewPipeline?.classList.add("hidden");
+        viewAudit?.classList.add("hidden");
+        stepperContainer?.classList.add("hidden");
+        renderCompanyWorkspace();
+    } else if (section === 'PIPELINE') {
+        viewCompanies?.classList.add("hidden");
+        viewPipeline?.classList.remove("hidden");
+        viewAudit?.classList.add("hidden");
+        stepperContainer?.classList.remove("hidden");
         renderStepperState();
         renderActiveStepContent();
-    } else {
-        if (btnAudit) {
-            btnAudit.className = "h-8 px-3.5 rounded text-xs font-semibold transition flex items-center space-x-2 bg-white text-slate-900 shadow-sm";
-        }
-        if (btnRun) {
-            btnRun.className = "h-8 px-3.5 rounded text-xs font-semibold transition flex items-center space-x-2 text-white/80 hover:text-white hover:bg-white/10";
-        }
-        if (stepperContainer) stepperContainer.classList.add("hidden");
-        if (viewRun) viewRun.classList.add("hidden");
-        if (viewAudit) viewAudit.classList.remove("hidden");
+    } else if (section === 'AUDIT') {
+        viewCompanies?.classList.add("hidden");
+        viewPipeline?.classList.add("hidden");
+        viewAudit?.classList.remove("hidden");
+        stepperContainer?.classList.add("hidden");
         renderObservabilityConsole();
     }
+}
+
+// Backward compatibility alias
+function switchSection(section) {
+    if (section === 'RUN') {
+        switchNavSection('PIPELINE');
+    } else if (section === 'AUDIT') {
+        switchNavSection('AUDIT');
+    } else {
+        switchNavSection(section);
+    }
+}
+
+function renderCompanyWorkspace() {
+    const container = document.getElementById("company-perimeter-content");
+    const titleEl = document.getElementById("company-profile-title");
+    const descEl = document.getElementById("company-profile-desc");
+    if (!container) return;
+
+    const compName = appStatus.active_company_name || "Company P Healthcare Corp";
+    const compId = appStatus.active_company_id || "company-p";
+    const curr = appStatus.reporting_currency || "INR";
+    const period = appStatus.current_period || "31-Mar-2024";
+
+    if (titleEl) titleEl.textContent = `${compName} (${compId})`;
+    if (descEl) descEl.textContent = `Consolidation Perimeter, Functional Currencies & Reporting Governance for ${period}.`;
+
+    const allEntities = appStatus.all_entities || ['Company_P', 'Company S1', 'Company S2', 'Company S3'];
+    const uploadedEntities = appStatus.uploaded_entities || [];
+    const missingPrereqs = appStatus.missing_prerequisites || [];
+
+    container.innerHTML = `
+        <!-- Governance & Scope Metrics Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-4 rounded-xl border border-kpmg-border bg-slate-50/70">
+                <div class="text-[11px] font-semibold text-kpmg-muted uppercase tracking-wider">Perimeter Scope</div>
+                <div class="text-2xl font-bold font-mono text-kpmg-navy mt-1">${allEntities.length} <span class="text-xs font-normal text-kpmg-muted">Entities</span></div>
+                <div class="text-[11px] text-emerald-700 font-medium mt-1 flex items-center space-x-1">
+                    <span>${uploadedEntities.length} Ingested</span>
+                </div>
+            </div>
+
+            <div class="p-4 rounded-xl border border-kpmg-border bg-slate-50/70">
+                <div class="text-[11px] font-semibold text-kpmg-muted uppercase tracking-wider">Presentation Currency</div>
+                <div class="text-2xl font-bold font-mono text-[#00338D] mt-1">${escapeHtml(curr)}</div>
+                <div class="text-[11px] text-kpmg-muted mt-1">Target reporting group</div>
+            </div>
+
+            <div class="p-4 rounded-xl border border-kpmg-border bg-slate-50/70">
+                <div class="text-[11px] font-semibold text-kpmg-muted uppercase tracking-wider">Target Period</div>
+                <div class="text-2xl font-bold font-mono text-kpmg-text mt-1">${escapeHtml(period)}</div>
+                <div class="text-[11px] text-kpmg-muted mt-1">Annual Financial Year</div>
+            </div>
+
+            <div class="p-4 rounded-xl border border-kpmg-border bg-slate-50/70">
+                <div class="text-[11px] font-semibold text-kpmg-muted uppercase tracking-wider">Prerequisite Health</div>
+                <div class="text-2xl font-bold font-mono ${missingPrereqs.length === 0 ? 'text-emerald-600' : 'text-amber-600'} mt-1">
+                    ${missingPrereqs.length === 0 ? '100% Ready' : 'Attention'}
+                </div>
+                <div class="text-[11px] text-kpmg-muted mt-1">${missingPrereqs.length === 0 ? 'All data tables validated' : missingPrereqs.length + ' files missing'}</div>
+            </div>
+        </div>
+
+        <!-- Perimeter Legal Entities Table -->
+        <div class="border border-kpmg-border rounded-xl overflow-hidden shadow-xs">
+            <div class="px-5 py-3.5 bg-slate-50 border-b border-kpmg-border flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-xs uppercase tracking-wider text-kpmg-navy">Legal Entities & Ownership Structure</h3>
+                    <p class="text-[11px] text-kpmg-muted mt-0.5">Corporate perimeter governing IFRS 10 / Ind AS 110 consolidation</p>
+                </div>
+                <span class="px-2.5 py-1 rounded text-xs font-semibold bg-blue-50 text-[#00338D] border border-blue-200">
+                    ${allEntities.length} Total Registered
+                </span>
+            </div>
+
+            <table class="fin-table">
+                <thead>
+                    <tr>
+                        <th class="w-12">#</th>
+                        <th>Legal Entity Name</th>
+                        <th>Entity Code</th>
+                        <th>Corporate Role</th>
+                        <th>Currency</th>
+                        <th>Consolidation Method</th>
+                        <th>Ingestion State</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${allEntities.map((ent, idx) => {
+                        const isParent = idx === 0 || ent.toLowerCase().includes("company_p") || ent.toLowerCase().includes("parent");
+                        const isUploaded = uploadedEntities.some(u => u.toLowerCase().replace(/[\s_]/g, '') === ent.toLowerCase().replace(/[\s_]/g, ''));
+                        return `
+                            <tr class="hover:bg-slate-50/80 transition">
+                                <td class="font-mono text-kpmg-muted text-[11px]">${idx + 1}</td>
+                                <td class="font-bold text-kpmg-navy flex items-center space-x-2 py-2.5">
+                                    <span class="w-2 h-2 rounded-full ${isParent ? 'bg-[#00338D]' : 'bg-blue-400'}"></span>
+                                    <span>${escapeHtml(ent.replace(/_/g, ' '))}</span>
+                                </td>
+                                <td class="font-mono text-[11px] text-kpmg-muted">${escapeHtml(ent)}</td>
+                                <td>
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${isParent ? 'bg-[#001D48] text-[#D4AF37]' : 'bg-slate-100 text-slate-700'}">
+                                        ${isParent ? 'Holding Entity (Parent)' : 'Operating Subsidiary'}
+                                    </span>
+                                </td>
+                                <td class="font-mono font-bold text-xs text-[#00338D]">${isParent ? escapeHtml(curr) : (ent.includes('S1') ? 'USD' : ent.includes('S2') ? 'EUR' : curr)}</td>
+                                <td class="text-xs text-kpmg-muted">${isParent ? 'Full (100% Direct)' : 'Full Consolidation (NCI Recognized)'}</td>
+                                <td>
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${isUploaded ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}">
+                                        ${isUploaded ? '✓ Ingested' : 'Missing File'}
+                                    </span>
+                                </td>
+                            </tr>
+                        `;
+                    }).join("")}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Master Data Status Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="p-5 rounded-xl border border-kpmg-border bg-white shadow-xs space-y-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-2 h-2 rounded-full bg-[#00338D]"></span>
+                        <h4 class="font-bold text-xs uppercase tracking-wider text-kpmg-navy">Chart of Accounts (COA) Status</h4>
+                    </div>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Standardized</span>
+                </div>
+                <p class="text-xs text-kpmg-muted leading-relaxed">
+                    Corporate Chart of Accounts loaded for multi-entity GL standardization. Mappings are validated by Gemini Brain and cached in learning memory.
+                </p>
+                <div class="pt-2 border-t border-kpmg-border flex items-center justify-between text-xs">
+                    <span class="text-kpmg-muted font-mono">Hierarchy: 5-Level Financial Statements</span>
+                    <button onclick="switchNavSection('PIPELINE'); switchStep(2);" class="text-[#00338D] font-bold hover:underline">Review Mappings &rarr;</button>
+                </div>
+            </div>
+
+            <div class="p-5 rounded-xl border border-kpmg-border bg-white shadow-xs space-y-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-2 h-2 rounded-full bg-[#D4AF37]"></span>
+                        <h4 class="font-bold text-xs uppercase tracking-wider text-kpmg-navy">Exchange Rate Matrices (IAS 21)</h4>
+                    </div>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-[#00338D] border border-blue-200">Active Rates</span>
+                </div>
+                <p class="text-xs text-kpmg-muted leading-relaxed">
+                    Closing, Average, and Historical FX rate tables configured for translation of foreign operations into ${escapeHtml(curr)}.
+                </p>
+                <div class="pt-2 border-t border-kpmg-border flex items-center justify-between text-xs">
+                    <span class="text-kpmg-muted font-mono">Rates: Closing &bull; Average &bull; Historical</span>
+                    <button onclick="switchNavSection('PIPELINE'); switchStep(3);" class="text-[#00338D] font-bold hover:underline">View FX Translation &rarr;</button>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 function renderStepperState() {
@@ -312,8 +567,8 @@ function renderStepperState() {
 }
 
 function switchStep(step) {
-    if (activeSection !== 'RUN') {
-        switchSection('RUN');
+    if (activeNavSection !== 'PIPELINE') {
+        switchNavSection('PIPELINE');
     }
     const maxUnlocked = Math.max(1, (appStatus.current_step || 1));
     if (step > maxUnlocked && !appStatus.completed_steps?.includes(step)) {

@@ -200,12 +200,15 @@ def test_observability_section_and_telemetry():
     assert "halted_node" in pipe_data
     assert "remediation_items" in pipe_data
 
-    # 3. Two-Section Architecture in index.html (6 steps in pipeline, no Step 7 in stepper)
+    # 3. Three-Section Collapsible Architecture in index.html (Companies, Pipeline, Audit)
     res_index = client.get("/")
     assert res_index.status_code == 200
     html = res_index.text
-    assert 'id="nav-btn-run"' in html
-    assert 'id="nav-btn-audit"' in html
+    assert ('id="nav-item-pipeline"' in html or 'id="nav-btn-run"' in html)
+    assert ('id="nav-item-audit"' in html or 'id="nav-btn-audit"' in html)
+    assert 'id="nav-item-companies"' in html
+    assert 'id="sidebar-nav"' in html
+    assert 'kpmg-logo.svg' in html
     assert 'id="view-pipeline-run"' in html
     assert 'id="view-observability"' in html
     assert 'id="step-btn-6"' in html
