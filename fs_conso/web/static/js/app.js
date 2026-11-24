@@ -666,7 +666,7 @@ function renderStep1(el) {
                     </div>
                 </div>
             </div>
-            <div class="overflow-x-auto max-h-[460px] border border-kpmg-border rounded bg-white shadow-xs">
+            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-280px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
                 <table class="fin-table">
                     <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
                         <tr>
@@ -723,7 +723,7 @@ function renderStep2(el) {
                     </button>
                 </div>
             </div>
-            <div class="overflow-x-auto max-h-[460px] border border-kpmg-border rounded bg-white shadow-xs">
+            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-280px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
                 <table class="fin-table">
                     <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
                         <tr>
@@ -768,7 +768,7 @@ function renderStep3(el) {
                     <span class="font-bold text-sm text-kpmg-navy">${escapeHtml(tb.entity_code)} (${escapeHtml(tb.currency)} &rarr; ${appStatus.reporting_currency || 'INR'})</span>
                     <span class="text-xs font-mono text-kpmg-muted">Net Translated: <strong class="text-emerald-700">${formatNum(tb.total_translated)}</strong></span>
                 </div>
-                <div class="overflow-x-auto max-h-[300px]">
+                <div class="overflow-x-auto min-h-[380px] max-h-[calc(100vh-320px)]">
                     <table class="fin-table">
                         <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
                             <tr>
@@ -837,7 +837,7 @@ function renderStep4(el) {
                     <span class="px-2 py-1 rounded bg-red-50 text-red-700 font-mono font-bold">Exceptions: ${elim.exception_count}</span>
                 </div>
             </div>
-            <div class="overflow-x-auto max-h-[460px] border border-kpmg-border rounded bg-white shadow-xs">
+            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-280px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
                 <table class="fin-table">
                     <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
                         <tr>
@@ -925,7 +925,7 @@ function renderStep5(el) {
                     </div>
                 </div>
             </div>
-            <div class="overflow-x-auto max-h-[460px] border border-kpmg-border rounded bg-white shadow-xs">
+            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-280px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
                 <table class="fin-table">
                     <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
                         <tr>
@@ -1081,7 +1081,7 @@ async function renderStep6(el) {
                 </div>
             </div>
 
-            <div class="overflow-x-auto max-h-[500px] border border-kpmg-border rounded bg-white shadow-xs">
+            <div class="overflow-x-auto min-h-[480px] max-h-[calc(100vh-280px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
                 <table class="fin-table">
                     <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
                         <tr>${headersHtml}</tr>
@@ -1696,7 +1696,7 @@ function renderObservabilityConsole() {
                         </a>
                     </div>
                 </div>
-                <div class="overflow-x-auto max-h-[360px] border border-kpmg-border rounded bg-white shadow-xs">
+                <div class="overflow-x-auto min-h-[380px] max-h-[calc(100vh-320px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
                     <table class="fin-table">
                         <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
                             <tr>

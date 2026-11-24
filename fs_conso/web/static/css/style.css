@@ -15,7 +15,7 @@
     --kpmg-cobalt: #1E49E2;
     --kpmg-pacific: #0091DA;
     --kpmg-cyan-soft: #ACEAFF;
-    --kpmg-canvas: #F8FAFC;
+    --kpmg-canvas: #FFFFFF;
     --kpmg-surface: #FFFFFF;
     --kpmg-border: #E2E8F0;
     --kpmg-border-subtle: #F1F5F9;
@@ -41,7 +41,7 @@
 }
 
 body {
-    background-color: var(--kpmg-canvas);
+    background-color: #FFFFFF;
     color: #0F172A;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -280,6 +280,7 @@ body {
 #main-layout-container {
     transition: margin-left 0.26s cubic-bezier(0.16, 1, 0.3, 1);
     margin-left: 16rem;
+    background-color: #FFFFFF;
 }
 
 #main-layout-container.sidebar-collapsed {

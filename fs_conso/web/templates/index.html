@@ -234,13 +234,13 @@
     </aside>
 
     <!-- Main Workspace Layout Container (Offset by Sidebar Width) -->
-    <div id="main-layout-container" class="flex-1 flex flex-col min-h-[calc(100vh-4rem)]">
+    <div id="main-layout-container" class="flex-1 flex flex-col min-h-[calc(100vh-4rem)] bg-white">
 
     <!-- 2. Pipeline Controls & Stepper Bar -->
     <div id="pipeline-stepper-container">
         <!-- Gated 6-Step Primary Stepper Bar -->
         <nav class="bg-white border-b border-kpmg-border px-6 py-3 sticky top-16 z-30 shadow-xs">
-            <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <div class="w-full px-2 md:px-4 flex items-center justify-between">
                 <div class="flex items-center space-x-2 md:space-x-4 w-full">
                     <!-- Step 1: Ingestion -->
                     <div id="step-btn-1" onclick="switchStep(1)"
@@ -307,7 +307,7 @@
 
     <!-- 3. Dynamic Missing Prerequisite Alert Banner -->
     <div id="banner-prerequisites" class="hidden bg-amber-50 border-b border-amber-200 px-6 py-2.5">
-        <div class="max-w-6xl mx-auto flex items-center justify-between text-xs text-amber-900">
+        <div class="w-full px-2 md:px-4 flex items-center justify-between text-xs text-amber-900">
             <div class="flex items-center space-x-2">
                 <svg class="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -330,12 +330,12 @@
         </div>
     </div>
 
-    <!-- Main Workspace View Container -->
-    <main class="flex-1 max-w-6xl w-full mx-auto p-6 space-y-6">
+    <!-- Main Workspace View Container (Full-Bleed Clean White Canvas) -->
+    <main class="flex-1 w-full px-6 md:px-8 py-6 space-y-6 bg-white">
         <!-- Section A: Primary Consolidation Stepper Views -->
-        <div id="view-pipeline-run" class="space-y-6">
-            <!-- Dynamic Step Containers -->
-            <div id="step-content" class="bg-white rounded-xl border border-kpmg-border p-6 shadow-sm min-h-[480px]">
+        <div id="view-pipeline-run" class="space-y-6 w-full">
+            <!-- Dynamic Step Containers (Full-Bleed, Zero Artificial Card Box) -->
+            <div id="step-content" class="w-full space-y-6">
                 <!-- Content loaded dynamically via app.js -->
                 <div class="flex items-center justify-center h-64 text-kpmg-muted text-sm">
                     Loading consolidation workspace...
@@ -343,36 +343,36 @@
             </div>
         </div>
 
-        <!-- Section B: Audit & Observability Console (Live Telemetry) -->
-        <div id="view-observability" class="hidden space-y-6">
-            <div class="flex items-center justify-center h-64 text-kpmg-muted text-sm bg-white rounded-xl border border-kpmg-border">
+        <!-- Section B: Audit & Observability Console (Live Telemetry, Full Width) -->
+        <div id="view-observability" class="hidden space-y-6 w-full">
+            <div class="flex items-center justify-center h-64 text-kpmg-muted text-sm">
                 Loading Observability Console...
             </div>
         </div>
 
-        <!-- Section C: Company Profile & Workspace Management -->
-        <div id="view-companies" class="hidden space-y-6">
-            <div class="bg-white rounded-xl border border-kpmg-border p-6 shadow-sm space-y-6">
+        <!-- Section C: Company Profile & Workspace Management (Full Width, Zero Outer Box) -->
+        <div id="view-companies" class="hidden space-y-6 w-full">
+            <div class="space-y-6 w-full">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-kpmg-border pb-4 gap-3">
                     <div>
                         <div class="flex items-center space-x-3">
-                            <h2 class="text-lg font-bold text-kpmg-text" id="company-profile-title">Company Profile & Perimeter</h2>
-                            <span id="company-profile-badge" class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Active</span>
+                            <h2 class="text-xl font-bold text-kpmg-text" id="company-profile-title">Company Profile & Perimeter</h2>
+                            <span id="company-profile-badge" class="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Active</span>
                         </div>
                         <p class="text-xs text-kpmg-muted mt-1" id="company-profile-desc">Multi-entity consolidation scope, legal entities, ownership percentages, and Chart of Accounts structure.</p>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <button onclick="openNewCompanyModal()" class="px-3 py-1.5 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition btn-tactile flex items-center space-x-1.5">
+                        <button onclick="openNewCompanyModal()" class="px-3.5 py-2 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition btn-tactile flex items-center space-x-1.5 shadow-xs">
                             <span>+ Create Workspace</span>
                         </button>
-                        <button onclick="openBatchUploadModal()" class="px-3 py-1.5 rounded-lg bg-white border border-kpmg-border hover:bg-gray-50 text-kpmg-text text-xs font-medium transition flex items-center space-x-1.5">
+                        <button onclick="openBatchUploadModal()" class="px-3.5 py-2 rounded-lg bg-white border border-kpmg-border hover:bg-gray-50 text-kpmg-text text-xs font-medium transition flex items-center space-x-1.5 shadow-xs">
                             <span>Upload Files</span>
                         </button>
                     </div>
                 </div>
 
                 <!-- Entity Perimeter Hierarchy Card Grid -->
-                <div id="company-perimeter-content" class="space-y-4">
+                <div id="company-perimeter-content" class="space-y-6 w-full">
                     <div class="flex items-center justify-center h-48 text-kpmg-muted text-xs">
                         Loading corporate perimeter structure...
                     </div>
