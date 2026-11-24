@@ -487,7 +487,7 @@ function renderCompanyWorkspace() {
                                 </td>
                                 <td class="font-mono text-[11px] text-kpmg-muted">${escapeHtml(ent)}</td>
                                 <td>
-                                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${isParent ? 'bg-[#001D48] text-[#D4AF37]' : 'bg-slate-100 text-slate-700'}">
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${isParent ? 'bg-[#00338D] text-white shadow-xs' : 'bg-slate-100 text-slate-700'}">
                                         ${isParent ? 'Holding Entity (Parent)' : 'Operating Subsidiary'}
                                     </span>
                                 </td>
@@ -527,7 +527,7 @@ function renderCompanyWorkspace() {
             <div class="p-5 rounded-xl border border-kpmg-border bg-white shadow-xs space-y-3">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center space-x-2">
-                        <span class="w-2 h-2 rounded-full bg-[#D4AF37]"></span>
+                        <span class="w-2 h-2 rounded-full bg-[#0091DA]"></span>
                         <h4 class="font-bold text-xs uppercase tracking-wider text-kpmg-navy">Exchange Rate Matrices (IAS 21)</h4>
                     </div>
                     <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-[#00338D] border border-blue-200">Active Rates</span>
@@ -623,7 +623,7 @@ function renderStep1(el) {
                 </div>
                 <div class="flex items-center space-x-2">
                     <button onclick="openBatchUploadModal()" class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1 shadow-xs">
-                        <svg class="w-3 h-3 text-[#D4AF37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                        <svg class="w-3 h-3 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
                         <span>Batch Upload (10–15 Files)</span>
                     </button>
                     <button onclick="triggerResetBaseline()" class="h-7 px-2.5 rounded bg-white hover:bg-gray-100 text-kpmg-navy text-[11px] font-medium border border-kpmg-border transition flex items-center space-x-1" title="Reset workspace">
@@ -945,7 +945,7 @@ async function renderStep6(el) {
                 <h4 class="font-bold text-sm text-kpmg-navy mb-1">Financial Statements Not Yet Generated</h4>
                 <p class="text-xs text-kpmg-muted max-w-md mx-auto mb-4">${statementsData?.message || 'Please execute the multi-agent consolidation pipeline to generate the IND AS Balance Sheet and Statement of Profit and Loss.'}</p>
                 <button onclick="triggerRunPipeline()" class="h-8 px-4 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition shadow-xs inline-flex items-center space-x-1.5">
-                    <svg class="w-3.5 h-3.5 text-[#D4AF37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path></svg>
+                    <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path></svg>
                     <span>Execute Consolidation</span>
                 </button>
             </div>
@@ -1473,11 +1473,11 @@ function renderObservabilityConsole() {
 
     // 3-Tier Architecture Segregation Banner
     const tierBannerHtml = `
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 rounded-lg bg-slate-900 text-white border border-[#D4AF37]/30 shadow-md">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 rounded-lg bg-[#001D48] text-white border border-[#0091DA]/30 shadow-md">
             <div class="space-y-1">
                 <div class="flex items-center space-x-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-                    <span class="text-xs font-bold uppercase tracking-wider text-[#D4AF37]">1. Deterministic Engine</span>
+                    <span class="text-xs font-bold uppercase tracking-wider text-[#ACEAFF]">1. Deterministic Engine</span>
                 </div>
                 <p class="text-[11px] text-white/70">Mathematical Debit = Credit checks, algebraic netting, date-effective FX conversions, and 100% active Excel formula generation.</p>
             </div>
@@ -1604,7 +1604,7 @@ function renderObservabilityConsole() {
                         <span>View Pipeline</span>
                     </button>
                     <button onclick="triggerRunPipeline()" class="h-8 px-3.5 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition flex items-center space-x-1 shadow-xs">
-                        <svg class="w-3.5 h-3.5 text-[#D4AF37]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path></svg>
+                        <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path></svg>
                         <span>Execute Run</span>
                     </button>
                 </div>
@@ -1789,8 +1789,8 @@ function showToast(title, message, type = "info") {
         toast.className += " bg-amber-900/95 text-white border-amber-500/50";
         iconSvg = `<svg class="w-4 h-4 text-amber-300 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
     } else {
-        toast.className += " bg-[#0B0F17] text-white border-[#D4AF37]/50";
-        iconSvg = `<svg class="w-4 h-4 text-[#D4AF37] shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+        toast.className += " formula-popover-glass text-white border border-[#0091DA]/40 shadow-xl";
+        iconSvg = `<svg class="w-4 h-4 text-[#0091DA] shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
     }
 
     toast.innerHTML = `
