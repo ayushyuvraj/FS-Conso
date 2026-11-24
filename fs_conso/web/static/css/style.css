@@ -95,6 +95,7 @@ body {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
+    table-layout: auto;
 }
 
 .fin-table th {
@@ -102,11 +103,153 @@ body {
     color: #475569;
     font-weight: 600;
     text-align: left;
-    padding: 8px 12px;
+    padding: 8px 14px 8px 12px;
     box-shadow: inset 0 -1px 0 var(--kpmg-border);
     position: sticky;
     top: 0;
     z-index: 10;
+    position: relative;
+    user-select: none;
+}
+
+/* Strict Alignment Sync between Column Headers and Cell Content */
+.fin-table th.num-cell,
+.fin-table td.num-cell,
+.fin-table th.text-right,
+.fin-table td.text-right,
+th.num-cell,
+td.num-cell {
+    text-align: right !important;
+}
+
+.fin-table th.text-center,
+.fin-table td.text-center,
+th.text-center,
+td.text-center {
+    text-align: center !important;
+}
+
+.fin-table th.text-left,
+.fin-table td.text-left,
+th.text-left,
+td.text-left {
+    text-align: left !important;
+}
+
+/* Draggable Table Column Resizer Bar */
+.col-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    user-select: none;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.col-resizer::after {
+    content: '';
+    display: block;
+    width: 2px;
+    height: 55%;
+    background-color: rgba(148, 163, 184, 0.4);
+    border-radius: 1px;
+    transition: background-color 0.15s ease, height 0.15s ease;
+}
+
+.col-resizer:hover::after,
+.col-resizer.resizing::after {
+    background-color: var(--kpmg-blue);
+    height: 100%;
+}
+
+body.table-col-resizing,
+body.table-col-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+/* Drawer Horizontal Resize Bar */
+.drawer-resizer-left {
+    position: absolute;
+    top: 0;
+    left: -4px;
+    width: 8px;
+    height: 100%;
+    cursor: ew-resize;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.drawer-resizer-left::after {
+    content: '';
+    display: block;
+    width: 2px;
+    height: 100%;
+    background-color: transparent;
+    transition: background-color 0.15s ease;
+}
+
+.drawer-resizer-left:hover::after,
+.drawer-resizer-left.resizing::after {
+    background-color: var(--kpmg-blue);
+}
+
+body.drawer-resizing,
+body.drawer-resizing * {
+    cursor: ew-resize !important;
+    user-select: none !important;
+}
+
+/* Modal Dialog Resize Handles */
+.modal-resizer-right {
+    position: absolute;
+    top: 0;
+    right: -4px;
+    width: 8px;
+    height: 100%;
+    cursor: ew-resize;
+    z-index: 50;
+}
+
+.modal-resizer-right:hover,
+.modal-resizer-right.resizing {
+    background-color: rgba(0, 51, 141, 0.25);
+}
+
+.modal-resizer-corner {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    z-index: 55;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 3px;
+}
+
+.modal-resizer-corner::after {
+    content: '';
+    display: block;
+    width: 7px;
+    height: 7px;
+    border-right: 2px solid #94A3B8;
+    border-bottom: 2px solid #94A3B8;
+}
+
+body.modal-resizing,
+body.modal-resizing * {
+    cursor: nwse-resize !important;
+    user-select: none !important;
 }
 
 .fin-table th:first-child,

@@ -16,6 +16,9 @@ let collapseEntityColumns = false;
 
 document.addEventListener("DOMContentLoaded", async () => {
     initSidebar();
+    initDialogAndDrawerResizers();
+    initTableColumnResizers();
+    initTableObserver();
     await fetchCompanies();
     await fetchStatus();
     await syncCachedApiKeyIfAvailable();
@@ -1995,4 +1998,192 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+// -------------------------------------------------------------
+// Interactive Table Column & Dialog / Drawer Resizing Engine
+// -------------------------------------------------------------
+
+function initTableColumnResizers(root) {
+    const scope = root || document;
+    const tables = scope.querySelectorAll("table.fin-table");
+    tables.forEach(table => {
+        const ths = table.querySelectorAll("thead th");
+        ths.forEach((th) => {
+            if (th.querySelector(".col-resizer")) return;
+
+            const resizer = document.createElement("div");
+            resizer.className = "col-resizer";
+            resizer.title = "Drag to resize column horizontally (double-click to auto-adjust)";
+            th.appendChild(resizer);
+
+            resizer.addEventListener("mousedown", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                resizer.classList.add("resizing");
+                document.body.classList.add("table-col-resizing");
+
+                const startX = e.clientX;
+                const startWidth = th.getBoundingClientRect().width;
+
+                const onMouseMove = (moveEvt) => {
+                    const delta = moveEvt.clientX - startX;
+                    const newWidth = Math.max(45, Math.round(startWidth + delta));
+                    th.style.width = `${newWidth}px`;
+                    th.style.minWidth = `${newWidth}px`;
+                };
+
+                const onMouseUp = () => {
+                    resizer.classList.remove("resizing");
+                    document.body.classList.remove("table-col-resizing");
+                    document.removeEventListener("mousemove", onMouseMove);
+                    document.removeEventListener("mouseup", onMouseUp);
+                };
+
+                document.addEventListener("mousemove", onMouseMove);
+                document.addEventListener("mouseup", onMouseUp);
+            });
+
+            // Double-click resets to default auto-adjust
+            resizer.addEventListener("dblclick", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                th.style.width = "";
+                th.style.minWidth = "";
+            });
+        });
+    });
+}
+
+function initTableObserver() {
+    const observer = new MutationObserver((mutations) => {
+        let shouldInit = false;
+        for (const m of mutations) {
+            if (m.addedNodes && m.addedNodes.length > 0) {
+                for (const node of m.addedNodes) {
+                    if (node.nodeType === 1 && (node.matches?.("table.fin-table") || node.querySelector?.("table.fin-table"))) {
+                        shouldInit = true;
+                        break;
+                    }
+                }
+            }
+            if (shouldInit) break;
+        }
+        if (shouldInit) {
+            initTableColumnResizers();
+        }
+    });
+
+    const target = document.getElementById("main-layout-container") || document.body;
+    observer.observe(target, { childList: true, subtree: true });
+}
+
+function initDialogAndDrawerResizers() {
+    // 1. Side Drawers: Settings Drawer & HITL Drawer (draggable left-edge bar)
+    const drawers = [document.getElementById("settings-drawer"), document.getElementById("hitl-drawer")];
+    drawers.forEach(drawer => {
+        if (!drawer || drawer.querySelector(".drawer-resizer-left")) return;
+        const resizer = document.createElement("div");
+        resizer.className = "drawer-resizer-left";
+        resizer.title = "Drag to resize panel";
+        drawer.prepend(resizer);
+
+        resizer.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            resizer.classList.add("resizing");
+            document.body.classList.add("drawer-resizing");
+
+            const onMouseMove = (moveEvt) => {
+                const newWidth = Math.min(window.innerWidth - 60, Math.max(300, window.innerWidth - moveEvt.clientX));
+                drawer.style.width = `${newWidth}px`;
+                drawer.style.maxWidth = `${newWidth}px`;
+            };
+
+            const onMouseUp = () => {
+                resizer.classList.remove("resizing");
+                document.body.classList.remove("drawer-resizing");
+                document.removeEventListener("mousemove", onMouseMove);
+                document.removeEventListener("mouseup", onMouseUp);
+            };
+
+            document.addEventListener("mousemove", onMouseMove);
+            document.addEventListener("mouseup", onMouseUp);
+        });
+    });
+
+    // 2. Modal Dialogs: Batch File Upload Modal & New Company Modal
+    const modalCards = document.querySelectorAll(".modal-dialog-card");
+    modalCards.forEach(card => {
+        if (!card || card.querySelector(".modal-resizer-corner")) return;
+
+        // Right-edge horizontal resize bar
+        const rightEdge = document.createElement("div");
+        rightEdge.className = "modal-resizer-right";
+        rightEdge.title = "Drag to resize dialog horizontally";
+        card.appendChild(rightEdge);
+
+        rightEdge.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            rightEdge.classList.add("resizing");
+            document.body.classList.add("drawer-resizing");
+
+            const startX = e.clientX;
+            const startWidth = card.getBoundingClientRect().width;
+
+            const onMouseMove = (moveEvt) => {
+                const newWidth = Math.max(360, Math.min(window.innerWidth - 40, startWidth + (moveEvt.clientX - startX)));
+                card.style.width = `${newWidth}px`;
+                card.style.maxWidth = `${newWidth}px`;
+            };
+
+            const onMouseUp = () => {
+                rightEdge.classList.remove("resizing");
+                document.body.classList.remove("drawer-resizing");
+                document.removeEventListener("mousemove", onMouseMove);
+                document.removeEventListener("mouseup", onMouseUp);
+            };
+
+            document.addEventListener("mousemove", onMouseMove);
+            document.addEventListener("mouseup", onMouseUp);
+        });
+
+        // Bottom-right corner resize handle
+        const corner = document.createElement("div");
+        corner.className = "modal-resizer-corner";
+        corner.title = "Drag to resize dialog";
+        card.appendChild(corner);
+
+        corner.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            corner.classList.add("resizing");
+            document.body.classList.add("modal-resizing");
+
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startWidth = card.getBoundingClientRect().width;
+            const startHeight = card.getBoundingClientRect().height;
+
+            const onMouseMove = (moveEvt) => {
+                const newWidth = Math.max(360, Math.min(window.innerWidth - 40, startWidth + (moveEvt.clientX - startX)));
+                const newHeight = Math.max(260, Math.min(window.innerHeight - 40, startHeight + (moveEvt.clientY - startY)));
+                card.style.width = `${newWidth}px`;
+                card.style.maxWidth = `${newWidth}px`;
+                card.style.height = `${newHeight}px`;
+                card.style.maxHeight = `${newHeight}px`;
+            };
+
+            const onMouseUp = () => {
+                corner.classList.remove("resizing");
+                document.body.classList.remove("modal-resizing");
+                document.removeEventListener("mousemove", onMouseMove);
+                document.removeEventListener("mouseup", onMouseUp);
+            };
+
+            document.addEventListener("mousemove", onMouseMove);
+            document.addEventListener("mouseup", onMouseUp);
+        });
+    });
 }
