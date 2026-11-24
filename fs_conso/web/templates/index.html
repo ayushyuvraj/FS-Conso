@@ -53,7 +53,8 @@
             <button id="nav-btn-run" onclick="switchSection('RUN')"
                 class="h-8 px-3.5 rounded text-xs font-semibold transition flex items-center space-x-2 bg-white text-kpmg-navy shadow-xs">
                 <svg class="w-3.5 h-3.5 text-kpmg-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
                 <span>Consolidation Pipeline</span>
             </button>
@@ -64,7 +65,8 @@
                         d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
                 <span>Audit & Observability</span>
-                <span id="badge-nav-observability" class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/30 text-emerald-300 font-bold">Live</span>
+                <span id="badge-nav-observability"
+                    class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/30 text-emerald-300 font-bold">Live</span>
             </button>
         </div>
 
@@ -110,7 +112,8 @@
                     <!-- Step 1: Ingestion -->
                     <div id="step-btn-1" onclick="switchStep(1)"
                         class="step-tab active flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-pointer">
-                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">1</span>
+                        <span
+                            class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">1</span>
                         <span>Ingestion</span>
                     </div>
                     <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
@@ -118,7 +121,8 @@
                     <!-- Step 2: Mapping -->
                     <div id="step-btn-2" onclick="switchStep(2)"
                         class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">2</span>
+                        <span
+                            class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">2</span>
                         <span>Mapping</span>
                     </div>
                     <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
@@ -126,7 +130,8 @@
                     <!-- Step 3: Translation -->
                     <div id="step-btn-3" onclick="switchStep(3)"
                         class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">3</span>
+                        <span
+                            class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">3</span>
                         <span>Translation</span>
                     </div>
                     <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
@@ -134,7 +139,8 @@
                     <!-- Step 4: Eliminations -->
                     <div id="step-btn-4" onclick="switchStep(4)"
                         class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">4</span>
+                        <span
+                            class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">4</span>
                         <span>Eliminations</span>
                     </div>
                     <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
@@ -142,7 +148,8 @@
                     <!-- Step 5: Consolidation -->
                     <div id="step-btn-5" onclick="switchStep(5)"
                         class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">5</span>
+                        <span
+                            class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">5</span>
                         <span>Consolidation</span>
                     </div>
                     <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
@@ -150,7 +157,8 @@
                     <!-- Step 6: Financial Statements -->
                     <div id="step-btn-6" onclick="switchStep(6)"
                         class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">6</span>
+                        <span
+                            class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">6</span>
                         <span>Statements</span>
                     </div>
                 </div>
@@ -230,7 +238,8 @@
 
         <!-- Section B: Audit & Observability Console (Accessible At All Times) -->
         <div id="view-observability" class="hidden space-y-6">
-            <div class="flex items-center justify-center h-64 text-kpmg-muted text-sm bg-white rounded border border-kpmg-border">
+            <div
+                class="flex items-center justify-center h-64 text-kpmg-muted text-sm bg-white rounded border border-kpmg-border">
                 Loading Observability Console...
             </div>
         </div>
@@ -251,11 +260,15 @@
             <div class="space-y-2">
                 <div class="flex items-center justify-between">
                     <label class="font-bold text-kpmg-text block">Google Gemini API Key</label>
-                    <span class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Saved Permanently</span>
+                    <span
+                        class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Saved
+                        Permanently</span>
                 </div>
                 <input id="input-api-key" type="password" placeholder="AIzaSy... (persisted permanently)"
                     class="w-full h-9 px-3 rounded border border-kpmg-border font-mono text-xs focus:ring-2 focus:ring-kpmg-electric focus:outline-none">
-                <p class="text-[11px] text-emerald-700">✓ Saved permanently to local <code class="font-mono bg-emerald-100/60 px-1 rounded">.env</code> and browser storage. You never need to re-enter it.
+                <p class="text-[11px] text-emerald-700">✓ Saved permanently to local <code
+                        class="font-mono bg-emerald-100/60 px-1 rounded">.env</code> and browser storage. You never need
+                    to re-enter it.
                 </p>
             </div>
 

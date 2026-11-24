@@ -28,7 +28,7 @@ async function syncCachedApiKeyIfAvailable() {
                 await fetchStatus();
             }
         }
-    } catch (_) {}
+    } catch (_) { }
 }
 
 async function fetchStatus() {
@@ -378,10 +378,9 @@ function renderStep4(el) {
             <td class="num-cell">${formatNum(p.counterparty_amount)}</td>
             <td class="num-cell font-bold ${Math.abs(p.net_variance) < 0.01 ? 'text-emerald-600' : 'text-amber-600'}">${formatNum(p.net_variance)}</td>
             <td class="text-center">
-                <span class="px-2.5 py-0.5 rounded text-[11px] font-semibold ${
-                    p.status === 'MATCHED' ? 'bg-emerald-100 text-emerald-800' :
-                    p.status === 'TOLERANCE_WARNING' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
-                }">
+                <span class="px-2.5 py-0.5 rounded text-[11px] font-semibold ${p.status === 'MATCHED' ? 'bg-emerald-100 text-emerald-800' :
+            p.status === 'TOLERANCE_WARNING' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
+        }">
                     ${p.status}
                 </span>
             </td>
@@ -443,7 +442,7 @@ function renderStep5(el) {
                 <td>${r.account_description}</td>
                 ${entCells}
                 <td class="num-cell font-bold formula-interactive"
-                    onmouseenter="showFormula(event, '=SUM(C${i+4}:F${i+4})', 'Total Entities Rollup')"
+                    onmouseenter="showFormula(event, '=SUM(C${i + 4}:F${i + 4})', 'Total Entities Rollup')"
                     onmouseleave="hideFormula()">
                     ${formatNum(r.total_entities)}
                 </td>
@@ -556,8 +555,8 @@ async function renderStep6(el) {
         }
 
         const isTotal = r.is_total;
-        const rowClass = isTotal 
-            ? "bg-blue-50/40 font-bold border-t border-b-2 border-kpmg-navy" 
+        const rowClass = isTotal
+            ? "bg-blue-50/40 font-bold border-t border-b-2 border-kpmg-navy"
             : "hover:bg-slate-50/70 border-b border-gray-100 transition";
 
         const titleCell = `
@@ -590,8 +589,8 @@ async function renderStep6(el) {
         return `<tr class="${rowClass}">${titleCell}${noteCell}${valCells}</tr>`;
     }).join("");
 
-    const balancePill = isBS 
-        ? (stData.is_balanced 
+    const balancePill = isBS
+        ? (stData.is_balanced
             ? `<span class="inline-flex items-center px-2.5 py-1 rounded bg-emerald-50 text-emerald-800 font-bold text-xs border border-emerald-200">
                 <svg class="w-3.5 h-3.5 mr-1 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                 Balance Sheet Balanced (Total Assets = Total Equity & Liabilities)
@@ -994,7 +993,7 @@ function renderObservabilityConsole() {
 
     // Filter audit trail based on current search & dropdowns
     const filteredAudit = auditLog.filter(a => {
-        const matchesQuery = !auditSearchQuery || 
+        const matchesQuery = !auditSearchQuery ||
             (a.stage && a.stage.toLowerCase().includes(auditSearchQuery.toLowerCase())) ||
             (a.agent && a.agent.toLowerCase().includes(auditSearchQuery.toLowerCase())) ||
             (a.action && a.action.toLowerCase().includes(auditSearchQuery.toLowerCase())) ||
@@ -1300,13 +1299,13 @@ async function triggerRunPipeline() {
                     subStepText.textContent = `Running: ${st.current_stage}`;
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
     }, 300);
 
     try {
         const res = await fetch("/api/run-pipeline", { method: "POST" });
         const data = await res.json();
-        
+
         if (!res.ok || data.success === false) {
             const errDetail = data.error_message || data.detail || "Consolidation failed";
             if (res.status === 403 || errDetail.toLowerCase().includes("api key") || !appStatus.has_active_api_key) {
@@ -1594,7 +1593,7 @@ async function saveSettings() {
             if (key) {
                 try {
                     localStorage.setItem("fs_conso_gemini_key", key);
-                } catch (_) {}
+                } catch (_) { }
                 if (keyInput) {
                     keyInput.value = "";
                 }
