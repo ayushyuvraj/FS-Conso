@@ -8,10 +8,28 @@ let pipelineData = {};
 let activeStep = 1;
 let activeSection = 'RUN'; // 'RUN' or 'AUDIT'
 
-document.addEventListener("DOMContentLoaded", () => {
-    fetchStatus();
+document.addEventListener("DOMContentLoaded", async () => {
+    await fetchStatus();
+    await syncCachedApiKeyIfAvailable();
     loadPipelineData();
 });
+
+async function syncCachedApiKeyIfAvailable() {
+    try {
+        const cachedKey = localStorage.getItem("fs_conso_gemini_key");
+        if (cachedKey && !appStatus.has_active_api_key) {
+            const res = await fetch("/api/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ gemini_api_key: cachedKey })
+            });
+            const data = await res.json();
+            if (data.success) {
+                await fetchStatus();
+            }
+        }
+    } catch (_) {}
+}
 
 async function fetchStatus() {
     try {
@@ -1526,10 +1544,22 @@ function showToast(title, message, type = "info") {
 // SETTINGS DRAWER FUNCTIONS
 function toggleSettingsDrawer(forceOpen = false) {
     const drawer = document.getElementById("settings-drawer");
+    if (!drawer) return;
+    const willOpen = forceOpen || drawer.classList.contains("translate-x-full");
     if (forceOpen) {
         drawer.classList.remove("translate-x-full");
     } else {
         drawer.classList.toggle("translate-x-full");
+    }
+    if (willOpen) {
+        const inputKey = document.getElementById("input-api-key");
+        if (inputKey) {
+            if (appStatus.has_active_api_key && appStatus.masked_api_key && appStatus.masked_api_key !== "[NOT CONFIGURED]") {
+                inputKey.placeholder = `Active: ${appStatus.masked_api_key} (saved in .env)`;
+            } else {
+                inputKey.placeholder = "AIzaSy... (persisted permanently)";
+            }
+        }
     }
 }
 
@@ -1538,25 +1568,38 @@ function updateThresholdDisplay(val) {
 }
 
 async function saveSettings() {
-    const key = document.getElementById("input-api-key").value;
+    const keyInput = document.getElementById("input-api-key");
+    const key = keyInput ? keyInput.value.trim() : "";
     const threshold = parseFloat(document.getElementById("slider-threshold").value) / 100.0;
     const absTol = parseFloat(document.getElementById("input-abs-tol").value);
     const pctTol = parseFloat(document.getElementById("input-pct-tol").value) / 100.0;
 
     try {
+        const payload = {
+            ai_confidence_threshold: threshold,
+            ic_absolute_tolerance: absTol,
+            ic_percent_tolerance: pctTol
+        };
+        if (key) {
+            payload.gemini_api_key = key;
+        }
+
         const res = await fetch("/api/settings", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                gemini_api_key: key || undefined,
-                ai_confidence_threshold: threshold,
-                ic_absolute_tolerance: absTol,
-                ic_percent_tolerance: pctTol
-            })
+            body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (data.success) {
-            showToast("Settings Saved", "Consolidation parameters and API key updated.", "success");
+            if (key) {
+                try {
+                    localStorage.setItem("fs_conso_gemini_key", key);
+                } catch (_) {}
+                if (keyInput) {
+                    keyInput.value = "";
+                }
+            }
+            showToast("Settings Saved", "Parameters and API key saved permanently.", "success");
             toggleSettingsDrawer();
             fetchStatus();
         } else {

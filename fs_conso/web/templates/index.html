@@ -249,10 +249,13 @@
         <div class="p-6 space-y-6 flex-1 overflow-y-auto text-xs">
             <!-- Google Gemini API Key Input -->
             <div class="space-y-2">
-                <label class="font-bold text-kpmg-text block">Google Gemini API Key (Mandatory)</label>
-                <input id="input-api-key" type="password" placeholder="AIzaSy..."
+                <div class="flex items-center justify-between">
+                    <label class="font-bold text-kpmg-text block">Google Gemini API Key</label>
+                    <span class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Saved Permanently</span>
+                </div>
+                <input id="input-api-key" type="password" placeholder="AIzaSy... (persisted permanently)"
                     class="w-full h-9 px-3 rounded border border-kpmg-border font-mono text-xs focus:ring-2 focus:ring-kpmg-electric focus:outline-none">
-                <p class="text-[11px] text-kpmg-muted">Execution will strictly halt if an active API key is not present.
+                <p class="text-[11px] text-emerald-700">✓ Saved permanently to local <code class="font-mono bg-emerald-100/60 px-1 rounded">.env</code> and browser storage. You never need to re-enter it.
                 </p>
             </div>
 

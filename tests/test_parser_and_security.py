@@ -122,6 +122,28 @@ def test_config_api_key_masking_and_repr():
     assert "AIzaSy1234567890abcdefghijklmnopqrstuvwxyz" not in repr(cfg)
 
 
+def test_config_api_key_env_persistence(tmp_path, monkeypatch):
+    """Verifies that set_api_key_secure safely writes to .env and unsets when cleared."""
+    import dotenv
+    test_env = tmp_path / ".env"
+    monkeypatch.setattr("fs_conso.config.ENV_PATH", test_env)
+
+    cfg = AppConfig(gemini_api_key="")
+    test_key = "AIzaSy" + "K" * 30
+    cfg.set_api_key_secure(test_key, persist_to_env=True)
+
+    assert test_env.exists()
+    content = test_env.read_text(encoding="utf-8")
+    assert test_key in content
+    assert dotenv.get_key(str(test_env), "GEMINI_API_KEY") == test_key
+
+    # Clearing the key should unset it
+    cfg.set_api_key_secure("", persist_to_env=True)
+    cleared_content = test_env.read_text(encoding="utf-8")
+    assert test_key not in cleared_content
+    assert dotenv.get_key(str(test_env), "GEMINI_API_KEY") is None
+
+
 def test_sanitize_error_message():
     """Verifies that error messages redact any embedded API keys."""
     raw_error = "Failed to connect to https://generativelanguage.googleapis.com?key=AIzaSySecretTestKey123456789"

@@ -8,6 +8,65 @@ from pydantic import BaseModel, Field
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Load environment from .env file if present (project root or user home directory)
+ENV_PATH = PROJECT_ROOT / ".env"
+HOME_ENV_PATH = Path.home() / ".env"
+
+def _load_env_file(path: Path) -> None:
+    """Loads key-value pairs from .env into os.environ with zero third-party dependencies."""
+    if not path.exists():
+        return
+    try:
+        content = path.read_text(encoding="utf-8")
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip()
+                if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                    val = val[1:-1]
+                if key and key not in os.environ:
+                    os.environ[key] = val
+    except Exception:
+        pass
+
+def _save_env_var(path: Path, key_name: str, value_to_set: str) -> None:
+    """Updates, adds, or clears a variable in .env file with zero external dependencies."""
+    try:
+        lines = []
+        found = False
+        if path.exists():
+            content = path.read_text(encoding="utf-8")
+            for line in content.splitlines():
+                stripped = line.strip()
+                if stripped.startswith(f"{key_name}=") or stripped.startswith(f"export {key_name}="):
+                    if value_to_set:
+                        lines.append(f"{key_name}='{value_to_set}'")
+                    found = True
+                else:
+                    lines.append(line)
+        if not found and value_to_set:
+            lines.append(f"{key_name}='{value_to_set}'")
+
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+# Attempt loading from .env
+if ENV_PATH.exists():
+    _load_env_file(ENV_PATH)
+elif HOME_ENV_PATH.exists():
+    _load_env_file(HOME_ENV_PATH)
+
+try:
+    import dotenv
+    dotenv.load_dotenv(dotenv_path=ENV_PATH, override=False)
+except ImportError:
+    pass
+
 # Standard Google API Key pattern (starts with AIzaSy)
 API_KEY_REGEX = re.compile(r"^AIzaSy[A-Za-z0-9_-]{15,50}$")
 
@@ -44,11 +103,13 @@ class AppConfig(BaseModel):
             return "********"
         return f"{key[:6]}...{key[-4:]}"
 
-    def set_api_key_secure(self, new_key: str) -> None:
-        """Sanitizes, validates, and synchronizes API key across config and environment."""
+    def set_api_key_secure(self, new_key: str, persist_to_env: bool = True) -> None:
+        """Sanitizes, validates, and synchronizes API key across config, environment, and .env file."""
         if not new_key:
             self.gemini_api_key = ""
             os.environ.pop("GEMINI_API_KEY", None)
+            if persist_to_env and ENV_PATH.exists():
+                _save_env_var(ENV_PATH, "GEMINI_API_KEY", "")
             return
 
         cleaned = new_key.strip()
@@ -60,6 +121,9 @@ class AppConfig(BaseModel):
 
         self.gemini_api_key = cleaned
         os.environ["GEMINI_API_KEY"] = cleaned
+
+        if persist_to_env:
+            _save_env_var(ENV_PATH, "GEMINI_API_KEY", cleaned)
 
     def validate_api_key_strict(self) -> bool:
         """Strict Execution Prerequisite: Halts application if an active key is missing/invalid."""
