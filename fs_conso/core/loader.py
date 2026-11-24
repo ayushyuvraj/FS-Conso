@@ -8,14 +8,44 @@ from typing import Dict, List, Optional, Tuple, Union
 import openpyxl
 import pandas as pd
 
+from fs_conso.core.company_manager import company_manager
 from fs_conso.core.file_parser import FlexibleTBParser
 from fs_conso.models.coa import AccountClassification, ChartOfAccounts, COAItem, RollUpOperator
+from fs_conso.models.company import CompanyProfile
 from fs_conso.models.entity import EntityHierarchy, LegalEntity
 from fs_conso.models.fx import FXRateEntry, FXRateTable
 from fs_conso.models.trial_balance import RawTBRow, RawTrialBalance
 
 # Expose TrialBalanceLoader for multi-format file ingestion
 TrialBalanceLoader = FlexibleTBParser
+
+
+def get_active_profile(company_id: str = "company-p") -> CompanyProfile:
+    """Retrieves active company profile or initializes demo benchmark profile."""
+    prof = company_manager.get_company(company_id)
+    if prof is None:
+        prof = company_manager.ensure_default_demo_company()
+    return prof
+
+
+def load_coa_for_company(company_id: str = "company-p") -> ChartOfAccounts:
+    prof = get_active_profile(company_id)
+    return prof.group_coa or ChartOfAccounts()
+
+
+def load_entity_hierarchy_for_company(company_id: str = "company-p") -> EntityHierarchy:
+    prof = get_active_profile(company_id)
+    return prof.entity_hierarchy or EntityHierarchy(parent_code=company_id)
+
+
+def load_fx_rates_for_company(company_id: str = "company-p", period: Optional[str] = None) -> FXRateTable:
+    prof = get_active_profile(company_id)
+    return prof.get_fx_table_for_period(period) or ConsoMasterLoader.load_default_fx_rates()
+
+
+def load_mappings_for_company(company_id: str = "company-p") -> Dict[Tuple[str, str], str]:
+    prof = get_active_profile(company_id)
+    return prof.get_mappings_dict()
 
 
 def load_trial_balance(

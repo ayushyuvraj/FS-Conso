@@ -20,6 +20,7 @@ from fs_conso.models.coa import AccountClassification, ChartOfAccounts
 from fs_conso.models.entity import EntityHierarchy
 from fs_conso.models.fx import FXRateTable
 from fs_conso.models.trial_balance import RawTrialBalance
+from fs_conso.excel.formula_builder import escape_csv_formula_injection
 
 class ExcelReportWriter:
     """Generates Consolidated_Financial_Statements.xlsx with 100% formula provenance."""
@@ -203,8 +204,8 @@ class ExcelReportWriter:
 
         curr_row = 4
         for row in raw_tb.rows:
-            ws.cell(row=curr_row, column=1, value=row.account_code)
-            ws.cell(row=curr_row, column=2, value=row.account_description)
+            ws.cell(row=curr_row, column=1, value=escape_csv_formula_injection(str(row.account_code or "")))
+            ws.cell(row=curr_row, column=2, value=escape_csv_formula_injection(str(row.account_description or "")))
 
             deb_cell = ws.cell(row=curr_row, column=3, value=row.debit if row.debit is not None else (row.amount if row.amount and row.amount > 0 else 0.0))
             deb_cell.number_format = "#,##0.00"
@@ -269,10 +270,10 @@ class ExcelReportWriter:
                 rate_row_in_fx = 5
 
             for r_idx, row in enumerate(tb.rows, start=1):
-                ws.cell(row=curr_row, column=1, value=tb.entity_code).alignment = Alignment(horizontal="center")
-                ws.cell(row=curr_row, column=2, value=row.account_code).alignment = Alignment(horizontal="center")
-                ws.cell(row=curr_row, column=3, value=row.account_description)
-                ws.cell(row=curr_row, column=4, value=row.source_currency).alignment = Alignment(horizontal="center")
+                ws.cell(row=curr_row, column=1, value=escape_csv_formula_injection(str(tb.entity_code or ""))).alignment = Alignment(horizontal="center")
+                ws.cell(row=curr_row, column=2, value=escape_csv_formula_injection(str(row.account_code or ""))).alignment = Alignment(horizontal="center")
+                ws.cell(row=curr_row, column=3, value=escape_csv_formula_injection(str(row.account_description or "")))
+                ws.cell(row=curr_row, column=4, value=escape_csv_formula_injection(str(row.source_currency or ""))).alignment = Alignment(horizontal="center")
 
                 if row.is_fctr_plug:
                     # FCTR Plug formula: =-SUM(previous rows for this entity)
@@ -361,11 +362,29 @@ class ExcelReportWriter:
 
         self._auto_fit_columns(ws)
 
+    def _resolve_column_layout(self, consolidated_tb: ConsolidatedTrialBalance):
+        """Resolves entity and elimination column ordering strictly matching Conso.xlsx:
+        [Entity 1 ... Entity N, Parent, Entity 1 Elim ... Entity N Elim, Elim Total, Consolidation, Net Total]
+        """
+        parent_code = self.hierarchy.parent_code if self.hierarchy else None
+        if parent_code and parent_code in consolidated_tb.entity_codes:
+            subs = [e for e in consolidated_tb.entity_codes if e != parent_code]
+            entity_display = subs + [parent_code]
+            elim_display = subs
+        else:
+            entity_display = consolidated_tb.entity_codes
+            elim_display = consolidated_tb.entity_codes
+        return entity_display, elim_display
+
     def _write_consolidated_tb_sheet(self, wb: openpyxl.Workbook, consolidated_tb: ConsolidatedTrialBalance) -> None:
         ws = wb.create_sheet(title="Consolidated_TB")
         ws.views.sheetView[0].showGridLines = True
 
-        total_cols = 3 + len(consolidated_tb.entity_codes) + 3  # Acc, Desc, Entities..., Total, Elim, Net
+        entity_display, elim_display = self._resolve_column_layout(consolidated_tb)
+        n_ents = len(entity_display)
+        n_elims = len(elim_display)
+        # Columns: Acc, Desc, [Entities...], [Eliminations...], Elim Total, Consolidation, Net Total
+        total_cols = 2 + n_ents + n_elims + 3
         last_col_letter = get_column_letter(total_cols)
 
         ws.merge_cells(f"A1:{last_col_letter}1")
@@ -375,7 +394,12 @@ class ExcelReportWriter:
         ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[1].height = 30
 
-        headers = ["Account Code", "Account Description"] + consolidated_tb.entity_codes + ["Total Entities", "Eliminations", "Consolidated Total"]
+        # Exact headers mirroring Conso.xlsx: [Entity 1 ... Entity N, Parent, Entity 1 Elim ... Entity N Elim, Elim Total, Consolidation, Net Total]
+        headers = ["Account Code", "Account Description"] + \
+                  entity_display + \
+                  [f"{e} Elim" for e in elim_display] + \
+                  ["Elim Total", "Consolidation", "Net Total"]
+
         for col_idx, h in enumerate(headers, start=1):
             cell = ws.cell(row=3, column=col_idx, value=h)
             cell.font = self.font_header
@@ -385,43 +409,59 @@ class ExcelReportWriter:
 
         curr_row = 4
         ent_start_col = 3
-        ent_end_col = ent_start_col + len(consolidated_tb.entity_codes) - 1
-        tot_ent_col = ent_end_col + 1
-        elim_col = tot_ent_col + 1
-        conso_tot_col = elim_col + 1
+        ent_end_col = ent_start_col + n_ents - 1
+        elim_start_col = ent_end_col + 1
+        elim_end_col = elim_start_col + n_elims - 1
+        elim_tot_col = elim_end_col + 1
+        conso_col = elim_tot_col + 1
+        net_col = conso_col + 1
 
-        tot_ent_letter = get_column_letter(tot_ent_col)
-        elim_letter = get_column_letter(elim_col)
-        conso_tot_letter = get_column_letter(conso_tot_col)
         first_ent_letter = get_column_letter(ent_start_col)
         last_ent_letter = get_column_letter(ent_end_col)
+        first_elim_letter = get_column_letter(elim_start_col)
+        last_elim_letter = get_column_letter(elim_end_col)
+        elim_tot_letter = get_column_letter(elim_tot_col)
+        conso_letter = get_column_letter(conso_col)
+        net_letter = get_column_letter(net_col)
+
+        # Apply Collapsible Column Grouping for High Subsidiary Scaling
+        if n_ents > 3:
+            ws.column_dimensions.group(first_ent_letter, last_ent_letter, outline_level=1, hidden=False)
+        if n_elims > 2:
+            ws.column_dimensions.group(first_elim_letter, last_elim_letter, outline_level=1, hidden=False)
 
         for row in consolidated_tb.rows:
-            ws.cell(row=curr_row, column=1, value=row.account_code).alignment = Alignment(horizontal="center")
-            ws.cell(row=curr_row, column=2, value=row.account_description)
+            ws.cell(row=curr_row, column=1, value=escape_csv_formula_injection(str(row.account_code or ""))).alignment = Alignment(horizontal="center")
+            ws.cell(row=curr_row, column=2, value=escape_csv_formula_injection(str(row.account_description or "")))
 
-            # Formulas linking to Translated_TB: =SUMIFS('Translated_TB'!$G:$G, 'Translated_TB'!$A:$A, "{entity}", 'Translated_TB'!$B:$B, $A{curr_row})
-            for e_idx, ent in enumerate(consolidated_tb.entity_codes):
+            # Entity Columns: live SUMIFS into Translated_TB
+            for e_idx, ent in enumerate(entity_display):
                 col_i = ent_start_col + e_idx
-                # Dynamic formula: =SUMIFS('Translated_TB'!$G:$G, 'Translated_TB'!$A:$A, "{ent}", 'Translated_TB'!$B:$B, $A{curr_row})
                 cell = ws.cell(row=curr_row, column=col_i, value=f'=SUMIFS(Translated_TB!$G:$G, Translated_TB!$A:$A, "{ent}", Translated_TB!$B:$B, $A{curr_row})')
                 cell.number_format = "#,##0.00"
                 cell.font = self.font_formula
 
-            # Formula for Total Entities: =SUM(first_ent:last_ent)
-            tot_cell = ws.cell(row=curr_row, column=tot_ent_col, value=f"=SUM({first_ent_letter}{curr_row}:{last_ent_letter}{curr_row})")
-            tot_cell.number_format = "#,##0.00"
-            tot_cell.font = self.font_formula
+            # Individual Entity Elimination Columns: live SUMIFS into IC_Eliminations
+            for e_idx, ent in enumerate(elim_display):
+                col_i = elim_start_col + e_idx
+                cell = ws.cell(row=curr_row, column=col_i, value=f'=SUMIFS(IC_Eliminations!$G:$G, IC_Eliminations!$B:$B, "{ent}", IC_Eliminations!$D:$D, $A{curr_row})')
+                cell.number_format = "#,##0.00"
+                cell.font = self.font_formula
 
-            # Elimination formula: =SUMIFS(IC_Eliminations!$G:$G, IC_Eliminations!$D:$D, $A{curr_row})
-            elim_cell = ws.cell(row=curr_row, column=elim_col, value=f'=SUMIFS(IC_Eliminations!$G:$G, IC_Eliminations!$D:$D, $A{curr_row})')
-            elim_cell.number_format = "#,##0.00"
-            elim_cell.font = self.font_formula
+            # Elim Total: =SUM(first_elim:last_elim)
+            tot_elim_cell = ws.cell(row=curr_row, column=elim_tot_col, value=f"=SUM({first_elim_letter}{curr_row}:{last_elim_letter}{curr_row})")
+            tot_elim_cell.number_format = "#,##0.00"
+            tot_elim_cell.font = self.font_formula
 
-            # Consolidated Total formula: =Total_Entities + Eliminations
-            conso_cell = ws.cell(row=curr_row, column=conso_tot_col, value=f"={tot_ent_letter}{curr_row}+{elim_letter}{curr_row}")
+            # Consolidation: =SUM(first_ent:last_ent) + Elim Total
+            conso_cell = ws.cell(row=curr_row, column=conso_col, value=f"=SUM({first_ent_letter}{curr_row}:{last_ent_letter}{curr_row})+{elim_tot_letter}{curr_row}")
             conso_cell.number_format = "#,##0.00"
             conso_cell.font = self.font_formula
+
+            # Net Total: =Consolidation
+            net_cell = ws.cell(row=curr_row, column=net_col, value=f"={conso_letter}{curr_row}")
+            net_cell.number_format = "#,##0.00"
+            net_cell.font = self.font_formula
 
             for c in range(1, total_cols + 1):
                 ws.cell(row=curr_row, column=c).border = self.thin_border
@@ -444,7 +484,10 @@ class ExcelReportWriter:
         ws = wb.create_sheet(title="Balance_Sheet")
         ws.views.sheetView[0].showGridLines = True
 
-        total_cols = 3 + len(consolidated_tb.entity_codes) + 3
+        entity_display, elim_display = self._resolve_column_layout(consolidated_tb)
+        n_ents = len(entity_display)
+        n_elims = len(elim_display)
+        total_cols = 2 + n_ents + n_elims + 3
         last_col_letter = get_column_letter(total_cols)
 
         ws.merge_cells(f"A1:{last_col_letter}1")
@@ -454,7 +497,12 @@ class ExcelReportWriter:
         ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[1].height = 30
 
-        headers = ["Line Item", "Note"] + consolidated_tb.entity_codes + ["Total Entities", "Eliminations", "Consolidated Net"]
+        # Exact headers mirroring Conso.xlsx: [Entity 1 ... Entity N, Parent, Entity 1 Elim ... Entity N Elim, Elim Total, Consolidation, Net Total]
+        headers = ["Balance Sheet", "Note"] + \
+                  entity_display + \
+                  [f"{e} Elim." for e in elim_display] + \
+                  ["Elim Total", "Consolidation", "Net Total"]
+
         for col_idx, h in enumerate(headers, start=1):
             cell = ws.cell(row=3, column=col_idx, value=h)
             cell.font = self.font_header
@@ -462,15 +510,29 @@ class ExcelReportWriter:
             cell.alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[3].height = 24
 
+        ent_start_col = 3
+        ent_end_col = ent_start_col + n_ents - 1
+        elim_start_col = ent_end_col + 1
+        elim_end_col = elim_start_col + n_elims - 1
+        elim_tot_col = elim_end_col + 1
+        conso_col = elim_tot_col + 1
+        net_col = conso_col + 1
+
+        first_ent_letter = get_column_letter(ent_start_col)
+        last_ent_letter = get_column_letter(ent_end_col)
+        first_elim_letter = get_column_letter(elim_start_col)
+        last_elim_letter = get_column_letter(elim_end_col)
+        elim_tot_letter = get_column_letter(elim_tot_col)
+        conso_letter = get_column_letter(conso_col)
+        net_letter = get_column_letter(net_col)
+
+        # Apply Collapsible Column Grouping
+        if n_ents > 3:
+            ws.column_dimensions.group(first_ent_letter, last_ent_letter, outline_level=1, hidden=False)
+        if n_elims > 2:
+            ws.column_dimensions.group(first_elim_letter, last_elim_letter, outline_level=1, hidden=False)
+
         # Standard IND AS Balance Sheet Sections:
-        # ASSETS:
-        # Non-Current Assets: PPE, Intangible, ROU, Investments, Other Financial, Deferred Tax
-        # Current Assets: Inventories, Trade Receivables, Cash, Other Current
-        # EQUITY & LIABILITIES:
-        # Equity: Share Capital, Other Equity, NCI
-        # Non-Current Liabilities: Borrowings, Lease Liabilities, Provisions
-        # Current Liabilities: Borrowings, Lease Liabilities, Trade Payables, Other Financial, Provisions
-        
         sections = [
             ("I. ASSETS", True, None),
             ("1. Non-Current Assets", True, None),
@@ -511,19 +573,14 @@ class ExcelReportWriter:
         ]
 
         curr_row = 4
-        nca_start, nca_end = 6, 11
-        ca_start, ca_end = 14, 17
-        ncl_start, ncl_end = 27, 29
-        cl_start, cl_end = 32, 35
-
         for title, is_header_or_tot, tag in sections:
             ws.cell(row=curr_row, column=1, value=title).font = self.font_bold if is_header_or_tot else self.font_regular
             if is_header_or_tot:
                 ws.cell(row=curr_row, column=1).fill = self.fill_subtle
 
             if tag:
-                # Fill formulas across all numeric columns
-                for col_idx in range(3, total_cols + 1):
+                # 1. Fill Entity and Elimination columns
+                for col_idx in range(3, elim_tot_col):
                     col_letter = get_column_letter(col_idx)
                     cell = ws.cell(row=curr_row, column=col_idx)
                     cell.number_format = "#,##0.00"
@@ -554,11 +611,50 @@ class ExcelReportWriter:
                         cell.value = f"={col_letter}26+{col_letter}37"
                         cell.border = self.double_bottom_border
                     else:
-                        # 100% Formula link into Consolidated_TB!
-                        # Uses =SUMIFS(Consolidated_TB!{col}:{col}, Consolidated_TB!$B:$B, "*{keyword}*")
                         keyword = title.split()[0]
                         cell.value = f'=ABS(SUMIFS(Consolidated_TB!{col_letter}:{col_letter}, Consolidated_TB!$B:$B, "*{keyword}*"))'
                         cell.border = self.thin_border
+
+                # 2. Elim Total column formula: =SUM(first_elim:last_elim)
+                cell_et = ws.cell(row=curr_row, column=elim_tot_col)
+                cell_et.number_format = "#,##0.00"
+                cell_et.font = self.font_bold if is_header_or_tot else self.font_formula
+                if is_header_or_tot:
+                    if tag == "SUM_NCA": cell_et.value = f"=SUM({elim_tot_letter}6:{elim_tot_letter}11)"
+                    elif tag == "SUM_CA": cell_et.value = f"=SUM({elim_tot_letter}14:{elim_tot_letter}17)"
+                    elif tag == "TOTAL_ASSETS": cell_et.value = f"={elim_tot_letter}12+{elim_tot_letter}18"
+                    elif tag == "SUM_EQUITY": cell_et.value = f"=SUM({elim_tot_letter}22:{elim_tot_letter}25)"
+                    elif tag == "SUM_NCL": cell_et.value = f"=SUM({elim_tot_letter}27:{elim_tot_letter}29)"
+                    elif tag == "SUM_CL": cell_et.value = f"=SUM({elim_tot_letter}32:{elim_tot_letter}35)"
+                    elif tag == "TOTAL_LIAB": cell_et.value = f"={elim_tot_letter}30+{elim_tot_letter}36"
+                    elif tag == "TOTAL_EQUITY_LIAB": cell_et.value = f"={elim_tot_letter}26+{elim_tot_letter}37"
+                else:
+                    cell_et.value = f"=SUM({first_elim_letter}{curr_row}:{last_elim_letter}{curr_row})"
+                cell_et.border = self.thin_border if not tag in ("TOTAL_ASSETS", "TOTAL_EQUITY_LIAB") else self.double_bottom_border
+
+                # 3. Consolidation column formula: =SUM(first_ent:last_ent) + Elim Total
+                cell_conso = ws.cell(row=curr_row, column=conso_col)
+                cell_conso.number_format = "#,##0.00"
+                cell_conso.font = self.font_bold if is_header_or_tot else self.font_formula
+                if is_header_or_tot:
+                    if tag == "SUM_NCA": cell_conso.value = f"=SUM({conso_letter}6:{conso_letter}11)"
+                    elif tag == "SUM_CA": cell_conso.value = f"=SUM({conso_letter}14:{conso_letter}17)"
+                    elif tag == "TOTAL_ASSETS": cell_conso.value = f"={conso_letter}12+{conso_letter}18"
+                    elif tag == "SUM_EQUITY": cell_conso.value = f"=SUM({conso_letter}22:{conso_letter}25)"
+                    elif tag == "SUM_NCL": cell_conso.value = f"=SUM({conso_letter}27:{conso_letter}29)"
+                    elif tag == "SUM_CL": cell_conso.value = f"=SUM({conso_letter}32:{conso_letter}35)"
+                    elif tag == "TOTAL_LIAB": cell_conso.value = f"={conso_letter}30+{conso_letter}36"
+                    elif tag == "TOTAL_EQUITY_LIAB": cell_conso.value = f"={conso_letter}26+{conso_letter}37"
+                else:
+                    cell_conso.value = f"=SUM({first_ent_letter}{curr_row}:{last_ent_letter}{curr_row})+{elim_tot_letter}{curr_row}"
+                cell_conso.border = self.thin_border if not tag in ("TOTAL_ASSETS", "TOTAL_EQUITY_LIAB") else self.double_bottom_border
+
+                # 4. Net Total column: =Consolidation
+                cell_net = ws.cell(row=curr_row, column=net_col)
+                cell_net.number_format = "#,##0.00"
+                cell_net.font = self.font_bold if is_header_or_tot else self.font_formula
+                cell_net.value = f"={conso_letter}{curr_row}"
+                cell_net.border = self.thin_border if not tag in ("TOTAL_ASSETS", "TOTAL_EQUITY_LIAB") else self.double_bottom_border
 
             curr_row += 1
 
@@ -568,7 +664,10 @@ class ExcelReportWriter:
         ws = wb.create_sheet(title="Profit_and_Loss")
         ws.views.sheetView[0].showGridLines = True
 
-        total_cols = 3 + len(consolidated_tb.entity_codes) + 3
+        entity_display, elim_display = self._resolve_column_layout(consolidated_tb)
+        n_ents = len(entity_display)
+        n_elims = len(elim_display)
+        total_cols = 2 + n_ents + n_elims + 3
         last_col_letter = get_column_letter(total_cols)
 
         ws.merge_cells(f"A1:{last_col_letter}1")
@@ -578,13 +677,40 @@ class ExcelReportWriter:
         ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[1].height = 30
 
-        headers = ["Line Item", "Note"] + consolidated_tb.entity_codes + ["Total Entities", "Eliminations", "Consolidated Net"]
+        # Exact headers mirroring Conso.xlsx: [Entity 1 ... Entity N, Parent, Entity 1 Elim ... Entity N Elim, Elim Total, Consolidation, Net Total]
+        headers = ["Statement of Profit and Loss", "Note"] + \
+                  entity_display + \
+                  [f"{e} Elim." for e in elim_display] + \
+                  ["Elim Total", "Consolidation", "Net Total"]
+
         for col_idx, h in enumerate(headers, start=1):
             cell = ws.cell(row=3, column=col_idx, value=h)
             cell.font = self.font_header
             cell.fill = self.fill_blue
             cell.alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[3].height = 24
+
+        ent_start_col = 3
+        ent_end_col = ent_start_col + n_ents - 1
+        elim_start_col = ent_end_col + 1
+        elim_end_col = elim_start_col + n_elims - 1
+        elim_tot_col = elim_end_col + 1
+        conso_col = elim_tot_col + 1
+        net_col = conso_col + 1
+
+        first_ent_letter = get_column_letter(ent_start_col)
+        last_ent_letter = get_column_letter(ent_end_col)
+        first_elim_letter = get_column_letter(elim_start_col)
+        last_elim_letter = get_column_letter(elim_end_col)
+        elim_tot_letter = get_column_letter(elim_tot_col)
+        conso_letter = get_column_letter(conso_col)
+        net_letter = get_column_letter(net_col)
+
+        # Apply Collapsible Column Grouping
+        if n_ents > 3:
+            ws.column_dimensions.group(first_ent_letter, last_ent_letter, outline_level=1, hidden=False)
+        if n_elims > 2:
+            ws.column_dimensions.group(first_elim_letter, last_elim_letter, outline_level=1, hidden=False)
 
         pl_rows = [
             ("I. Revenue from operations", "OPERATING_REV", False),
@@ -608,7 +734,8 @@ class ExcelReportWriter:
                 ws.cell(row=curr_row, column=1).fill = self.fill_subtle
 
             if tag:
-                for col_idx in range(3, total_cols + 1):
+                # 1. Fill Entity and Elimination columns
+                for col_idx in range(3, elim_tot_col):
                     col_letter = get_column_letter(col_idx)
                     cell = ws.cell(row=curr_row, column=col_idx)
                     cell.number_format = "#,##0.00"
@@ -630,6 +757,39 @@ class ExcelReportWriter:
                         keyword = title.split()[0]
                         cell.value = f'=ABS(SUMIFS(Consolidated_TB!{col_letter}:{col_letter}, Consolidated_TB!$B:$B, "*{keyword}*"))'
                         cell.border = self.thin_border
+
+                # 2. Elim Total column formula: =SUM(first_elim:last_elim)
+                cell_et = ws.cell(row=curr_row, column=elim_tot_col)
+                cell_et.number_format = "#,##0.00"
+                cell_et.font = self.font_bold if is_tot else self.font_formula
+                if is_tot:
+                    if tag == "TOTAL_INCOME": cell_et.value = f"={elim_tot_letter}4+{elim_tot_letter}5"
+                    elif tag == "TOTAL_EXPENSES": cell_et.value = f"=SUM({elim_tot_letter}8:{elim_tot_letter}11)"
+                    elif tag == "PROFIT_BEFORE_TAX": cell_et.value = f"={elim_tot_letter}6-{elim_tot_letter}12"
+                    elif tag == "NET_PROFIT": cell_et.value = f"={elim_tot_letter}13-{elim_tot_letter}14"
+                else:
+                    cell_et.value = f"=SUM({first_elim_letter}{curr_row}:{last_elim_letter}{curr_row})"
+                cell_et.border = self.thin_border if tag != "NET_PROFIT" else self.double_bottom_border
+
+                # 3. Consolidation column formula: =SUM(first_ent:last_ent) + Elim Total
+                cell_conso = ws.cell(row=curr_row, column=conso_col)
+                cell_conso.number_format = "#,##0.00"
+                cell_conso.font = self.font_bold if is_tot else self.font_formula
+                if is_tot:
+                    if tag == "TOTAL_INCOME": cell_conso.value = f"={conso_letter}4+{conso_letter}5"
+                    elif tag == "TOTAL_EXPENSES": cell_conso.value = f"=SUM({conso_letter}8:{conso_letter}11)"
+                    elif tag == "PROFIT_BEFORE_TAX": cell_conso.value = f"={conso_letter}6-{conso_letter}12"
+                    elif tag == "NET_PROFIT": cell_conso.value = f"={conso_letter}13-{conso_letter}14"
+                else:
+                    cell_conso.value = f"=SUM({first_ent_letter}{curr_row}:{last_ent_letter}{curr_row})+{elim_tot_letter}{curr_row}"
+                cell_conso.border = self.thin_border if tag != "NET_PROFIT" else self.double_bottom_border
+
+                # 4. Net Total column: =Consolidation
+                cell_net = ws.cell(row=curr_row, column=net_col)
+                cell_net.number_format = "#,##0.00"
+                cell_net.font = self.font_bold if is_tot else self.font_formula
+                cell_net.value = f"={conso_letter}{curr_row}"
+                cell_net.border = self.thin_border if tag != "NET_PROFIT" else self.double_bottom_border
 
             curr_row += 1
 
@@ -667,12 +827,12 @@ class ExcelReportWriter:
             ]
 
         for item in audit_log:
-            ws.cell(row=curr_row, column=1, value=item.get("timestamp", ""))
-            ws.cell(row=curr_row, column=2, value=item.get("stage", "")).font = self.font_bold
-            ws.cell(row=curr_row, column=3, value=item.get("agent", "")).alignment = Alignment(horizontal="center")
-            ws.cell(row=curr_row, column=4, value=item.get("action", ""))
-            ws.cell(row=curr_row, column=5, value=item.get("status", "")).alignment = Alignment(horizontal="center")
-            ws.cell(row=curr_row, column=6, value=item.get("details", ""))
+            ws.cell(row=curr_row, column=1, value=escape_csv_formula_injection(str(item.get("timestamp", ""))))
+            ws.cell(row=curr_row, column=2, value=escape_csv_formula_injection(str(item.get("stage", "")))).font = self.font_bold
+            ws.cell(row=curr_row, column=3, value=escape_csv_formula_injection(str(item.get("agent", "")))).alignment = Alignment(horizontal="center")
+            ws.cell(row=curr_row, column=4, value=escape_csv_formula_injection(str(item.get("action", ""))))
+            ws.cell(row=curr_row, column=5, value=escape_csv_formula_injection(str(item.get("status", "")))).alignment = Alignment(horizontal="center")
+            ws.cell(row=curr_row, column=6, value=escape_csv_formula_injection(str(item.get("details", ""))))
 
             for c in range(1, 7):
                 ws.cell(row=curr_row, column=c).border = self.thin_border
@@ -691,3 +851,6 @@ class ExcelReportWriter:
                     continue
                 max_len = max(max_len, len(val))
             ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+ConsolidatedReportWriter = ExcelReportWriter
+

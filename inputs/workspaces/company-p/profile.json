@@ -1,0 +1,51 @@
+{
+  "company_id": "company-p",
+  "company_name": "Company P Healthcare Corp",
+  "reporting_currency": "INR",
+  "current_period": "31-Mar-2024",
+  "historical_mappings": [
+    {
+      "entity": "Parent",
+      "local_code": "110001",
+      "group_code": "PPE-OFF"
+    },
+    {
+      "entity": "Sub A",
+      "local_code": "FA-200",
+      "group_code": "PPE-IT"
+    },
+    {
+      "entity": "Sub B",
+      "local_code": "4015",
+      "group_code": "TRD-REC"
+    },
+    {
+      "entity": "Company_S1",
+      "local_code": "11001",
+      "group_code": "120400"
+    },
+    {
+      "entity": "Company_S1",
+      "local_code": "21001",
+      "group_code": "320300"
+    },
+    {
+      "entity": "Company_S2",
+      "local_code": "CASH01",
+      "group_code": "120400"
+    },
+    {
+      "entity": "Company_S2",
+      "local_code": "PAY01",
+      "group_code": "320300"
+    },
+    {
+      "entity": "Company_S3",
+      "local_code": "CASH01",
+      "group_code": "120400"
+    }
+  ],
+  "period_statuses": {},
+  "created_at": "2026-11-24 13:48:19",
+  "updated_at": "2026-11-24 13:48:19"
+}

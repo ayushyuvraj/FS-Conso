@@ -1,14 +1,17 @@
 """Foreign currency translation engine (Ind AS 21).
 
 Applies Closing, Average, and Historical rates and generates exact FCTR plug.
+Supports multi-period date-effective rate tables and missing FX detection.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from pydantic import BaseModel, Field
 
 from fs_conso.models.coa import AccountClassification, ChartOfAccounts
+from fs_conso.models.entity import LegalEntity
 from fs_conso.models.fx import FXRateEntry, FXRateTable
 from fs_conso.models.trial_balance import StandardizedRow, StandardizedTrialBalance
+
 
 class TranslatedRow(BaseModel):
     """An individual line item translated into the parent reporting currency (e.g. INR)."""
@@ -21,6 +24,7 @@ class TranslatedRow(BaseModel):
     translated_amount: float
     is_fctr_plug: bool = False
     formula: Optional[str] = None
+
 
 class TranslatedTrialBalance(BaseModel):
     """Translated Trial Balance in reporting currency (Sum == 0.00)."""
@@ -38,12 +42,35 @@ class TranslatedTrialBalance(BaseModel):
     def is_tallied(self) -> bool:
         return abs(self.total_translated) < 0.01
 
+
 class FXTranslationEngine:
     """Performs Ind AS 21 currency translation with exact FCTR balancing."""
 
-    def __init__(self, coa: ChartOfAccounts, fx_table: FXRateTable):
+    def __init__(self, coa: ChartOfAccounts, fx_table: Optional[FXRateTable] = None):
         self.coa = coa
-        self.fx_table = fx_table
+        self.fx_table = fx_table or FXRateTable()
+
+    @classmethod
+    def check_missing_rates(
+        cls,
+        entities: List[LegalEntity],
+        fx_table: Optional[FXRateTable],
+        reporting_currency: str = "INR",
+        presentation_currency: Optional[str] = None
+    ) -> List[Tuple[str, str]]:
+        """Identifies foreign currencies in scope that lack exchange rates to the reporting currency."""
+        missing = []
+        rep = (presentation_currency or reporting_currency).upper()
+        tbl = fx_table or FXRateTable()
+        for ent in entities:
+            curr = ent.input_currency.upper()
+            if curr != rep:
+                rate = tbl.get_rate(curr, rep)
+                if not rate:
+                    pair = (curr, rep)
+                    if pair not in missing:
+                        missing.append(pair)
+        return missing
 
     def translate(
         self,
@@ -57,7 +84,10 @@ class FXTranslationEngine:
         fx_entry: Optional[FXRateEntry] = self.fx_table.get_rate(std_tb.currency, reporting_currency)
 
         if not is_identity and fx_entry is None:
-            raise ValueError(f"Missing FX rate for currency pair {std_tb.currency} -> {reporting_currency}")
+            raise ValueError(
+                f"MISSING FX RATE: No exchange rate found for currency pair '{std_tb.currency}' -> '{reporting_currency}' "
+                f"for period '{std_tb.period}'. Please upload or configure exchange rates for this date."
+            )
 
         for idx, row in enumerate(std_tb.rows, start=1):
             coa_item = self.coa.get_item(row.account_code)
@@ -98,19 +128,19 @@ class FXTranslationEngine:
 
         # Check translation balance
         subtotal = round(sum(r.translated_amount for r in translated_rows), 2)
-        fctr_row: Optional[TranslatedRow] = None
+        fctr_row = None
 
-        # If there is a discrepancy and not identity, plug to FCTR (Foreign Currency Translation Reserve)
-        if not is_identity and abs(subtotal) >= 0.01:
-            fctr_amt = round(-subtotal, 2)
+        # If difference exists and foreign currency was translated, plug FCTR
+        if not is_identity and abs(subtotal) > 0.001:
+            fctr_plug = -subtotal
             fctr_row = TranslatedRow(
-                account_code="A330000",
-                account_description="Foreign Currency Translation Reserve (FCTR)",
+                account_code="O620102",  # Group COA: Foreign Currency Translation Differences
+                account_description="Foreign Currency Translation Reserve (FCTR Plug)",
                 source_currency=std_tb.currency,
                 source_amount=0.0,
                 rate_applied=1.0,
                 rate_type="FCTR_Plug",
-                translated_amount=fctr_amt,
+                translated_amount=round(fctr_plug, 2),
                 is_fctr_plug=True
             )
             translated_rows.append(fctr_row)

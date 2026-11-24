@@ -127,7 +127,11 @@ class AppConfig(BaseModel):
 
     def validate_api_key_strict(self) -> bool:
         """Strict Execution Prerequisite: Halts application if an active key is missing/invalid."""
-        key = (self.gemini_api_key or os.getenv("GEMINI_API_KEY", "")).strip()
+        if self.gemini_api_key is not None:
+            key = self.gemini_api_key.strip()
+        else:
+            key = os.getenv("GEMINI_API_KEY", "").strip()
+
         if not key or key == "YOUR_GEMINI_API_KEY":
             return False
         if any(c in key for c in ["\r", "\n", "\0", "\t"]):

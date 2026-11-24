@@ -176,6 +176,11 @@ INSTRUCTIONS:
 
         return results
 
+    def add_user_mapping(self, entity_code: str, local_code: str, group_code: str, reasoning: str = "User approved in HITL workbench") -> None:
+        """Stores user approved mapping into learning memory cache and historical rules."""
+        self.historical_mappings[(entity_code, local_code)] = group_code
+        self._global_decision_cache[(entity_code, local_code)] = (group_code, 1.0, "USER_APPROVED_RULE", reasoning)
+
     def standardize_trial_balance(
         self,
         raw_tb: RawTrialBalance,

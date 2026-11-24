@@ -23,12 +23,19 @@ from pydantic import BaseModel, Field, field_validator
 from fs_conso.agent.graph import build_consolidation_graph
 from fs_conso.agent.state import ConsolidationState
 from fs_conso.config import config
+from fs_conso.core.company_manager import company_manager
+import pandas as pd
+from fs_conso.core.file_classifier import FileClassifier, ClassifiedFile
 from fs_conso.core.file_parser import FlexibleTBParser
+from fs_conso.core.elimination_engine import IntercompanyEliminationEngine
+from fs_conso.models.entity import EntityHierarchy
 from fs_conso.core.lineage_tracker import LineageTracker
-from fs_conso.core.loader import ConsoMasterLoader
+from fs_conso.core.loader import ConsoMasterLoader, get_active_profile, load_coa_for_company, load_entity_hierarchy_for_company, load_fx_rates_for_company, load_mappings_for_company
 from fs_conso.core.sample_generator import generate_benchmark_dataset, load_benchmark_raw_tbs
 from fs_conso.core.statement_builder import FinancialStatementBuilder
+from fs_conso.core.translator import FXTranslationEngine
 from fs_conso.core.validator import TBValidator
+from fs_conso.models.fx import FXRateEntry, FXRateTable
 
 app = FastAPI(
     title="Enterprise Financial Consolidation Portal",
@@ -74,22 +81,34 @@ def sanitize_error_message(msg: str) -> str:
 # Global execution lock to prevent session race conditions
 pipeline_lock = asyncio.Lock()
 
-# In-memory session manager with clean reset capability
+# In-memory session manager with clean multi-company reset capability
 class SessionManager:
     def __init__(self):
+        self.active_company_id: str = "company-p"
         self.state: Optional[ConsolidationState] = None
         self.graph = build_consolidation_graph()
         self.is_running: bool = False
         self.current_stage: Optional[str] = None
         self.current_node: Optional[str] = None
-        self.initialize_baseline()
+        self.initialize_company("company-p", load_samples=True)
 
-    def initialize_baseline(self):
-        sample_dir = config.project_root / "inputs" / "sample_data"
-        if not sample_dir.exists() or not (sample_dir / "TB_Company_P.xlsx").exists():
-            generate_benchmark_dataset(sample_dir)
-        raw_tbs = load_benchmark_raw_tbs(sample_dir)
+    def initialize_company(self, company_id: str, load_samples: bool = False):
+        self.active_company_id = company_id
+        prof = company_manager.get_company(company_id)
+        if not prof:
+            prof = company_manager.ensure_default_demo_company()
+            self.active_company_id = prof.company_id
+
+        raw_tbs = []
+        if load_samples and company_id == "company-p":
+            sample_dir = config.project_root / "inputs" / "sample_data"
+            if not sample_dir.exists() or not (sample_dir / "TB_Company_P.xlsx").exists():
+                generate_benchmark_dataset(sample_dir)
+            raw_tbs = load_benchmark_raw_tbs(sample_dir)
+
         self.state = ConsolidationState(
+            company_id=self.active_company_id,
+            period=prof.current_period,
             raw_tbs=raw_tbs,
             current_step=1,
             completed_steps=[],
@@ -100,9 +119,12 @@ class SessionManager:
         self.current_stage = None
         self.current_node = None
 
+    def initialize_baseline(self):
+        self.initialize_company("company-p", load_samples=True)
+
     def reset(self):
-        """Completely restores pristine baseline state."""
-        self.initialize_baseline()
+        """Completely restores pristine baseline state for active company."""
+        self.initialize_company(self.active_company_id, load_samples=(self.active_company_id == "company-p"))
 
 session = SessionManager()
 
@@ -120,16 +142,42 @@ async def serve_index():
 
 @app.get("/api/status")
 async def get_status():
-    """Returns portal state, active API key status, and current step without secret leaks."""
+    """Returns portal state, active company info, API key status, and current step without secret leaks."""
     has_key = config.validate_api_key_strict()
+    prof = company_manager.get_company(session.active_company_id) or company_manager.ensure_default_demo_company()
+    hierarchy = prof.entity_hierarchy or EntityHierarchy(parent_code=prof.company_id)
+    all_entity_codes = list(hierarchy.entities.keys()) if hierarchy.entities else []
+    uploaded_entity_codes = [tb.entity_code for tb in session.state.raw_tbs] if session.state else []
+
+    # Check for missing prerequisites
+    missing_prereqs = []
+    missing_tbs = [e for e in all_entity_codes if e not in uploaded_entity_codes]
+    if missing_tbs:
+        missing_prereqs.append(f"Missing Trial Balance for {len(missing_tbs)} active entities: {', '.join(missing_tbs[:3])}{'...' if len(missing_tbs)>3 else ''}")
+
+    active_period = session.state.period if session.state and session.state.period else prof.current_period
+    fx_table = prof.get_fx_table_for_period(active_period)
+    missing_fx = FXTranslationEngine.check_missing_rates(list(hierarchy.entities.values()), fx_table, prof.reporting_currency)
+    if missing_fx:
+        missing_prereqs.append(f"Missing FX Rates for {active_period} ({', '.join(f'{f}->{t}' for f,t in missing_fx)})")
+
+    if session.state:
+        session.state.missing_prerequisites = missing_prereqs
+
     return {
         "has_active_api_key": has_key,
         "masked_api_key": config.get_masked_api_key(),
-        "current_period": config.current_period,
-        "reporting_currency": config.reporting_currency,
+        "active_company_id": session.active_company_id,
+        "active_company_name": prof.company_name,
+        "current_period": active_period,
+        "reporting_currency": prof.reporting_currency,
         "ai_confidence_threshold": config.ai_confidence_threshold,
         "ic_absolute_tolerance": config.ic_absolute_tolerance,
         "ic_percent_tolerance": config.ic_percent_tolerance,
+        "all_entities": all_entity_codes,
+        "uploaded_entities": uploaded_entity_codes,
+        "missing_prerequisites": missing_prereqs,
+        "hitl_pending_reviews": session.state.hitl_pending_reviews if session.state else [],
         "current_step": session.state.current_step if session.state else 1,
         "completed_steps": session.state.completed_steps if session.state else [],
         "is_blocked": session.state.is_blocked if session.state else False,
@@ -243,6 +291,243 @@ async def reset_baseline():
         "entities": [tb.entity_code for tb in session.state.raw_tbs]
     }
 
+# --- Multi-Company Profile Endpoints ---
+
+class CompanyCreateRequest(BaseModel):
+    company_id: str
+    company_name: str
+    reporting_currency: str = "INR"
+    current_period: str = "31-Mar-2024"
+
+class CompanySwitchRequest(BaseModel):
+    company_id: str
+
+@app.get("/api/companies")
+async def list_companies():
+    """Lists all available client company workspaces."""
+    companies = company_manager.list_companies()
+    if not companies:
+        company_manager.ensure_default_demo_company()
+        companies = company_manager.list_companies()
+    return {"companies": companies, "active_company_id": session.active_company_id}
+
+@app.post("/api/companies/switch")
+async def switch_company(req: CompanySwitchRequest):
+    """Switches active company workspace."""
+    async with pipeline_lock:
+        session.initialize_company(req.company_id, load_samples=False)
+    return {"success": True, "active_company_id": session.active_company_id}
+
+@app.post("/api/companies/create")
+async def create_company(req: CompanyCreateRequest):
+    """Creates a new company workspace."""
+    prof = company_manager.create_company(
+        company_id=req.company_id,
+        company_name=req.company_name,
+        reporting_currency=req.reporting_currency,
+        current_period=req.current_period
+    )
+    async with pipeline_lock:
+        session.initialize_company(prof.company_id, load_samples=False)
+    return {"success": True, "company": prof.model_dump(exclude={"group_coa", "entity_hierarchy", "fx_tables_by_date"})}
+
+@app.post("/api/companies/load-demo")
+async def load_demo_benchmark():
+    """Loads the reference 4-entity Company P Healthcare benchmark."""
+    async with pipeline_lock:
+        company_manager.ensure_default_demo_company()
+        session.initialize_company("company-p", load_samples=True)
+    return {"success": True, "message": "Demo benchmark loaded."}
+
+@app.post("/api/companies/import-master")
+async def import_master_workbook(
+    file: UploadFile = File(...),
+    company_id: str = Form(...),
+    company_name: str = Form(...)
+):
+    """Imports master setup from a multi-tab Excel file (like Conso.xlsx)."""
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File exceeds maximum size limit of {MAX_FILE_SIZE // (1024*1024)}MB.")
+
+    safe_fn = re.sub(r"[^a-zA-Z0-9_.-]", "_", file.filename.split("/")[-1].split("\\")[-1])
+    upload_dir = (config.inputs_dir / "uploads").resolve()
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    temp_path = upload_dir / f"master_{safe_fn}"
+    if not temp_path.resolve().is_relative_to(upload_dir):
+        raise HTTPException(status_code=400, detail="Invalid file path.")
+
+    temp_path.write_bytes(content)
+
+    prof = company_manager.import_master_workbook(
+        conso_path=temp_path,
+        company_id=company_id,
+        company_name=company_name
+    )
+    async with pipeline_lock:
+        session.initialize_company(prof.company_id, load_samples=False)
+    return {"success": True, "company_id": prof.company_id, "entities_count": len(prof.entity_hierarchy.entities) if prof.entity_hierarchy else 0}
+
+# --- Batch Upload & Agentic Ingestion ---
+
+@app.post("/api/upload-batch")
+async def upload_batch(
+    files: List[UploadFile] = File(...),
+    period: Optional[str] = Form(None)
+):
+    """Accepts a batch of 10-15+ files and autonomously classifies & ingests each."""
+    prof = company_manager.get_company(session.active_company_id) or company_manager.ensure_default_demo_company()
+    hierarchy = prof.entity_hierarchy or EntityHierarchy(parent_code=prof.company_id)
+    known_ents = list(hierarchy.entities.keys()) if hierarchy.entities else []
+    target_period = period or prof.current_period
+
+    files_data = []
+    for f in files:
+        b = await f.read()
+        if len(b) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail=f"File '{f.filename}' exceeds maximum {MAX_FILE_SIZE // (1024*1024)}MB limit.")
+        safe_n = re.sub(r"[^a-zA-Z0-9_.-]", "_", f.filename.split("/")[-1].split("\\")[-1])
+        files_data.append((safe_n, b))
+
+    classified_files = FileClassifier.classify_batch(files_data, expected_period=target_period, known_entities=known_ents)
+    
+    ingested_tbs = []
+    ingested_fx = 0
+    ingested_ic = 0
+    pending_reviews = []
+
+    async with pipeline_lock:
+        for cf, (_, file_bytes) in zip(classified_files, files_data):
+            if cf.file_type in ("CURRENT_TB", "PRIOR_TB") and cf.entity_code:
+                try:
+                    raw_tb = FlexibleTBParser.parse_file(
+                        file_path_or_bytes=file_bytes,
+                        filename=cf.filename,
+                        entity_code=cf.entity_code,
+                        period=cf.period or target_period,
+                        currency=cf.currency or "INR"
+                    )
+                    raw_tb.is_prior_period = (cf.file_type == "PRIOR_TB")
+                    
+                    replaced = False
+                    for i, existing in enumerate(session.state.raw_tbs):
+                        if existing.entity_code == raw_tb.entity_code and existing.is_prior_period == raw_tb.is_prior_period:
+                            session.state.raw_tbs[i] = raw_tb
+                            replaced = True
+                            break
+                    if not replaced:
+                        session.state.raw_tbs.append(raw_tb)
+                    ingested_tbs.append(cf.entity_code)
+                except Exception as e:
+                    cf.needs_review = True
+                    cf.reasoning += f" (Ingestion error: {str(e)})"
+
+            elif cf.file_type == "FX_RATES":
+                try:
+                    df = pd.read_excel(io.BytesIO(file_bytes))
+                    fx_table = FXRateTable()
+                    for _, r in df.iterrows():
+                        from_c = str(r.get("From Currency", r.get("from_currency", ""))).strip().upper()
+                        to_c = str(r.get("To Currency", r.get("to_currency", prof.reporting_currency))).strip().upper()
+                        cr = float(r.get("Closing", r.get("closing_rate", 1.0)))
+                        ar = float(r.get("Average", r.get("average_rate", 1.0)))
+                        hr = float(r.get("Historical", r.get("historical_rate", 1.0)))
+                        if from_c:
+                            fx_table.add_rate(FXRateEntry(
+                                from_currency=from_c,
+                                to_currency=to_c,
+                                as_on_date=target_period,
+                                closing_rate=cr,
+                                average_rate=ar,
+                                historical_rate=hr
+                            ))
+                    prof.set_fx_table_for_period(target_period, fx_table)
+                    company_manager.save_company(prof)
+                    ingested_fx += 1
+                except Exception:
+                    pass
+
+            elif cf.file_type == "INTERCOMPANY_SCHEDULE":
+                try:
+                    pairs = IntercompanyEliminationEngine.parse_uploaded_ic_file(file_bytes, cf.filename)
+                    session.state.uploaded_ic_pairs.extend(pairs)
+                    ingested_ic += len(pairs)
+                except Exception:
+                    pass
+
+            if cf.needs_review:
+                pending_reviews.append({
+                    "filename": cf.filename,
+                    "detected_type": cf.file_type,
+                    "entity_code": cf.entity_code,
+                    "confidence": cf.confidence,
+                    "reasoning": cf.reasoning
+                })
+
+        session.state.current_step = 1
+        session.state.completed_steps = []
+
+    return {
+        "success": True,
+        "total_files": len(files),
+        "ingested_tbs": ingested_tbs,
+        "ingested_fx": ingested_fx,
+        "ingested_ic_pairs": ingested_ic,
+        "pending_reviews": pending_reviews,
+        "classified_summary": [
+            {
+                "filename": cf.filename,
+                "file_type": cf.file_type,
+                "entity_code": cf.entity_code,
+                "confidence": cf.confidence,
+                "needs_review": cf.needs_review,
+                "reasoning": cf.reasoning
+            }
+            for cf in classified_files
+        ]
+    }
+
+# --- Human-in-the-Loop (HITL) Workbench Endpoints ---
+
+class HITLResolveRequest(BaseModel):
+    entity_code: str
+    local_code: str
+    group_code: str
+    reasoning: Optional[str] = "User approved in HITL workbench"
+
+@app.get("/api/hitl/pending")
+async def get_hitl_pending():
+    """Returns items needing Human-in-the-Loop review & learning memory suggestions."""
+    reviews = session.state.hitl_pending_reviews if session.state else []
+    return {"pending_reviews": reviews, "threshold": config.ai_confidence_threshold}
+
+@app.post("/api/hitl/resolve")
+async def resolve_hitl_item(req: HITLResolveRequest):
+    """Applies human review decision and commits it into Learning Memory."""
+    prof = company_manager.get_company(session.active_company_id)
+    if prof:
+        prof.add_mapping(req.entity_code, req.local_code, req.group_code)
+        company_manager.save_company(prof)
+
+    async with pipeline_lock:
+        if session.state:
+            for d in session.state.mapping_decisions:
+                if d.local_code == req.local_code:
+                    d.group_code = req.group_code
+                    d.method = "USER_APPROVED_RULE"
+                    d.confidence = 1.0
+                    d.needs_review = False
+                    d.reasoning = req.reasoning
+            session.state.hitl_pending_reviews = [
+                r for r in session.state.hitl_pending_reviews
+                if r.get("local_code") != req.local_code
+            ]
+            if not session.state.hitl_pending_reviews:
+                session.state.halted_node = None
+                session.state.remediation_items = []
+
+    return {"success": True, "message": f"Mapping for '{req.local_code}' saved to learning memory."}
+
 # 5. Production-Hardened File Upload Endpoint
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB cap
 CHUNK_SIZE = 1024 * 1024          # 1 MB chunk buffer
@@ -313,7 +598,9 @@ async def upload_trial_balance(
 
     # D. Ingestion & Accounting Validation
     target_period = (period or config.current_period).strip()
-    target_entity = entity_code.strip().upper()
+    target_entity = re.sub(r"[^a-zA-Z0-9_-]", "", entity_code.strip().upper())
+    if not target_entity:
+        raise HTTPException(status_code=400, detail="Invalid entity code provided.")
     target_currency = (currency or config.reporting_currency).strip().upper()
 
     try:
@@ -331,9 +618,11 @@ async def upload_trial_balance(
     val_res = TBValidator.validate(raw_tb, expected_period=target_period, expected_entity=target_entity)
 
     # Save copy to inputs/uploads
-    upload_dir = config.project_root / "inputs" / "uploads"
+    upload_dir = (config.project_root / "inputs" / "uploads").resolve()
     upload_dir.mkdir(parents=True, exist_ok=True)
     save_dest = upload_dir / f"{target_entity}_{safe_name}"
+    if not save_dest.resolve().is_relative_to(upload_dir):
+        raise HTTPException(status_code=400, detail="Invalid destination path.")
     save_dest.write_bytes(bytes(content))
 
     # Synchronize into session
@@ -378,7 +667,12 @@ async def run_pipeline():
 
     async with pipeline_lock:
         if not session.state or not session.state.raw_tbs:
-            session.initialize_baseline()
+            session.initialize_company(session.active_company_id, load_samples=(session.active_company_id == "company-p"))
+
+        session.state.company_id = session.active_company_id
+        prof = company_manager.get_company(session.active_company_id)
+        if prof and not session.state.period:
+            session.state.period = prof.current_period
 
         # Clear prior transient block and flag active run
         session.state.is_blocked = False

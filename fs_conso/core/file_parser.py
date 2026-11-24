@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import openpyxl
 import pandas as pd
 
+from fs_conso.config import config
 from fs_conso.models.trial_balance import RawTBRow, RawTrialBalance
 
 
@@ -332,6 +333,106 @@ class FlexibleTBParser:
         return 0, {}
 
     @classmethod
+    def _parse_complex_layout_with_gemini(cls, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
+        """Uses Gemini Agentic Brain to analyze messy layouts, multi-tables, or ambiguous headers."""
+        if not config.validate_api_key_strict():
+            return None
+        try:
+            import json
+            import google.genai as genai
+            from google.genai import types
+
+            client = genai.Client(api_key=config.gemini_api_key)
+            preview_rows = df.head(8).fillna("").to_dict(orient="records")
+            columns = [str(c) for c in df.columns]
+
+            prompt = f"""
+You are an expert financial system parser analyzing a complex accounting trial balance sheet.
+Identify the functional role of the columns in this dataset:
+
+Columns ({len(columns)}): {columns[:30]}
+Sample Rows:
+{json.dumps(preview_rows[:5], default=str)}
+
+Return a JSON object identifying which column name corresponds to:
+- "code_col": column holding the GL account code or account number
+- "desc_col": column holding the account description or name (optional)
+- "debit_col": column holding debit amounts (optional)
+- "credit_col": column holding credit amounts (optional)
+- "amount_col": column holding signed or net amounts (optional)
+- "dr_cr_col": column indicating DR or CR (optional)
+
+Schema:
+{{
+  "code_col": "string",
+  "desc_col": "string or null",
+  "debit_col": "string or null",
+  "credit_col": "string or null",
+  "amount_col": "string or null",
+  "dr_cr_col": "string or null"
+}}
+"""
+            res = client.models.generate_content(
+                model=config.gemini_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.1, response_mime_type="application/json")
+            )
+            return json.loads(res.text.strip())
+        except Exception:
+            return None
+
+    @classmethod
+    def _unpivot_wide_matrix(
+        cls,
+        df: pd.DataFrame,
+        code_col: str,
+        desc_col: Optional[str],
+        numeric_cols: List[str],
+        entity_code: str,
+        period: str,
+        currency: str,
+        duplicate_policy: str
+    ) -> RawTrialBalance:
+        """Unpivots a wide dimensional matrix (e.g., 75 department/dimension columns) into normalized rows."""
+        rows: List[RawTBRow] = []
+        for _, r in df.iterrows():
+            c_raw = r[code_col]
+            if pd.isna(c_raw) or not str(c_raw).strip():
+                continue
+            code = str(c_raw).strip()
+            desc = str(r[desc_col]).strip() if desc_col and pd.notna(r[desc_col]) else code
+            if cls._is_summary_row(code, desc):
+                continue
+
+            for dim_col in numeric_cols:
+                val = cls.clean_number(r[dim_col])
+                if val is not None and abs(val) > 0.0001:
+                    rows.append(RawTBRow(
+                        account_code=code,
+                        account_description=desc,
+                        amount=val,
+                        dimensions={"dimension": str(dim_col).strip()}
+                    ))
+
+        # If duplicate policy is aggregate, sum up by account code
+        if duplicate_policy == "aggregate" and rows:
+            agg_map: Dict[str, RawTBRow] = {}
+            for row in rows:
+                if row.account_code not in agg_map:
+                    agg_map[row.account_code] = row.model_copy()
+                else:
+                    curr = agg_map[row.account_code]
+                    curr.amount = round((curr.amount or 0.0) + (row.amount or 0.0), 2)
+            rows = list(agg_map.values())
+
+        return RawTrialBalance(
+            entity_code=entity_code,
+            period=period,
+            currency=currency,
+            rows=rows
+        )
+
+    @classmethod
     def parse_dataframe(
         cls,
         df: pd.DataFrame,
@@ -358,15 +459,35 @@ class FlexibleTBParser:
                 code_col = cls._find_column(cols, cls.ACCOUNT_CODE_ALIASES)
 
         if not code_col:
-            raise ValueError(
-                f"Could not identify an 'Account Code' column. Columns inspected: {', '.join([str(c) for c in cols[:8]])}."
-            )
+            # Stage 2: Agentic Brain layout inspection fallback
+            ai_layout = cls._parse_complex_layout_with_gemini(df)
+            if ai_layout and ai_layout.get("code_col"):
+                code_col = ai_layout.get("code_col")
+                desc_col = ai_layout.get("desc_col")
+                debit_col = ai_layout.get("debit_col")
+                credit_col = ai_layout.get("credit_col")
+                amount_col = ai_layout.get("amount_col")
+                dr_cr_col = ai_layout.get("dr_cr_col")
+            else:
+                # Deterministic fallback: pick first non-empty column as code
+                code_col = cols[0] if cols else None
+                if not code_col:
+                    raise ValueError(
+                        f"Could not identify an 'Account Code' column. Columns inspected: {', '.join([str(c) for c in cols[:8]])}."
+                    )
 
-        desc_col = cls._find_column(cols, cls.DESCRIPTION_ALIASES)
-        debit_col = cls._find_column(cols, cls.DEBIT_ALIASES, exclude_indicators=True)
-        credit_col = cls._find_column(cols, cls.CREDIT_ALIASES, exclude_indicators=True)
-        amount_col = cls._find_column(cols, cls.AMOUNT_ALIASES)
-        dr_cr_col = cls._find_column(cols, cls.DR_CR_INDICATOR_ALIASES)
+        desc_col = desc_col if 'desc_col' in locals() and desc_col else cls._find_column(cols, cls.DESCRIPTION_ALIASES)
+        debit_col = debit_col if 'debit_col' in locals() and debit_col else cls._find_column(cols, cls.DEBIT_ALIASES, exclude_indicators=True)
+        credit_col = credit_col if 'credit_col' in locals() and credit_col else cls._find_column(cols, cls.CREDIT_ALIASES, exclude_indicators=True)
+        amount_col = amount_col if 'amount_col' in locals() and amount_col else cls._find_column(cols, cls.AMOUNT_ALIASES)
+        dr_cr_col = dr_cr_col if 'dr_cr_col' in locals() and dr_cr_col else cls._find_column(cols, cls.DR_CR_INDICATOR_ALIASES)
+
+        # Check for wide dimensional layout (e.g. 75 cost center/subsidiary columns)
+        numeric_cols = [c for c in cols if c not in (code_col, desc_col, dr_cr_col)]
+        is_wide_matrix = len(numeric_cols) > 5 and not (debit_col and credit_col)
+
+        if is_wide_matrix:
+            return cls._unpivot_wide_matrix(df, code_col, desc_col, numeric_cols, entity_code, period, currency, duplicate_policy)
 
         rows: List[RawTBRow] = []
 

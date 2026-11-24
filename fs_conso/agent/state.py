@@ -30,6 +30,13 @@ class AgentNodeTrace(BaseModel):
 
 class ConsolidationState(BaseModel):
     """Execution state passed through the LangGraph consolidation graph."""
+    # Active workspace context
+    company_id: str = "company-p"
+    period: str = "31-Mar-2024"
+    uploaded_ic_pairs: List[Any] = Field(default_factory=list)
+    hitl_pending_reviews: List[Dict[str, Any]] = Field(default_factory=list)
+    missing_prerequisites: List[str] = Field(default_factory=list)
+
     # Pipeline data
     raw_tbs: List[RawTrialBalance] = Field(default_factory=list)
     validation_results: List[ValidationResult] = Field(default_factory=list)

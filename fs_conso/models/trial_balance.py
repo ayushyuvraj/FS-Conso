@@ -1,7 +1,8 @@
-"""Trial Balance domain models."""
+"""Trial Balance domain models supporting flexible layouts and dimensions."""
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
+
 
 class RawTBRow(BaseModel):
     """Raw input row from an entity Trial Balance submission."""
@@ -10,11 +11,14 @@ class RawTBRow(BaseModel):
     debit: Optional[float] = None
     credit: Optional[float] = None
     amount: Optional[float] = None  # Signed amount if single-column format
+    dimensions: Dict[str, Any] = Field(default_factory=dict)  # e.g., Counterparty, Cost Center, Dept
+    row_number: Optional[int] = None
 
     @property
     def is_blank(self) -> bool:
         """Determines if the amount fields are completely missing (blank)."""
         return self.debit is None and self.credit is None and self.amount is None
+
 
 class RawTrialBalance(BaseModel):
     """Container for an ingested entity Trial Balance before standardization."""
@@ -24,6 +28,9 @@ class RawTrialBalance(BaseModel):
     rows: List[RawTBRow] = Field(default_factory=list)
     version: int = 1
     is_active: bool = True
+    is_prior_period: bool = False
+    source_filename: Optional[str] = None
+    source_sheet: Optional[str] = None
 
     @property
     def total_debit(self) -> float:
@@ -36,6 +43,7 @@ class RawTrialBalance(BaseModel):
     @property
     def total_signed_amount(self) -> float:
         return sum(r.amount or 0.0 for r in self.rows)
+
 
 class StandardizedRow(BaseModel):
     """A row converted to the Standard Import Format:
@@ -53,6 +61,8 @@ class StandardizedRow(BaseModel):
     entity_code: str
     currency: str
     source_row_index: Optional[int] = None
+    dimensions: Dict[str, Any] = Field(default_factory=dict)
+
 
 class StandardizedTrialBalance(BaseModel):
     """Entity Trial Balance aligned to the Group Import Format."""
