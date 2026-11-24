@@ -173,3 +173,41 @@ def test_api_agent_traces_and_audit_export():
     res_export_csv = client.get("/api/audit-trail/export?format=csv")
     assert res_export_csv.status_code == 200
     assert "text/csv" in res_export_csv.headers["content-type"]
+
+
+def test_observability_section_and_telemetry():
+    """Verifies observability telemetry fields and UI two-section architecture."""
+    client = TestClient(app)
+
+    # 1. Telemetry in /api/status
+    res_status = client.get("/api/status")
+    assert res_status.status_code == 200
+    status_data = res_status.json()
+    assert "token_usage" in status_data
+    assert "prompt_tokens" in status_data["token_usage"]
+    assert "completion_tokens" in status_data["token_usage"]
+    assert "total_tokens" in status_data["token_usage"]
+    assert "halted_node" in status_data
+    assert "halted_stage" in status_data
+    assert "remediation_items" in status_data
+    assert isinstance(status_data["remediation_items"], list)
+
+    # 2. Telemetry in /api/pipeline-data
+    res_pipe = client.get("/api/pipeline-data")
+    assert res_pipe.status_code == 200
+    pipe_data = res_pipe.json()
+    assert "token_usage" in pipe_data
+    assert "halted_node" in pipe_data
+    assert "remediation_items" in pipe_data
+
+    # 3. Two-Section Architecture in index.html (6 steps in pipeline, no Step 7 in stepper)
+    res_index = client.get("/")
+    assert res_index.status_code == 200
+    html = res_index.text
+    assert 'id="nav-btn-run"' in html
+    assert 'id="nav-btn-audit"' in html
+    assert 'id="view-pipeline-run"' in html
+    assert 'id="view-observability"' in html
+    assert 'id="step-btn-6"' in html
+    assert 'id="step-btn-7"' not in html
+

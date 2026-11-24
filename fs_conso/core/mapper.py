@@ -61,6 +61,7 @@ class COAMappingEngine:
         self.coa = coa
         self.historical_mappings = historical_mappings or {}
         self._gemini_client = None
+        self.last_token_usage: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
     def _get_gemini_client(self, client=None):
         if client is not None:
@@ -145,6 +146,15 @@ INSTRUCTIONS:
                 model=config.gemini_model,
                 contents=prompt
             )
+            # Capture token usage from Gemini metadata
+            if hasattr(response, "usage_metadata") and response.usage_metadata:
+                p_tok = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                c_tok = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+                t_tok = getattr(response.usage_metadata, "total_token_count", 0) or (p_tok + c_tok)
+                self.last_token_usage["prompt_tokens"] += p_tok
+                self.last_token_usage["completion_tokens"] += c_tok
+                self.last_token_usage["total_tokens"] += t_tok
+
             text = response.text.strip()
             if text.startswith("```"):
                 text = text.split("```")[1]

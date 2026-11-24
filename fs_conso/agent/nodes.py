@@ -43,6 +43,11 @@ def validator_node(state: ConsolidationState) -> ConsolidationState:
         t1 = time.perf_counter()
         state.is_blocked = True
         state.error_message = "MANDATORY GATE ERROR: Active Google Gemini API Key required to run the consolidation engine."
+        state.halted_node = "validator"
+        state.halted_stage = "API Key Verification Gate"
+        state.remediation_items = [
+            "Active Google Gemini API key required. Click 'Settings' in the top right to configure your API key."
+        ]
         _log_event(state, "Validation", "ValidatorAgent", "API Key Check", "FAILED", state.error_message)
         state.agent_traces.append(AgentNodeTrace(
             node_id="validator",
@@ -77,6 +82,9 @@ def validator_node(state: ConsolidationState) -> ConsolidationState:
     if blocking_errors:
         state.is_blocked = True
         state.error_message = "; ".join(blocking_errors)
+        state.halted_node = "validator"
+        state.halted_stage = "Trial Balance Integrity Validation"
+        state.remediation_items = [f"Resolve validation error: {err}" for err in blocking_errors]
         _log_event(state, "Validation", "ValidatorAgent", "TB Integrity Validation", "FAILED", state.error_message)
         state.agent_traces.append(AgentNodeTrace(
             node_id="validator",
@@ -93,6 +101,8 @@ def validator_node(state: ConsolidationState) -> ConsolidationState:
         state.current_step = max(state.current_step, 2)
         if 1 not in state.completed_steps:
             state.completed_steps.append(1)
+        state.halted_node = None
+        state.remediation_items = []
         _log_event(state, "Validation", "ValidatorAgent", f"Validated {len(state.raw_tbs)} raw entity TBs", "PASSED", "All trial balances verified tallied with zero blank errors.")
         state.agent_traces.append(AgentNodeTrace(
             node_id="validator",
@@ -163,12 +173,27 @@ def mapper_node(state: ConsolidationState) -> ConsolidationState:
         for d in all_decisions if d.method == "GEMINI_AI"
     ][:5]
 
+    # Record cumulative token usage
+    tok = mapper.last_token_usage
+    state.token_usage = {
+        "prompt_tokens": state.token_usage.get("prompt_tokens", 0) + tok.get("prompt_tokens", 0),
+        "completion_tokens": state.token_usage.get("completion_tokens", 0) + tok.get("completion_tokens", 0),
+        "total_tokens": state.token_usage.get("total_tokens", 0) + tok.get("total_tokens", 0),
+    }
+
     if unmapped:
+        state.halted_node = "mapper"
+        state.halted_stage = "Chart of Accounts Standardization"
+        state.remediation_items = [
+            f"{len(unmapped)} accounts fell below AI confidence threshold ({config.ai_confidence_threshold:.0%}). Review mapped suggestions in Step 2 or lower the threshold in Settings."
+        ]
         _log_event(state, "Mapping", "COAMapperAgent", f"Mapped {len(all_decisions)} accounts ({len(unmapped)} flagged for review)", "REVIEW_REQUIRED", f"{len(unmapped)} accounts fell below confidence threshold of {config.ai_confidence_threshold:.0%}.")
     else:
         state.current_step = max(state.current_step, 3)
         if 2 not in state.completed_steps:
             state.completed_steps.append(2)
+        state.halted_node = None
+        state.remediation_items = []
         _log_event(state, "Mapping", "COAMapperAgent", f"Mapped {len(all_decisions)} accounts to Group COA", "PASSED", "100% accounts aligned to standard import format.")
 
     state.agent_traces.append(AgentNodeTrace(
@@ -190,6 +215,7 @@ def mapper_node(state: ConsolidationState) -> ConsolidationState:
             "flagged_for_review": len(unmapped)
         },
         decisions_count=len(all_decisions),
+        token_usage=tok,
         ai_calls=ai_samples,
         state_mutations=["standardized_tbs", "mapping_decisions", "current_step", "completed_steps"],
         details=f"Standardized {len(all_decisions)} GLs ({exact_count} exact, {ai_count} AI inferred) in {elapsed_ms}ms."

@@ -48,8 +48,28 @@
             <span class="text-xs px-2.5 py-0.5 rounded-full bg-white/10 text-white/80 font-mono">Ind AS 110</span>
         </div>
 
+        <!-- Section Switcher Tabs: Run vs Observability -->
+        <div class="flex items-center space-x-1 bg-white/10 p-1 rounded-lg border border-white/10">
+            <button id="nav-btn-run" onclick="switchSection('RUN')"
+                class="h-8 px-3.5 rounded text-xs font-semibold transition flex items-center space-x-2 bg-white text-kpmg-navy shadow-xs">
+                <svg class="w-3.5 h-3.5 text-kpmg-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Consolidation Pipeline</span>
+            </button>
+            <button id="nav-btn-audit" onclick="switchSection('AUDIT')"
+                class="h-8 px-3.5 rounded text-xs font-semibold transition flex items-center space-x-2 text-white/80 hover:text-white hover:bg-white/10">
+                <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Audit & Observability</span>
+                <span id="badge-nav-observability" class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/30 text-emerald-300 font-bold">Live</span>
+            </button>
+        </div>
+
         <!-- Central Status & Period Display -->
-        <div class="hidden md:flex items-center space-x-6 text-xs text-white/80">
+        <div class="hidden lg:flex items-center space-x-4 text-xs text-white/80">
             <div>Period: <strong class="text-white font-mono" id="disp-period">31-Mar-2024</strong></div>
             <div>Reporting: <strong class="text-white font-mono" id="disp-curr">INR</strong></div>
             <div id="badge-teacher"
@@ -67,16 +87,6 @@
                 <span class="w-2 h-2 rounded-full" id="key-dot"></span>
                 <span id="key-label">API Key</span>
             </div>
-            <button onclick="switchStep(7)"
-                class="h-9 px-3.5 rounded bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition flex items-center space-x-1.5"
-                title="Jump to Audit & Agent Tracing Console">
-                <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
-                    </path>
-                </svg>
-                <span>Observability</span>
-            </button>
             <button onclick="toggleSettingsDrawer()"
                 class="h-9 px-3.5 rounded bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition flex items-center space-x-1.5">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -91,104 +101,99 @@
         </div>
     </header>
 
-    <!-- 2. Gated 6-Step Primary Stepper Bar (Morph Geometry Stable) -->
-    <nav class="bg-white border-b border-kpmg-border px-6 py-3 sticky top-16 z-30 shadow-xs">
-        <div class="max-w-6xl mx-auto flex items-center justify-between">
-            <div class="flex items-center space-x-2 md:space-x-4 w-full">
-                <!-- Step 1: Ingestion -->
-                <div id="step-btn-1" onclick="switchStep(1)"
-                    class="step-tab active flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-pointer">
-                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">1</span>
-                    <span>Ingestion</span>
-                </div>
-                <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+    <!-- 2. Pipeline Controls Container (Visible in Run View) -->
+    <div id="pipeline-stepper-container">
+        <!-- Gated 6-Step Primary Stepper Bar -->
+        <nav class="bg-white border-b border-kpmg-border px-6 py-3 sticky top-16 z-30 shadow-xs">
+            <div class="max-w-6xl mx-auto flex items-center justify-between">
+                <div class="flex items-center space-x-2 md:space-x-4 w-full">
+                    <!-- Step 1: Ingestion -->
+                    <div id="step-btn-1" onclick="switchStep(1)"
+                        class="step-tab active flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-pointer">
+                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">1</span>
+                        <span>Ingestion</span>
+                    </div>
+                    <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
 
-                <!-- Step 2: Mapping -->
-                <div id="step-btn-2" onclick="switchStep(2)"
-                    class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">2</span>
-                    <span>Mapping</span>
-                </div>
-                <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+                    <!-- Step 2: Mapping -->
+                    <div id="step-btn-2" onclick="switchStep(2)"
+                        class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">2</span>
+                        <span>Mapping</span>
+                    </div>
+                    <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
 
-                <!-- Step 3: Translation -->
-                <div id="step-btn-3" onclick="switchStep(3)"
-                    class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">3</span>
-                    <span>Translation</span>
-                </div>
-                <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+                    <!-- Step 3: Translation -->
+                    <div id="step-btn-3" onclick="switchStep(3)"
+                        class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">3</span>
+                        <span>Translation</span>
+                    </div>
+                    <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
 
-                <!-- Step 4: Eliminations -->
-                <div id="step-btn-4" onclick="switchStep(4)"
-                    class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">4</span>
-                    <span>Eliminations</span>
-                </div>
-                <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+                    <!-- Step 4: Eliminations -->
+                    <div id="step-btn-4" onclick="switchStep(4)"
+                        class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">4</span>
+                        <span>Eliminations</span>
+                    </div>
+                    <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
 
-                <!-- Step 5: Consolidation -->
-                <div id="step-btn-5" onclick="switchStep(5)"
-                    class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">5</span>
-                    <span>Consolidation</span>
-                </div>
-                <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+                    <!-- Step 5: Consolidation -->
+                    <div id="step-btn-5" onclick="switchStep(5)"
+                        class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">5</span>
+                        <span>Consolidation</span>
+                    </div>
+                    <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
 
-                <!-- Step 6: Financial Statements -->
-                <div id="step-btn-6" onclick="switchStep(6)"
-                    class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">6</span>
-                    <span>Statements</span>
-                </div>
-                <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
-
-                <!-- Step 7: Audit & Agent Tracing Console -->
-                <div id="step-btn-7" onclick="switchStep(7)"
-                    class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                    <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">7</span>
-                    <span>Audit & Tracing</span>
+                    <!-- Step 6: Financial Statements -->
+                    <div id="step-btn-6" onclick="switchStep(6)"
+                        class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">6</span>
+                        <span>Statements</span>
+                    </div>
                 </div>
             </div>
-        </div>
-    </nav>
+        </nav>
 
-    <!-- 3. Sub-Bar Action Strip (Constant Size, Zero Layout Shift) -->
-    <div class="bg-kpmg-canvas border-b border-kpmg-border px-6 py-2">
-        <div class="max-w-6xl mx-auto flex items-center justify-between">
-            <div id="sub-step-label" class="text-xs font-medium text-kpmg-muted flex items-center space-x-2">
-                <span class="w-1.5 h-1.5 rounded-full bg-kpmg-blue"></span>
-                <span id="sub-step-text">Ingestion: Standalone Trial Balances</span>
-            </div>
-            <div class="flex items-center space-x-3">
-                <button id="btn-upload-trigger" onclick="openUploadModal()"
-                    class="h-8 px-3.5 rounded bg-white hover:bg-gray-50 text-kpmg-navy text-xs font-semibold border border-kpmg-border transition shadow-xs flex items-center space-x-1.5">
-                    <svg class="w-3.5 h-3.5 text-kpmg-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
-                        </path>
-                    </svg>
-                    <span>Upload TB</span>
-                </button>
-                <button id="btn-run" onclick="triggerRunPipeline()"
-                    class="h-8 px-4 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition shadow-xs flex items-center space-x-1.5">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                        </path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <span>Execute Consolidation</span>
-                </button>
-                <a id="btn-export" href="/api/export-excel"
-                    class="h-8 px-4 rounded bg-white hover:bg-gray-50 text-kpmg-navy text-xs font-semibold border border-kpmg-border transition shadow-xs flex items-center space-x-1.5">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                    </svg>
-                    <span>Download Excel (100% Formulas)</span>
-                </a>
+        <!-- 3. Sub-Bar Action Strip (Constant Size, Zero Layout Shift) -->
+        <div class="bg-kpmg-canvas border-b border-kpmg-border px-6 py-2">
+            <div class="max-w-6xl mx-auto flex items-center justify-between">
+                <div id="sub-step-label" class="text-xs font-medium text-kpmg-muted flex items-center space-x-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-kpmg-blue"></span>
+                    <span id="sub-step-text">Ingestion: Standalone Trial Balances</span>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button id="btn-upload-trigger" onclick="openUploadModal()"
+                        class="h-8 px-3.5 rounded bg-white hover:bg-gray-50 text-kpmg-navy text-xs font-semibold border border-kpmg-border transition shadow-xs flex items-center space-x-1.5">
+                        <svg class="w-3.5 h-3.5 text-kpmg-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                            </path>
+                        </svg>
+                        <span>Upload TB</span>
+                    </button>
+                    <button id="btn-run" onclick="triggerRunPipeline()"
+                        class="h-8 px-4 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition shadow-xs flex items-center space-x-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                            </path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>Execute Consolidation</span>
+                    </button>
+                    <a id="btn-export" href="/api/export-excel"
+                        class="h-8 px-4 rounded bg-white hover:bg-gray-50 text-kpmg-navy text-xs font-semibold border border-kpmg-border transition shadow-xs flex items-center space-x-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        <span>Download Excel (100% Formulas)</span>
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -212,11 +217,21 @@
             </div>
         </div>
 
-        <!-- Dynamic Step Containers -->
-        <div id="step-content" class="bg-white rounded border border-kpmg-border p-6 shadow-xs min-h-[460px]">
-            <!-- Content loaded dynamically via app.js -->
-            <div class="flex items-center justify-center h-64 text-kpmg-muted text-sm">
-                Loading consolidation workspace...
+        <!-- Section A: Consolidation Pipeline (Steps 1-6) -->
+        <div id="view-pipeline-run" class="space-y-4">
+            <!-- Dynamic Step Containers -->
+            <div id="step-content" class="bg-white rounded border border-kpmg-border p-6 shadow-xs min-h-[460px]">
+                <!-- Content loaded dynamically via app.js -->
+                <div class="flex items-center justify-center h-64 text-kpmg-muted text-sm">
+                    Loading consolidation workspace...
+                </div>
+            </div>
+        </div>
+
+        <!-- Section B: Audit & Observability Console (Accessible At All Times) -->
+        <div id="view-observability" class="hidden space-y-6">
+            <div class="flex items-center justify-center h-64 text-kpmg-muted text-sm bg-white rounded border border-kpmg-border">
+                Loading Observability Console...
             </div>
         </div>
 

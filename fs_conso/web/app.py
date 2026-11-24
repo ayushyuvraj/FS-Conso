@@ -139,6 +139,10 @@ async def get_status():
         "is_running": session.is_running,
         "current_stage": session.current_stage or (session.state.current_stage if session.state else None),
         "current_node": session.current_node or (session.state.current_node if session.state else None),
+        "token_usage": session.state.token_usage if session.state else {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        "halted_node": session.state.halted_node if session.state else None,
+        "halted_stage": session.state.halted_stage if session.state else None,
+        "remediation_items": session.state.remediation_items if session.state else [],
     }
 
 # 3. Input Validation Models with Strict Finite / Non-NaN Bounds
@@ -393,6 +397,14 @@ async def run_pipeline():
             err_msg = sanitize_error_message(str(exc))
             session.state.is_blocked = True
             session.state.error_message = f"Agent Execution Error: {err_msg}"
+            session.state.halted_node = session.current_node or "pipeline"
+            session.state.halted_stage = session.current_stage or "Execution Failure"
+            session.state.remediation_items = [
+                f"Execution failed at {session.state.halted_node}: {err_msg}",
+                "Check that GEMINI_API_KEY is configured with valid quota.",
+                "Verify trial balance input sheets are clean and balanced.",
+                "Click 'Reset to Baseline' to restore standard multi-entity benchmark."
+            ]
             session.current_stage = f"Execution failed: {err_msg}"
             session.current_node = None
             raise HTTPException(status_code=500, detail=f"Consolidation pipeline failed: {err_msg}")
@@ -406,6 +418,10 @@ async def run_pipeline():
         "teacher_score": session.state.teacher_score,
         "teacher_evaluation": session.state.teacher_evaluation,
         "error_message": session.state.error_message,
+        "token_usage": session.state.token_usage,
+        "halted_node": session.state.halted_node,
+        "halted_stage": session.state.halted_stage,
+        "remediation_items": session.state.remediation_items,
         "audit_trail_count": len(session.state.audit_trail),
         "output_file": session.state.output_excel_path
     }
@@ -427,6 +443,10 @@ async def get_pipeline_data():
     return {
         "current_step": st.current_step,
         "completed_steps": st.completed_steps,
+        "token_usage": st.token_usage,
+        "halted_node": st.halted_node,
+        "halted_stage": st.halted_stage,
+        "remediation_items": st.remediation_items,
         "raw_tbs": [
             {
                 "entity_code": tb.entity_code,
@@ -480,6 +500,7 @@ async def get_agent_traces():
         td["input_summary"] = sanitize_error_message(td.get("input_summary", ""))
         td["output_summary"] = sanitize_error_message(td.get("output_summary", ""))
         td["details"] = sanitize_error_message(td.get("details", ""))
+        td["token_usage"] = t.token_usage
         sanitized_traces.append(td)
     return {
         "traces": sanitized_traces,
@@ -554,6 +575,7 @@ async def export_audit_trail(format: str = "json"):
         td["input_summary"] = sanitize_error_message(td.get("input_summary", ""))
         td["output_summary"] = sanitize_error_message(td.get("output_summary", ""))
         td["details"] = sanitize_error_message(td.get("details", ""))
+        td["token_usage"] = t.token_usage
         sanitized_traces.append(td)
 
     if format.lower() == "csv":

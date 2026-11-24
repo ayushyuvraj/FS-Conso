@@ -22,6 +22,7 @@ class AgentNodeTrace(BaseModel):
     input_summary: Dict[str, Any] = Field(default_factory=dict)
     output_summary: Dict[str, Any] = Field(default_factory=dict)
     decisions_count: int = 0
+    token_usage: Dict[str, int] = Field(default_factory=lambda: {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
     ai_calls: List[Dict[str, Any]] = Field(default_factory=list)
     state_mutations: List[str] = Field(default_factory=list)
     details: Optional[str] = None
@@ -41,12 +42,16 @@ class ConsolidationState(BaseModel):
     output_excel_path: Optional[str] = None
 
     # Stepper and gating state
-    current_step: int = 1  # 1: Ingestion, 2: Mapping, 3: Translation, 4: Eliminations, 5: Consolidation, 6: Statements, 7: Audit
+    current_step: int = 1  # 1: Ingestion, 2: Mapping, 3: Translation, 4: Eliminations, 5: Consolidation, 6: Statements
     completed_steps: List[int] = Field(default_factory=list)
     is_blocked: bool = False
     error_message: Optional[str] = None
     current_stage: Optional[str] = None
     current_node: Optional[str] = None
+    halted_node: Optional[str] = None
+    halted_stage: Optional[str] = None
+    remediation_items: List[str] = Field(default_factory=list)
+    token_usage: Dict[str, int] = Field(default_factory=lambda: {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})
 
     # Teacher self-evaluation & audit telemetry
     teacher_score: float = 0.0

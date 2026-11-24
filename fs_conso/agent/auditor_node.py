@@ -128,6 +128,14 @@ def auditor_node(state: ConsolidationState) -> ConsolidationState:
     state.teacher_score = score
     state.teacher_evaluation = evaluation
 
+    if evaluation["passed"]:
+        state.halted_node = None
+        state.remediation_items = []
+    else:
+        state.halted_node = "auditor"
+        state.halted_stage = "Strict Teacher Quality Audit"
+        state.remediation_items = evaluation.get("feedback", [])
+
     t1 = time.perf_counter()
     elapsed_ms = round((t1 - t0) * 1000, 2)
     end_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
