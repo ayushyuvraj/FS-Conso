@@ -96,12 +96,13 @@
                 <div>Currency: <strong class="text-kpmg-blue font-mono font-bold" id="disp-curr">INR</strong></div>
             </div>
 
-            <!-- Gemini API Key Status Pill -->
+            <!-- Gemini Status Dot (Top Right) -->
             <div id="key-pill"
-                class="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 cursor-pointer hover:bg-slate-200/80 transition"
-                onclick="toggleSettingsDrawer()">
-                <span class="w-2 h-2 rounded-full" id="key-dot"></span>
-                <span id="key-label">API Key</span>
+                class="w-7 h-7 rounded-full flex items-center justify-center hover:bg-slate-100 cursor-pointer transition"
+                onclick="toggleSettingsDrawer()"
+                title="Gemini AI: Active">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500" id="key-dot"></span>
+                <span id="key-label" class="hidden"></span>
             </div>
         </div>
     </header>

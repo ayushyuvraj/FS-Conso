@@ -318,13 +318,15 @@ function renderHeaderStatus() {
 
     if (keyDot && keyLabel && keyPill) {
         if (appStatus.has_active_api_key) {
-            keyDot.className = "w-2 h-2 rounded-full bg-emerald-500";
-            keyLabel.textContent = "Gemini Active";
-            keyPill.className = "flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-300 cursor-pointer shadow-2xs";
+            keyDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+            keyLabel.textContent = "";
+            keyPill.className = "w-7 h-7 rounded-full flex items-center justify-center hover:bg-slate-100 cursor-pointer transition";
+            keyPill.title = "Gemini AI: Active (Click to configure)";
         } else {
-            keyDot.className = "w-2 h-2 rounded-full bg-rose-500 animate-pulse";
-            keyLabel.textContent = "API Key Missing";
-            keyPill.className = "flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-300 cursor-pointer shadow-2xs";
+            keyDot.className = "w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse";
+            keyLabel.textContent = "";
+            keyPill.className = "w-7 h-7 rounded-full flex items-center justify-center hover:bg-slate-100 cursor-pointer transition";
+            keyPill.title = "API Key Missing (Click to configure)";
         }
     }
 
