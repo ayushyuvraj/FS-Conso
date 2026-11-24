@@ -53,7 +53,7 @@ function toggleSidebar() {
 function applySidebarState() {
     const sidebar = document.getElementById("sidebar-nav");
     const mainLayout = document.getElementById("main-layout-container");
-    const chevron = document.getElementById("icon-collapse-chevron");
+    const toggleBtn = document.getElementById("btn-toggle-sidebar");
 
     if (sidebar) {
         if (sidebarCollapsed) {
@@ -69,8 +69,9 @@ function applySidebarState() {
             mainLayout.classList.remove("sidebar-collapsed");
         }
     }
-    if (chevron) {
-        chevron.style.transform = sidebarCollapsed ? "rotate(180deg)" : "rotate(0deg)";
+    if (toggleBtn) {
+        toggleBtn.setAttribute("aria-expanded", sidebarCollapsed ? "false" : "true");
+        toggleBtn.title = sidebarCollapsed ? "Expand Sidebar (Ctrl+B)" : "Collapse Sidebar (Ctrl+B)";
     }
 }
 
@@ -283,13 +284,13 @@ function renderHeaderStatus() {
 
     if (keyDot && keyLabel && keyPill) {
         if (appStatus.has_active_api_key) {
-            keyDot.className = "w-2 h-2 rounded-full bg-emerald-400";
+            keyDot.className = "w-2 h-2 rounded-full bg-emerald-500";
             keyLabel.textContent = "Gemini Active";
-            keyPill.className = "flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 cursor-pointer";
+            keyPill.className = "flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-300 cursor-pointer shadow-2xs";
         } else {
-            keyDot.className = "w-2 h-2 rounded-full bg-rose-400 animate-pulse";
+            keyDot.className = "w-2 h-2 rounded-full bg-rose-500 animate-pulse";
             keyLabel.textContent = "API Key Missing";
-            keyPill.className = "flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-rose-500/20 text-rose-300 border border-rose-500/30 cursor-pointer";
+            keyPill.className = "flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-300 cursor-pointer shadow-2xs";
         }
     }
 

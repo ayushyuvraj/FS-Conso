@@ -198,21 +198,17 @@ body {
     transform: scale(0.97) !important;
 }
 
-/* KPMG Clara Frosted Glassmorphism Surfaces */
+/* KPMG Clara Executive Surfaces */
 .glass-kpmg-header {
-    background: var(--glass-navy) !important;
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
-    border-bottom: 1px solid var(--glass-border) !important;
-    box-shadow: 0 4px 24px rgba(0, 29, 72, 0.25);
+    background: #FFFFFF !important;
+    border-bottom: 1px solid #E2E8F0 !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02) !important;
 }
 
 .glass-kpmg-sidebar {
-    background: var(--glass-sidebar) !important;
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
-    border-right: 1px solid var(--glass-border) !important;
-    box-shadow: 4px 0 24px rgba(0, 29, 72, 0.25);
+    background: #FFFFFF !important;
+    border-right: 1px solid #E2E8F0 !important;
+    box-shadow: 1px 0 3px 0 rgba(0, 0, 0, 0.03) !important;
 }
 
 .glass-kpmg-drawer-header {
@@ -281,7 +277,7 @@ body {
     margin-left: 4.5rem;
 }
 
-/* Sidebar Nav Item: Emil Kowalski Spring Pop-Out Physics */
+/* Sidebar Nav Item: Emil Kowalski Spring Pop-Out Physics (Executive White) */
 .sidebar-nav-item {
     position: relative;
     transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
@@ -291,14 +287,19 @@ body {
                 box-shadow 0.22s ease;
     border-left: 3px solid transparent;
     border-radius: 8px;
+    color: #475569;
 }
 
 .sidebar-nav-item:hover:not(.active) {
     transform: translateX(4px) scale(1.015);
-    background-color: rgba(255, 255, 255, 0.12);
-    color: #FFFFFF;
+    background-color: #F8FAFC;
+    color: var(--kpmg-blue);
     border-left: 3px solid var(--kpmg-pacific);
-    box-shadow: 0 4px 16px rgba(0, 145, 218, 0.25);
+    box-shadow: 0 4px 12px rgba(0, 51, 141, 0.08);
+}
+
+.sidebar-nav-item:hover:not(.active) .nav-icon {
+    color: var(--kpmg-blue);
 }
 
 .sidebar-nav-item:active {
@@ -306,14 +307,19 @@ body {
 }
 
 .sidebar-nav-item.active {
-    background: linear-gradient(90deg, rgba(0, 51, 141, 0.70) 0%, rgba(0, 29, 72, 0.45) 100%);
-    color: #FFFFFF;
-    border-left: 3px solid var(--kpmg-pacific);
-    box-shadow: 0 0 16px rgba(0, 145, 218, 0.35);
+    background-color: rgba(0, 51, 141, 0.08);
+    color: var(--kpmg-blue);
+    border-left: 3px solid var(--kpmg-blue);
+    box-shadow: 0 2px 8px rgba(0, 51, 141, 0.10);
+    font-weight: 600;
 }
 
 .sidebar-nav-item.active .nav-icon {
-    color: var(--kpmg-pacific);
+    color: var(--kpmg-blue);
+}
+
+.sidebar-nav-item.active .sidebar-label span.font-semibold {
+    color: var(--kpmg-blue) !important;
 }
 
 /* Tooltip on collapsed state hover */
@@ -323,9 +329,7 @@ body {
     left: calc(100% + 12px);
     top: 50%;
     transform: translateY(-50%);
-    background: rgba(0, 29, 72, 0.95);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: #001D48;
     color: #FFFFFF;
     font-size: 11px;
     font-weight: 600;
@@ -333,7 +337,7 @@ body {
     padding: 6px 12px;
     border-radius: 6px;
     border: 1px solid rgba(0, 145, 218, 0.4);
-    box-shadow: 0 8px 24px rgba(0, 29, 72, 0.4);
+    box-shadow: 0 8px 24px rgba(0, 29, 72, 0.25);
     z-index: 60;
     pointer-events: none;
 }
