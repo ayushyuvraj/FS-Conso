@@ -1,0 +1,29 @@
+{
+  "skills": [
+    {
+      "name": "emil-kowalski",
+      "path": "skills/emil-kowalski/SKILL.md",
+      "description": "Emil Kowalski animation decisions, fluid spring physics, micro-interactions, Apple-tier tactile UI, and invisible polish."
+    },
+    {
+      "name": "impeccable",
+      "path": "skills/impeccable/SKILL.md",
+      "description": "Luxury design system, high-finance typography, Neo Kinpaku & Lacquer Obsidian visual craftsmanship, and layout hierarchy."
+    },
+    {
+      "name": "taste",
+      "path": "skills/taste/SKILL.md",
+      "description": "Anti-slop frontend engineering, opinionated typography, editorial restraint, no AI boilerplate or generic dashboard templates."
+    },
+    {
+      "name": "ui-ux-pro-max",
+      "path": "skills/ui-ux-pro-max/SKILL.md",
+      "description": "Enterprise financial data density, complex tabular data, tabular figures, sticky headers, drill-down inspectors, and keyboard navigation."
+    },
+    {
+      "name": "frontend-design",
+      "path": "skills/frontend-design/SKILL.md",
+      "description": "Anthropic official frontend design skill: distinctive visual identity, opinionated palettes, custom typography, and bespoke UI components."
+    }
+  ]
+}
