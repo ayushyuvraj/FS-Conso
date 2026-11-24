@@ -47,7 +47,7 @@
 <body class="bg-kpmg-canvas text-kpmg-text font-sans antialiased min-h-screen flex flex-col">
 
     <!-- 1. Luxury High-Finance Navigation Bar (KPMG Clara Executive Frosted Glass) -->
-    <header class="h-16 bg-white border-b border-slate-200/90 shadow-xs px-4 md:px-6 flex items-center justify-between sticky top-0 z-40">
+    <header class="h-16 bg-white border-b border-slate-200/90 shadow-xs px-4 md:px-6 flex items-center justify-between sticky top-0 z-40 relative">
         <!-- Left: Unified KPMG Brand / Sidebar Toggle & Portal Title -->
         <div class="flex items-center space-x-3">
             <!-- Merged KPMG Logo / Hamburger Toggle Button (Morphs to Hamburger on Hover) -->
@@ -73,9 +73,9 @@
             </div>
         </div>
 
-        <!-- Center: Company Name (Matching Enterprise Consolidation Typography) -->
-        <div class="hidden sm:flex items-center justify-center">
-            <span id="header-active-company-name" class="font-bold text-sm md:text-base tracking-tight text-kpmg-navy">Company P Healthcare Corp</span>
+        <!-- Center: Company Name (Absolute Center of Screen) -->
+        <div class="hidden sm:flex items-center justify-center absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none max-w-[45vw] text-center">
+            <span id="header-active-company-name" class="font-bold text-sm md:text-base tracking-tight text-kpmg-navy truncate pointer-events-auto">Company P Healthcare Corp</span>
         </div>
 
         <!-- Right Actions: HITL Review, Period, API Key -->
