@@ -73,11 +73,9 @@
             </div>
         </div>
 
-        <!-- Center: Active Workspace Quick Pill (KPMG Clara Style) -->
-        <div class="hidden xl:flex items-center space-x-2 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200/70 px-3.5 py-1.5 rounded-full border border-slate-200 transition">
-            <span class="w-2 h-2 rounded-full bg-kpmg-blue animate-pulse"></span>
-            <span class="text-slate-400">Active:</span>
-            <span id="header-active-company-name" class="font-semibold text-kpmg-navy">Company P Healthcare Corp</span>
+        <!-- Center: Company Name (Matching Enterprise Consolidation Typography) -->
+        <div class="hidden sm:flex items-center justify-center">
+            <span id="header-active-company-name" class="font-bold text-sm md:text-base tracking-tight text-kpmg-navy">Company P Healthcare Corp</span>
         </div>
 
         <!-- Right Actions: HITL Review, Period, API Key -->
@@ -89,11 +87,11 @@
                 <span>HITL: <strong id="badge-hitl-count">0</strong></span>
             </button>
 
-            <!-- Active Period & Currency Badge -->
-            <div class="hidden md:flex items-center space-x-3 text-xs text-slate-600 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
-                <div>Period: <strong class="text-slate-800 font-mono" id="disp-period">31-Mar-2024</strong></div>
-                <div class="w-[1px] h-3 bg-slate-200"></div>
-                <div>Currency: <strong class="text-kpmg-blue font-mono font-bold" id="disp-curr">INR</strong></div>
+            <!-- Active Period & Currency (Clean, Boxless) -->
+            <div class="hidden md:flex items-center space-x-2 text-xs">
+                <span class="font-mono text-slate-700 font-medium" id="disp-period">31-Mar-2024</span>
+                <span class="text-slate-300">•</span>
+                <span class="font-mono text-kpmg-blue font-bold" id="disp-curr">INR</span>
             </div>
 
             <!-- Gemini Status Dot (Top Right) -->
@@ -109,34 +107,6 @@
 
     <!-- Collapsible Left Navigation Sidebar (Executive White Theme) -->
     <aside id="sidebar-nav" class="fixed top-16 left-0 bottom-0 bg-white border-r border-slate-200/90 shadow-xs text-slate-800 flex flex-col z-30 select-none">
-        <!-- Workspace Header & Quick Switcher -->
-        <div class="p-3 border-b border-slate-200/80 flex flex-col space-y-2">
-            <div class="sidebar-expanded-only flex items-center justify-between">
-                <span class="text-[10px] font-bold text-slate-400 tracking-wider uppercase">Active Workspace</span>
-                <button onclick="openNewCompanyModal()" title="Create New Client Company" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-kpmg-blue text-xs font-bold transition flex items-center space-x-1 border border-slate-200">
-                    <span>+</span><span>New</span>
-                </button>
-            </div>
-            
-            <!-- Company Card / Selector (Expanded) -->
-            <div class="sidebar-expanded-only bg-slate-50 hover:bg-slate-100/70 p-2.5 rounded-lg border border-slate-200 transition">
-                <div class="text-[11px] text-slate-500 uppercase font-semibold mb-1 flex items-center justify-between">
-                    <span>Entity Scope</span>
-                    <span id="sidebar-entity-badge" class="px-1.5 py-0.2 rounded text-[10px] bg-kpmg-blue text-white font-mono">4 Entities</span>
-                </div>
-                <select id="select-company" onchange="handleCompanySwitch(this.value)" class="w-full bg-white text-xs font-semibold text-kpmg-navy px-2 py-1.5 rounded border border-slate-300 focus:outline-none focus:border-kpmg-blue cursor-pointer">
-                    <option value="company-p" class="bg-white text-kpmg-navy" selected>Company P Healthcare Corp</option>
-                </select>
-            </div>
-
-            <!-- Collapsed Icon Indicator -->
-            <div class="sidebar-collapsed-only flex items-center justify-center py-2" title="Active Workspace">
-                <div class="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-xs text-kpmg-blue shadow-2xs">
-                    <span id="sidebar-mini-company-code">CP</span>
-                </div>
-            </div>
-        </div>
-
         <!-- Primary 3-Option Navigation List -->
         <nav class="flex-1 p-2 space-y-1.5 overflow-y-auto overflow-x-hidden">
             <!-- Option 1: Company Profile -->
