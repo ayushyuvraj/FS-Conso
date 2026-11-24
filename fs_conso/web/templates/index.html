@@ -48,22 +48,25 @@
 
     <!-- 1. Luxury High-Finance Navigation Bar (KPMG Clara Executive Frosted Glass) -->
     <header class="h-16 bg-white border-b border-slate-200/90 shadow-xs px-4 md:px-6 flex items-center justify-between sticky top-0 z-40">
-        <!-- Left: Sidebar Toggle & Official KPMG Corporate Logo Lockup -->
-        <div class="flex items-center space-x-2.5">
+        <!-- Left: Unified KPMG Brand / Sidebar Toggle & Portal Title -->
+        <div class="flex items-center space-x-3">
+            <!-- Merged KPMG Logo / Hamburger Toggle Button (Morphs to Hamburger on Hover) -->
             <button id="btn-toggle-sidebar" onclick="toggleSidebar()" 
-                class="p-2 rounded-lg text-slate-600 hover:text-kpmg-navy hover:bg-slate-100 transition focus:outline-none flex items-center justify-center btn-tactile" 
+                class="group relative h-10 px-2.5 rounded-lg hover:bg-slate-100 text-kpmg-navy transition-all duration-200 flex items-center justify-center focus:outline-none border border-transparent hover:border-slate-200/80 btn-tactile cursor-pointer" 
                 title="Toggle Sidebar Navigation (Ctrl+B)">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
+                <!-- Default State: KPMG Corporate Logo -->
+                <div class="flex items-center transition-all duration-200 ease-out group-hover:opacity-0 group-hover:scale-90 group-hover:pointer-events-none">
+                    <img src="/static/img/kpmg-logo.svg" alt="KPMG" class="h-6 w-auto object-contain" />
+                </div>
+                <!-- Hover State: Hamburger Menu Icon -->
+                <div class="absolute inset-0 flex items-center justify-center opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 ease-out text-kpmg-navy pointer-events-none">
+                    <svg class="w-5 h-5 text-kpmg-navy" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </div>
             </button>
 
-            <!-- Official KPMG Corporate Logo -->
-            <div class="flex items-center h-8 cursor-pointer select-none" onclick="switchNavSection('PIPELINE')" title="KPMG Clara Consolidation Platform">
-                <img src="/static/img/kpmg-logo.svg" alt="KPMG" class="h-6 w-auto object-contain" />
-            </div>
-
-            <div class="h-5 w-[1px] bg-slate-200 hidden sm:block mx-1"></div>
+            <div class="h-5 w-[1px] bg-slate-200 hidden sm:block"></div>
 
             <div class="flex items-center">
                 <span class="font-bold text-sm md:text-base tracking-tight text-kpmg-navy">Enterprise Consolidation</span>
@@ -134,7 +137,7 @@
         </div>
 
         <!-- Primary 3-Option Navigation List -->
-        <nav class="flex-1 p-2 space-y-1.5 overflow-y-auto">
+        <nav class="flex-1 p-2 space-y-1.5 overflow-y-auto overflow-x-hidden">
             <!-- Option 1: Company Profile & Workspace -->
             <button id="nav-item-companies" onclick="switchNavSection('COMPANIES')" 
                 data-tooltip="Company Profile & Perimeter"
@@ -234,11 +237,7 @@
         <!-- Sidebar Footer Status -->
         <div class="px-3 py-2 border-t border-slate-200/90 flex items-center justify-between text-xs text-slate-400">
             <div class="sidebar-expanded-only flex items-center space-x-2">
-                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span class="text-[11px] font-mono text-slate-500">v2.0-agentic</span>
-            </div>
-            <div class="sidebar-collapsed-only mx-auto">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 block" title="Online v2.0"></span>
+                <span class="text-[11px] font-mono text-slate-400">v2.0-agentic</span>
             </div>
         </div>
     </aside>

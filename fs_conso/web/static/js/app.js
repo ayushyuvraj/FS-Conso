@@ -33,12 +33,46 @@ function initSidebar() {
         }
     } catch (_) { }
 
+    initSidebarTooltips();
+
     // Global keyboard shortcut: Ctrl+B or Cmd+B to toggle sidebar
     document.addEventListener("keydown", (e) => {
         if ((e.ctrlKey || e.metaKey) && (e.key === "b" || e.key === "B")) {
             e.preventDefault();
             toggleSidebar();
         }
+    });
+}
+
+function initSidebarTooltips() {
+    let tooltipEl = document.getElementById("sidebar-floating-tooltip");
+    if (!tooltipEl) {
+        tooltipEl = document.createElement("div");
+        tooltipEl.id = "sidebar-floating-tooltip";
+        tooltipEl.className = "fixed pointer-events-none z-50 text-xs font-semibold px-2.5 py-1.5 rounded-md bg-[#001D48] text-white shadow-xl border border-[#0091DA]/40 opacity-0 transition-opacity duration-150";
+        document.body.appendChild(tooltipEl);
+    }
+
+    document.querySelectorAll("#sidebar-nav .sidebar-nav-item").forEach(item => {
+        item.addEventListener("mouseenter", () => {
+            if (!sidebarCollapsed) return;
+            const text = item.getAttribute("data-tooltip");
+            if (!text) return;
+            tooltipEl.textContent = text;
+            const rect = item.getBoundingClientRect();
+            tooltipEl.style.top = `${rect.top + (rect.height / 2) - 14}px`;
+            tooltipEl.style.left = `${rect.right + 10}px`;
+            tooltipEl.classList.remove("opacity-0");
+            tooltipEl.classList.add("opacity-100");
+        });
+        item.addEventListener("mouseleave", () => {
+            tooltipEl.classList.remove("opacity-100");
+            tooltipEl.classList.add("opacity-0");
+        });
+        item.addEventListener("click", () => {
+            tooltipEl.classList.remove("opacity-100");
+            tooltipEl.classList.add("opacity-0");
+        });
     });
 }
 
