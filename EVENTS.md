@@ -170,4 +170,23 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Portal server live status: HTTP 200 OK (`active_company_id: c1`, `is_ready: True`).
   - Git checkpoint and remote push: tagged `checkpoint-profile-v2-ghost-buttons-and-plain-cells`.
 
+### [2026-11-25 20:30] Milestone: Consolidation Toolbar Action Alignment (Ghost Upload/Reset & Run Consolidation)
+- **Requirements Implemented**:
+  1. **Ghost Icon Buttons for Upload and Reset**:
+     - Converted `Batch Upload` and `Reset Workspace` buttons to clean borderless ghost icon buttons matching Edit/Delete and Sort/Filter.
+     - Upload button: `w-8 h-8 rounded text-slate-500 hover:text-kpmg-blue hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile` with cloud upload icon.
+     - Reset button: `w-8 h-8 rounded text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition flex items-center justify-center cursor-pointer btn-tactile` with refresh icon and rose hover glow.
+  2. **Suppression of Counter Badge**:
+     - Completely removed the redundant `${tbs.length} Ingested` counter badge.
+  3. **Relocated 'Run Consolidation' Button**:
+     - Removed the oversized `Run Consolidation` button from the top sticky stepper navigation bar.
+     - Brought it down into the workspace toolbar on the far right where "0 ingested" previously stood.
+     - Standardized button dimensions and typography to the established `h-7 px-3 rounded bg-kpmg-blue` corporate standard.
+- **Verification**:
+  - Node.js syntax check: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Full automated pytest suite: 54/54 PASSED in 22.47s (100% pass rate).
+  - Portal server live status: HTTP 200 OK (`active_company_id: c1`, `is_ready: True`).
+  - Git checkpoint and remote push: tagged `checkpoint-consolidation-toolbar-ghost-actions`.
+
+
 
