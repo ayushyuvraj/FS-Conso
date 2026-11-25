@@ -31,6 +31,7 @@ class ClassifiedFile(BaseModel):
     filename: str
     file_type: str = Field(..., description="CURRENT_TB, PRIOR_TB, INTERCOMPANY_SCHEDULE, FX_RATES, COA_MASTER, ENTITY_STRUCTURE, UNKNOWN")
     entity_code: Optional[str] = None
+    entity_name: Optional[str] = None
     period: Optional[str] = None
     currency: Optional[str] = None
     confidence: float = 1.0
@@ -38,6 +39,8 @@ class ClassifiedFile(BaseModel):
     reasoning: str = ""
     needs_review: bool = False
     sheet_names: List[str] = Field(default_factory=list)
+    detected_columns: Dict[str, str] = Field(default_factory=dict)
+    candidates: List[Dict[str, Any]] = Field(default_factory=list)
     raw_data: Optional[bytes] = Field(default=None, repr=False)
 
 
@@ -88,10 +91,12 @@ class FileClassifier:
         file_bytes: bytes,
         filename: str,
         expected_period: Optional[str] = None,
-        known_entities: Optional[List[str]] = None
+        known_entities: Optional[Any] = None,
+        entity_hierarchy: Optional[Any] = None
     ) -> ClassifiedFile:
         """Classifies a single file using 3-tier escalation (Deterministic -> Gemini -> HITL)."""
-        preview = cls._inspect_file_preview(file_bytes, filename)
+        target_entities = known_entities if known_entities is not None else entity_hierarchy
+        preview = cls._inspect_file_preview(file_bytes or b"", filename)
         fname_lower = filename.lower()
         sheets_lower = [s.lower() for s in preview["sheets"]]
         flat_samples = " ".join(" ".join(str(c) for c in r) for r in preview["sample_rows"]).lower()
@@ -161,34 +166,102 @@ class FileClassifier:
             )
 
         # 5. Deterministic Trial Balance (with Entity matching)
-        ent_code = None
-        if known_entities:
-            for e in known_entities:
-                pattern = rf"(^|[_\-\s]){re.escape(e.lower())}([_\-\s]|\.|$)"
-                if re.search(pattern, fname_lower) or any(re.search(pattern, s) for s in sheets_lower):
-                    ent_code = e
+        roster: List[Dict[str, Any]] = []
+        if target_entities:
+            if hasattr(target_entities, "entities"):  # EntityHierarchy
+                for ent in target_entities.entities.values():
+                    roster.append({
+                        "code": getattr(ent, "entity_code", ""),
+                        "name": getattr(ent, "entity_name", ""),
+                        "currency": getattr(ent, "input_currency", "INR"),
+                        "holding": getattr(ent, "holding_percentage", 1.0)
+                    })
+            elif isinstance(target_entities, list):
+                for item in target_entities:
+                    if isinstance(item, dict):
+                        roster.append({
+                            "code": item.get("entity_code") or item.get("code", ""),
+                            "name": item.get("entity_name") or item.get("name", ""),
+                            "currency": item.get("input_currency") or item.get("currency", "INR"),
+                            "holding": item.get("holding_percentage", 1.0)
+                        })
+                    elif hasattr(item, "entity_code"):
+                        roster.append({
+                            "code": getattr(item, "entity_code", ""),
+                            "name": getattr(item, "entity_name", ""),
+                            "currency": getattr(item, "input_currency", "INR"),
+                            "holding": getattr(item, "holding_percentage", 1.0)
+                        })
+                    elif isinstance(item, str):
+                        roster.append({
+                            "code": item,
+                            "name": item,
+                            "currency": "INR",
+                            "holding": 1.0
+                        })
+
+        matched_ent = None
+        matched_confidence = 0.0
+
+        # Pass 1: Exact entity code match with word boundary
+        for ent in roster:
+            code = ent["code"].lower().strip()
+            if not code:
+                continue
+            code_pattern = rf"(^|[_\-\s\(\)\.\[\]]){re.escape(code)}([_\-\s\(\)\.\[\]]|\.|$)"
+            if re.search(code_pattern, fname_lower) or any(re.search(code_pattern, s) for s in sheets_lower):
+                matched_ent = ent
+                matched_confidence = 0.95
+                break
+
+        # Pass 2: Exact or slug entity name match
+        if not matched_ent:
+            for ent in roster:
+                name_clean = re.sub(r"[^a-z0-9]", "", ent["name"].lower())
+                fname_clean = re.sub(r"[^a-z0-9]", "", fname_lower)
+                if len(name_clean) >= 3 and name_clean in fname_clean:
+                    matched_ent = ent
+                    matched_confidence = 0.92
+                    break
+                # Substring tokens
+                tokens = [t for t in re.split(r"[_\-\s]+", ent["name"].lower()) if len(t) > 2]
+                if tokens and all(t in fname_lower for t in tokens):
+                    matched_ent = ent
+                    matched_confidence = 0.90
                     break
 
-        # Fallback regex for common entity patterns: Company_P, Company_S1, Sub_1, etc.
-        if not ent_code:
-            m = re.search(r"(company[_\s-]?[a-z0-9]+|sub[_\s-]?[a-z0-9]+|entity[_\s-]?[a-z0-9]+)", fname_lower)
-            if m:
-                ent_code = m.group(1).title().replace(" ", "_").replace("-", "_")
+        # Pass 3: Common parent / sub abbreviations
+        if not matched_ent:
+            for ent in roster:
+                if ent.get("holding", 1.0) == 1.0 and ("parent" in fname_lower or "_p_" in fname_lower or fname_lower.endswith("_p") or "parent" in sheets_lower):
+                    matched_ent = ent
+                    matched_confidence = 0.88
+                    break
+                m_sub = re.search(r"(?:sub|subsidiary|s)[_\s-]?(\d+)", fname_lower)
+                if m_sub:
+                    sub_num = m_sub.group(1)
+                    if sub_num in ent["code"].lower() or sub_num in ent["name"].lower():
+                        matched_ent = ent
+                        matched_confidence = 0.90
+                        break
 
         is_prior = "prior" in fname_lower or "opening" in fname_lower or "py" in fname_lower
+        ftype = "PRIOR_TB" if is_prior else "CURRENT_TB"
 
-        if ent_code and ("tb" in fname_lower or "trial" in fname_lower or "balance" in fname_lower):
-            ftype = "PRIOR_TB" if is_prior else "CURRENT_TB"
+        if matched_ent and matched_confidence >= config.ai_confidence_threshold:
             return ClassifiedFile(
                 filename=filename,
                 file_type=ftype,
-                entity_code=ent_code,
+                entity_code=matched_ent["code"],
+                entity_name=matched_ent["name"],
                 period=expected_period,
-                confidence=0.92,
+                currency=matched_ent["currency"],
+                confidence=matched_confidence,
                 classification_method="DETERMINISTIC",
-                reasoning=f"Identified {ftype} for legal entity '{ent_code}' via filename match.",
+                reasoning=f"Deterministically matched legal entity '{matched_ent['name']}' ({matched_ent['code']}) from filename/sheet pattern.",
                 needs_review=False,
                 sheet_names=preview["sheets"],
+                candidates=roster,
                 raw_data=file_bytes
             )
 
@@ -196,24 +269,33 @@ class FileClassifier:
         # Tier 2: Agentic Brain (Gemini Flash)
         # -------------------------------------------------------------
         if config.validate_api_key_strict():
-            ai_classification = cls._classify_with_gemini(preview, known_entities, expected_period)
+            ai_classification = cls._classify_with_gemini(preview, roster, expected_period)
             if ai_classification:
                 ai_classification.raw_data = file_bytes
+                ai_classification.candidates = roster
                 return ai_classification
 
         # -------------------------------------------------------------
-        # Tier 3: Fallback / HITL Escalation
+        # Tier 3: Fallback / HITL Escalation (< threshold)
         # -------------------------------------------------------------
+        best_code = matched_ent["code"] if matched_ent else None
+        best_name = matched_ent["name"] if matched_ent else None
+        best_curr = matched_ent["currency"] if matched_ent else "INR"
+        best_conf = matched_confidence if matched_ent else 0.50
+
         return ClassifiedFile(
             filename=filename,
-            file_type="CURRENT_TB" if ent_code else "UNKNOWN",
-            entity_code=ent_code,
+            file_type=ftype if best_code else "UNKNOWN",
+            entity_code=best_code,
+            entity_name=best_name,
             period=expected_period,
-            confidence=0.50,
-            classification_method="DETERMINISTIC",
-            reasoning="Uncertain structure. Routed to Human-in-the-Loop for confirmation.",
+            currency=best_curr,
+            confidence=best_conf,
+            classification_method="DETERMINISTIC" if best_code else "FALLBACK",
+            reasoning=f"Confidence ({best_conf:.2f}) below threshold ({config.ai_confidence_threshold:.2f}). Routed to Human-in-the-Loop review.",
             needs_review=True,
             sheet_names=preview["sheets"],
+            candidates=roster,
             raw_data=file_bytes
         )
 
@@ -221,7 +303,7 @@ class FileClassifier:
     def _classify_with_gemini(
         cls,
         preview: Dict[str, Any],
-        known_entities: Optional[List[str]],
+        roster: Optional[List[Dict[str, Any]]],
         expected_period: Optional[str]
     ) -> Optional[ClassifiedFile]:
         """Invokes Gemini Agentic Brain to analyze messy layouts and classify the document."""
@@ -239,7 +321,8 @@ Sheet Names: {preview['sheets']}
 Top Sample Rows (JSON):
 {json.dumps(preview['sample_rows'][:6])}
 
-Known In-Scope Entities in Conglomerate: {known_entities or ['Company_P', 'Company_S1', 'Company_S2', 'Company_S3']}
+Known In-Scope Entities in Conglomerate Perimeter:
+{json.dumps(roster or [{'code': 'P', 'name': 'Parent Company', 'currency': 'INR'}], indent=2)}
 Expected Reporting Period: {expected_period or '31-Mar-2024'}
 
 Classify the file into exactly ONE of the following file_types:
@@ -253,11 +336,11 @@ Classify the file into exactly ONE of the following file_types:
 Respond STRICTLY in JSON format matching this schema:
 {{
   "file_type": "CURRENT_TB",
-  "entity_code": "Company_S1",
+  "entity_code": "code of one of the in-scope entities",
   "period": "31-Mar-2024",
   "currency": "INR",
   "confidence": 0.95,
-  "reasoning": "Headers show GL Code, Account Description, Debit, Credit for Operating Sub 1."
+  "reasoning": "Reasoning based on file headers, currency columns, and entity profile."
 }}
 """
             response = client.models.generate_content(
@@ -274,19 +357,28 @@ Respond STRICTLY in JSON format matching this schema:
             conf = float(data.get("confidence", 0.85))
             threshold = config.ai_confidence_threshold
 
+            ent_code = data.get("entity_code")
+            matched_ent = next((e for e in (roster or []) if e.get("code") == ent_code or e.get("name") == ent_code), None)
+            ent_name = matched_ent["name"] if matched_ent else None
+            ent_curr = matched_ent["currency"] if matched_ent else data.get("currency")
+            if matched_ent:
+                ent_code = matched_ent["code"]
+
             return ClassifiedFile(
                 filename=preview["filename"],
                 file_type=data.get("file_type", "CURRENT_TB"),
-                entity_code=data.get("entity_code"),
+                entity_code=ent_code,
+                entity_name=ent_name,
                 period=data.get("period") or expected_period,
-                currency=data.get("currency"),
+                currency=ent_curr,
                 confidence=conf,
                 classification_method="GEMINI_AI",
                 reasoning=data.get("reasoning", "Classified via Gemini Agentic Brain layout inspection."),
-                needs_review=(conf < threshold or data.get("entity_code") is None),
-                sheet_names=preview["sheets"]
+                needs_review=(conf < threshold or ent_code is None),
+                sheet_names=preview["sheets"],
+                candidates=roster or []
             )
-        except Exception as e:
+        except Exception:
             return None
 
     @classmethod

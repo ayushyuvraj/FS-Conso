@@ -1753,38 +1753,194 @@ function renderActiveStepContent() {
 
 // STEP 1: INGESTION
 function renderStep1(el) {
-    const tbs = pipelineData.raw_tbs || [];
-    let rowsHtml = tbs.map(tb => `
-        <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
-            <td class="font-bold text-kpmg-navy py-2 px-3 text-xs">
-                ${escapeHtml(tb.entity_code)}
-                ${tb.is_prior_period ? '<span class="ml-1 px-1.5 py-0.2 rounded text-[9px] bg-slate-200 text-slate-700 font-mono">PRIOR</span>' : ''}
-            </td>
-            <td class="py-2 px-3 text-xs"><span class="px-2 py-0.5 rounded bg-gray-100 font-mono text-[11px]">${escapeHtml(tb.currency)}</span></td>
-            <td class="num-cell py-2 px-3 text-xs font-mono">${tb.row_count}</td>
-            <td class="num-cell py-2 px-3 text-xs font-mono">${formatNum(tb.total_debit)}</td>
-            <td class="num-cell py-2 px-3 text-xs font-mono">${formatNum(tb.total_credit)}</td>
-            <td class="num-cell py-2 px-3 text-xs font-mono font-bold ${tb.is_tallied ? 'text-emerald-600' : 'text-red-600'}">${formatNum(tb.signed_sum)}</td>
-            <td class="text-center py-2 px-3 text-xs">
-                <span class="px-2.5 py-0.5 rounded text-[11px] font-semibold ${tb.is_tallied ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
-                    ${tb.is_tallied ? 'Tallied (0.00)' : 'Unbalanced'}
-                </span>
-            </td>
-        </tr>
-    `).join("");
+    const tbs = (pipelineData && pipelineData.raw_tbs) ? pipelineData.raw_tbs : [];
+    const tbMap = new Map();
+    tbs.forEach(tb => {
+        if (tb.entity_code) {
+            tbMap.set(tb.entity_code.toUpperCase(), tb);
+        }
+    });
+
+    const perimeter = (appStatus && appStatus.perimeter_entities) ? appStatus.perimeter_entities : [];
+    const missingEntities = (appStatus && appStatus.missing_entities) ? appStatus.missing_entities : [];
+    const hasPerimeter = perimeter.length > 0;
+
+    let rowsHtml = "";
+    if (hasPerimeter) {
+        // Render each perimeter entity (uploaded or pending)
+        rowsHtml = perimeter.map(ent => {
+            const tb = tbMap.get(ent.entity_code.toUpperCase());
+            const isUploaded = !!tb;
+            const displayName = ent.entity_name || (tb && tb.entity_name) || ent.entity_code;
+            const currency = ent.currency || (tb && tb.currency) || '—';
+            const holdingPct = ent.holding_percentage != null ? `${Math.round(ent.holding_percentage * 100)}%` : (ent.is_parent ? '100%' : '100%');
+            const rolePill = ent.is_parent 
+                ? `<span class="px-1.5 py-0.2 rounded text-[10px] bg-blue-100 text-kpmg-blue font-semibold">PARENT</span>` 
+                : `<span class="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 text-slate-600 font-medium">${holdingPct} OWNED</span>`;
+
+            if (isUploaded) {
+                return `
+                    <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
+                        <td class="py-2.5 px-3 text-xs">
+                            <div class="font-bold text-kpmg-navy text-[13px] leading-snug">
+                                ${escapeHtml(displayName)}
+                            </div>
+                            <div class="flex items-center space-x-1.5 mt-0.5 text-[11px] text-slate-500">
+                                <span class="font-mono font-semibold">${escapeHtml(ent.entity_code)}</span>
+                                <span>•</span>
+                                ${rolePill}
+                            </div>
+                        </td>
+                        <td class="py-2.5 px-3 text-xs">
+                            <span class="px-2 py-0.5 rounded bg-slate-100 font-mono text-[11px] font-semibold text-slate-700 border border-slate-200/60">${escapeHtml(currency)}</span>
+                        </td>
+                        <td class="num-cell py-2.5 px-3 text-xs font-mono">${tb.row_count}</td>
+                        <td class="num-cell py-2.5 px-3 text-xs font-mono">${formatNum(tb.total_debit)}</td>
+                        <td class="num-cell py-2.5 px-3 text-xs font-mono">${formatNum(tb.total_credit)}</td>
+                        <td class="num-cell py-2.5 px-3 text-xs font-mono font-bold ${tb.is_tallied ? 'text-emerald-600' : 'text-red-600'}">${formatNum(tb.signed_sum)}</td>
+                        <td class="text-center py-2.5 px-3 text-xs">
+                            <span class="px-2.5 py-0.5 rounded text-[11px] font-semibold ${tb.is_tallied ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
+                                ${tb.is_tallied ? 'Tallied (0.00)' : 'Unbalanced'}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                return `
+                    <tr class="hover:bg-amber-50/30 border-b border-gray-100 transition bg-slate-50/40">
+                        <td class="py-2.5 px-3 text-xs">
+                            <div class="font-bold text-slate-700 text-[13px] leading-snug">
+                                ${escapeHtml(displayName)}
+                            </div>
+                            <div class="flex items-center space-x-1.5 mt-0.5 text-[11px] text-slate-500">
+                                <span class="font-mono font-semibold">${escapeHtml(ent.entity_code)}</span>
+                                <span>•</span>
+                                ${rolePill}
+                            </div>
+                        </td>
+                        <td class="py-2.5 px-3 text-xs">
+                            <span class="px-2 py-0.5 rounded bg-slate-100 font-mono text-[11px] font-semibold text-slate-500 border border-slate-200/60">${escapeHtml(currency)}</span>
+                        </td>
+                        <td class="num-cell py-2.5 px-3 text-xs font-mono text-slate-400">—</td>
+                        <td class="num-cell py-2.5 px-3 text-xs font-mono text-slate-400">—</td>
+                        <td class="num-cell py-2.5 px-3 text-xs font-mono text-slate-400">—</td>
+                        <td class="num-cell py-2.5 px-3 text-xs font-mono text-slate-400">—</td>
+                        <td class="text-center py-2.5 px-3 text-xs">
+                            <span class="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80">
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1 animate-pulse"></span>
+                                Pending Upload
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }
+        }).join("");
+
+        // Also check if any uploaded TB is outside perimeter (e.g. prior period or ad-hoc)
+        const perimeterCodes = new Set(perimeter.map(p => p.entity_code.toUpperCase()));
+        const extraTbs = tbs.filter(tb => !perimeterCodes.has((tb.entity_code || '').toUpperCase()));
+        if (extraTbs.length > 0) {
+            rowsHtml += extraTbs.map(tb => `
+                <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
+                    <td class="py-2.5 px-3 text-xs">
+                        <div class="font-bold text-kpmg-navy text-[13px] leading-snug">
+                            ${escapeHtml(tb.entity_name || tb.entity_code)}
+                        </div>
+                        <div class="flex items-center space-x-1.5 mt-0.5 text-[11px] text-slate-500">
+                            <span class="font-mono font-semibold">${escapeHtml(tb.entity_code)}</span>
+                            ${tb.is_prior_period ? '<span class="ml-1 px-1.5 py-0.2 rounded text-[9px] bg-slate-200 text-slate-700 font-mono">PRIOR</span>' : ''}
+                        </div>
+                    </td>
+                    <td class="py-2.5 px-3 text-xs"><span class="px-2 py-0.5 rounded bg-gray-100 font-mono text-[11px] font-semibold text-slate-700">${escapeHtml(tb.currency)}</span></td>
+                    <td class="num-cell py-2.5 px-3 text-xs font-mono">${tb.row_count}</td>
+                    <td class="num-cell py-2.5 px-3 text-xs font-mono">${formatNum(tb.total_debit)}</td>
+                    <td class="num-cell py-2.5 px-3 text-xs font-mono">${formatNum(tb.total_credit)}</td>
+                    <td class="num-cell py-2.5 px-3 text-xs font-mono font-bold ${tb.is_tallied ? 'text-emerald-600' : 'text-red-600'}">${formatNum(tb.signed_sum)}</td>
+                    <td class="text-center py-2.5 px-3 text-xs">
+                        <span class="px-2.5 py-0.5 rounded text-[11px] font-semibold ${tb.is_tallied ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
+                            ${tb.is_tallied ? 'Tallied (0.00)' : 'Unbalanced'}
+                        </span>
+                    </td>
+                </tr>
+            `).join("");
+        }
+    } else {
+        // Fallback when no perimeter is configured
+        rowsHtml = tbs.map(tb => `
+            <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
+                <td class="font-bold text-kpmg-navy py-2 px-3 text-xs">
+                    ${escapeHtml(tb.entity_name || tb.entity_code)}
+                    <span class="ml-1 font-mono text-slate-400 font-normal">(${escapeHtml(tb.entity_code)})</span>
+                    ${tb.is_prior_period ? '<span class="ml-1 px-1.5 py-0.2 rounded text-[9px] bg-slate-200 text-slate-700 font-mono">PRIOR</span>' : ''}
+                </td>
+                <td class="py-2 px-3 text-xs"><span class="px-2 py-0.5 rounded bg-gray-100 font-mono text-[11px]">${escapeHtml(tb.currency)}</span></td>
+                <td class="num-cell py-2 px-3 text-xs font-mono">${tb.row_count}</td>
+                <td class="num-cell py-2 px-3 text-xs font-mono">${formatNum(tb.total_debit)}</td>
+                <td class="num-cell py-2 px-3 text-xs font-mono">${formatNum(tb.total_credit)}</td>
+                <td class="num-cell py-2 px-3 text-xs font-mono font-bold ${tb.is_tallied ? 'text-emerald-600' : 'text-red-600'}">${formatNum(tb.signed_sum)}</td>
+                <td class="text-center py-2 px-3 text-xs">
+                    <span class="px-2.5 py-0.5 rounded text-[11px] font-semibold ${tb.is_tallied ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
+                        ${tb.is_tallied ? 'Tallied (0.00)' : 'Unbalanced'}
+                    </span>
+                </td>
+            </tr>
+        `).join("");
+    }
+
+    // Perimeter readiness strip
+    let readinessBanner = '';
+    if (hasPerimeter) {
+        const totalCount = perimeter.length;
+        const uploadedCount = totalCount - missingEntities.length;
+        const isComplete = missingEntities.length === 0;
+
+        if (isComplete) {
+            readinessBanner = `
+                <div class="bg-emerald-50 border border-emerald-200/80 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-emerald-800">
+                    <div class="flex items-center space-x-2">
+                        <svg class="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span><strong class="font-semibold text-emerald-900">Perimeter Ingestion Complete:</strong> All ${totalCount} legal entities have valid ingested trial balances. Consolidation pipeline is ready to run.</span>
+                    </div>
+                    <span class="font-mono font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded self-start sm:self-auto">${uploadedCount} / ${totalCount} Ingested</span>
+                </div>
+            `;
+        } else {
+            const missingDisplay = missingEntities.map(m => {
+                const ent = perimeter.find(p => p.entity_code === m);
+                return ent ? `${ent.entity_name || ent.entity_code} (${ent.entity_code})` : m;
+            }).join(", ");
+
+            readinessBanner = `
+                <div class="bg-amber-50 border border-amber-200/80 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-amber-800">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0 animate-pulse"></span>
+                        <span><strong class="font-semibold text-amber-900">Perimeter Incomplete:</strong> Missing trial balances for <strong>${escapeHtml(missingDisplay)}</strong>. All entities must be uploaded before consolidation can run.</span>
+                    </div>
+                    <div class="flex items-center space-x-2 self-start sm:self-auto">
+                        <span class="font-mono font-bold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded">${uploadedCount} / ${totalCount} Ready</span>
+                        <button onclick="openBatchUploadModal()" class="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-medium text-[11px] transition cursor-pointer btn-tactile">
+                            Upload Files
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    }
 
     el.innerHTML = `
         <div class="space-y-4">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-kpmg-border pb-3">
                 <div>
                     <h3 class="font-bold text-base text-kpmg-navy">Ingested Entity Submissions</h3>
-                    <p class="text-xs text-kpmg-muted">Autonomous parser handles arbitrary matrix layouts, 75-column wide sheets, and verifies Debit = Credit.</p>
+                    <p class="text-xs text-kpmg-muted">Deterministic & Gemini Agentic Brain pipeline with dynamic currency parsing and perimeter verification.</p>
                 </div>
                 <div class="flex items-center space-x-1.5">
                     <!-- Ghost Upload Icon Button -->
                     <button onclick="openBatchUploadModal()"
                         class="w-8 h-8 rounded text-slate-500 hover:text-kpmg-blue hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none"
-                        title="Batch Upload Files">
+                        title="Upload Trial Balance Files">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                         </svg>
@@ -1799,7 +1955,7 @@ function renderStep1(el) {
                         </svg>
                     </button>
 
-                    <!-- Run Consolidation Primary Action Button (brought down to the far right) -->
+                    <!-- Run Consolidation Primary Action Button -->
                     <button id="btn-run-pipeline" onclick="triggerRunPipeline()"
                         class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
                         title="Run Consolidation">
@@ -1811,11 +1967,14 @@ function renderStep1(el) {
                     </button>
                 </div>
             </div>
+
+            ${readinessBanner}
+
             <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-280px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
                 <table class="fin-table">
                     <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
                         <tr>
-                            <th>Entity Code</th>
+                            <th>Entity Name & Code</th>
                             <th>Currency</th>
                             <th class="num-cell">GL Accounts</th>
                             <th class="num-cell">Total Debits</th>
@@ -2385,6 +2544,12 @@ async function submitBatchUpload(e) {
         const data = await res.json();
         if (res.ok && data.success) {
             closeBatchUploadModal();
+            if (data.needs_review && data.pending_reviews && data.pending_reviews.length > 0) {
+                openHITLMappingModal(data.pending_reviews);
+                await fetchStatus();
+                await loadPipelineData();
+                return;
+            }
             showToast("Batch Ingested", `Successfully classified and ingested ${data.total_files} file(s): ${data.ingested_tbs.length} TBs, ${data.ingested_fx} FX tables, ${data.ingested_ic_pairs} IC pairs.`, "success");
             await fetchStatus();
             await loadPipelineData();
@@ -2397,6 +2562,125 @@ async function submitBatchUpload(e) {
     } finally {
         btn.disabled = false;
         btn.innerHTML = `<span>Upload</span>`;
+    }
+}
+
+// HUMAN-IN-THE-LOOP (HITL) MAPPING REVIEW MODAL
+let hitlPendingReviews = [];
+
+function openHITLMappingModal(pendingReviews) {
+    hitlPendingReviews = pendingReviews || [];
+    const modal = document.getElementById("modal-hitl-mapping");
+    const tbody = document.getElementById("hitl-mapping-tbody");
+    if (!modal || !tbody) return;
+
+    const perimeter = (appStatus && appStatus.perimeter_entities) ? appStatus.perimeter_entities : [];
+
+    tbody.innerHTML = hitlPendingReviews.map((rev, idx) => {
+        let entOptions = perimeter.map(p => `
+            <option value="${escapeHtml(p.entity_code)}" ${p.entity_code === rev.assigned_entity ? 'selected' : ''}>
+                ${escapeHtml(p.entity_name || p.entity_code)} (${escapeHtml(p.entity_code)})
+            </option>
+        `).join("");
+
+        if (!entOptions) {
+            entOptions = `<option value="${escapeHtml(rev.assigned_entity || '')}">${escapeHtml(rev.assigned_entity || 'Unknown')}</option>`;
+        }
+
+        const confPct = Math.round((rev.confidence || 0) * 100);
+        const confBadge = confPct >= 85 
+            ? `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">${confPct}%</span>`
+            : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">${confPct}% (Review)</span>`;
+
+        const cols = rev.detected_columns || {};
+
+        return `
+            <tr data-index="${idx}" class="hover:bg-slate-50/70 transition">
+                <td class="p-3 font-mono text-[11px] text-slate-700 max-w-[180px] truncate" title="${escapeHtml(rev.file_name)}">
+                    ${escapeHtml(rev.file_name)}
+                </td>
+                <td class="p-3">
+                    <select class="hitl-entity-select h-8 px-2 rounded border border-kpmg-border bg-white text-xs font-medium w-full">
+                        ${entOptions}
+                    </select>
+                </td>
+                <td class="p-3">
+                    <input type="text" class="hitl-col-code h-8 px-2 rounded border border-kpmg-border bg-white text-xs font-mono w-full"
+                        value="${escapeHtml(cols.account_code || '')}" placeholder="e.g. Account">
+                </td>
+                <td class="p-3">
+                    <input type="text" class="hitl-col-desc h-8 px-2 rounded border border-kpmg-border bg-white text-xs font-mono w-full"
+                        value="${escapeHtml(cols.account_desc || '')}" placeholder="e.g. Description">
+                </td>
+                <td class="p-3">
+                    <input type="text" class="hitl-col-amt h-8 px-2 rounded border border-kpmg-border bg-white text-xs font-mono w-full"
+                        value="${escapeHtml(cols.amount || cols.debit || '')}" placeholder="e.g. Debit / Amount">
+                </td>
+                <td class="p-3">
+                    <input type="text" class="hitl-col-cred h-8 px-2 rounded border border-kpmg-border bg-white text-xs font-mono w-full"
+                        value="${escapeHtml(cols.credit || '')}" placeholder="e.g. Credit">
+                </td>
+                <td class="p-3 text-center whitespace-nowrap">
+                    ${confBadge}
+                </td>
+            </tr>
+        `;
+    }).join("");
+
+    modal.classList.remove("hidden");
+}
+
+function closeHITLMappingModal() {
+    const modal = document.getElementById("modal-hitl-mapping");
+    if (modal) modal.classList.add("hidden");
+}
+
+async function confirmHITLMappings() {
+    const tbody = document.getElementById("hitl-mapping-tbody");
+    if (!tbody || !hitlPendingReviews || hitlPendingReviews.length === 0) {
+        closeHITLMappingModal();
+        return;
+    }
+
+    const rows = tbody.querySelectorAll("tr");
+    const mappings = [];
+    rows.forEach((row, i) => {
+        const rev = hitlPendingReviews[i];
+        if (!rev) return;
+        const entSelect = row.querySelector(".hitl-entity-select");
+        const colCode = row.querySelector(".hitl-col-code");
+        const colDesc = row.querySelector(".hitl-col-desc");
+        const colAmt = row.querySelector(".hitl-col-amt");
+        const colCred = row.querySelector(".hitl-col-cred");
+
+        mappings.push({
+            file_name: rev.file_name,
+            entity_code: entSelect ? entSelect.value : rev.assigned_entity,
+            account_code_col: colCode ? colCode.value.trim() : null,
+            account_desc_col: colDesc ? colDesc.value.trim() : null,
+            amount_col: colAmt ? colAmt.value.trim() : null,
+            credit_col: colCred ? colCred.value.trim() : null
+        });
+    });
+
+    try {
+        const res = await fetch("/api/confirm-ingestion-mappings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mappings })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            closeHITLMappingModal();
+            showToast("Mappings Confirmed", `Successfully ingested ${data.ingested_tbs ? data.ingested_tbs.length : mappings.length} trial balance(s) with confirmed mappings.`, "success");
+            await fetchStatus();
+            await loadPipelineData();
+            switchStep(1);
+        } else {
+            showToast("Confirmation Error", data.detail || "Failed to confirm mappings.", "error");
+        }
+    } catch (err) {
+        showToast("Network Error", "Failed to confirm mappings: " + err, "error");
     }
 }
 
@@ -3050,11 +3334,19 @@ function renderObservabilityConsole() {
 
 // PIPELINE EXECUTION TRIGGER
 async function triggerRunPipeline() {
-    // Gate Check: If files have not been uploaded, open the Batch Document Dispatcher modal
+    // Gate Check 1: If files have not been uploaded at all
     const rawTbs = (pipelineData && pipelineData.raw_tbs) ? pipelineData.raw_tbs : [];
     const uploadedEntities = (appStatus && appStatus.uploaded_entities) ? appStatus.uploaded_entities : [];
     if (rawTbs.length === 0 && uploadedEntities.length === 0) {
         showToast("Upload Required", "Please upload entity trial balances before running consolidation.", "info");
+        openBatchUploadModal();
+        return;
+    }
+
+    // Gate Check 2: Perimeter Completeness Gating
+    if (appStatus && appStatus.is_perimeter_complete === false) {
+        const missing = (appStatus.missing_entities || []).join(", ");
+        showToast("Perimeter Incomplete", `Cannot run consolidation: Trial balances missing for ${missing || 'pending entities'}. Please upload all perimeter entities.`, "warning");
         openBatchUploadModal();
         return;
     }

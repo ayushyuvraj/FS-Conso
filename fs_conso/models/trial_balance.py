@@ -31,18 +31,34 @@ class RawTrialBalance(BaseModel):
     is_prior_period: bool = False
     source_filename: Optional[str] = None
     source_sheet: Optional[str] = None
+    entity_name: Optional[str] = None
+    detected_columns: Dict[str, str] = Field(default_factory=dict)
+    detection_trace: Optional[str] = None
 
     @property
     def total_debit(self) -> float:
-        return sum(r.debit or 0.0 for r in self.rows)
+        return sum(
+            r.debit if r.debit is not None else (r.amount if (r.amount is not None and r.amount > 0) else 0.0)
+            for r in self.rows
+        )
 
     @property
     def total_credit(self) -> float:
-        return sum(r.credit or 0.0 for r in self.rows)
+        return sum(
+            r.credit if r.credit is not None else (abs(r.amount) if (r.amount is not None and r.amount < 0) else 0.0)
+            for r in self.rows
+        )
 
     @property
     def total_signed_amount(self) -> float:
-        return sum(r.amount or 0.0 for r in self.rows)
+        return sum(
+            r.amount if r.amount is not None else ((r.debit or 0.0) - (r.credit or 0.0))
+            for r in self.rows
+        )
+
+    @property
+    def is_tallied(self) -> bool:
+        return abs(self.total_signed_amount) < 0.01 or abs(self.total_debit - self.total_credit) < 0.01
 
 
 class StandardizedRow(BaseModel):

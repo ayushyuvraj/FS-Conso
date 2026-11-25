@@ -200,6 +200,54 @@ class FlexibleTBParser:
         return None
 
     @classmethod
+    def _find_currency_specific_column(
+        cls,
+        columns: List[str],
+        aliases: List[str],
+        target_currency: Optional[str] = None,
+        exclude_indicators: bool = False
+    ) -> Optional[str]:
+        """Finds column matching alias and specifically tailored to target functional currency."""
+        if not target_currency:
+            return cls._find_column(columns, aliases, exclude_indicators=exclude_indicators)
+
+        curr_clean = str(target_currency).strip().lower()
+        curr_tokens = [curr_clean]
+        if curr_clean == "inr":
+            curr_tokens.extend(["rs", "rs.", "₹", "rupees", "rupee"])
+        elif curr_clean == "usd":
+            curr_tokens.extend(["$", "us$", "dollar", "dollars"])
+        elif curr_clean == "eur":
+            curr_tokens.extend(["€", "euro", "euros"])
+        elif curr_clean == "gbp":
+            curr_tokens.extend(["£", "pound", "pounds"])
+        elif curr_clean == "sgd":
+            curr_tokens.extend(["s$", "sgd$"])
+        elif curr_clean == "aed":
+            curr_tokens.extend(["dhs", "dirham", "dirhams"])
+
+        col_lower = {str(c).strip().lower(): c for c in columns}
+
+        # 1. Exact alias AND target currency token match
+        for alias in aliases:
+            for token in curr_tokens:
+                for c_str, original in col_lower.items():
+                    if exclude_indicators and cls._is_indicator_column(original):
+                        continue
+                    if alias in c_str and (token in c_str or re.search(rf"\b{re.escape(token)}\b", c_str)):
+                        return original
+
+        # 2. Look for column matching alias that does NOT contain other competing currencies
+        all_competing = {"inr", "usd", "eur", "gbp", "sgd", "aed", "cad", "aud", "jpy", "cny", "$", "₹", "€", "£"} - set(curr_tokens)
+        candidate = cls._find_column(columns, aliases, exclude_indicators=exclude_indicators)
+        if candidate:
+            cand_lower = str(candidate).lower()
+            if not any(re.search(rf"\b{re.escape(comp)}\b", cand_lower) or comp in cand_lower for comp in all_competing):
+                return candidate
+
+        return candidate
+
+    @classmethod
     def _is_summary_row(cls, code: str, desc: str) -> bool:
         combined = f"{code} {desc}".lower().strip()
         if any(kw in combined for kw in cls.SUMMARY_ROW_KEYWORDS):
@@ -333,7 +381,13 @@ class FlexibleTBParser:
         return 0, {}
 
     @classmethod
-    def _parse_complex_layout_with_gemini(cls, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
+    def _parse_complex_layout_with_gemini(
+        cls,
+        df: pd.DataFrame,
+        entity_code: Optional[str] = None,
+        entity_name: Optional[str] = None,
+        entity_currency: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """Uses Gemini Agentic Brain to analyze messy layouts, multi-tables, or ambiguous headers."""
         if not config.validate_api_key_strict():
             return None
@@ -346,11 +400,14 @@ class FlexibleTBParser:
             preview_rows = df.head(8).fillna("").to_dict(orient="records")
             columns = [str(c) for c in df.columns]
 
+            target_ctx = f"Entity: {entity_code or ''} ({entity_name or ''}), Functional Currency: {entity_currency or 'INR'}"
             prompt = f"""
 You are an expert financial system parser analyzing a complex accounting trial balance sheet.
-Identify the functional role of the columns in this dataset:
+Target Company: {target_ctx}
+Identify the functional role of the columns in this dataset.
+Important: If there are multiple currency columns (e.g., amount_INR, amount_USD), select the columns that correspond to the entity's functional currency ({entity_currency or 'INR'}).
 
-Columns ({len(columns)}): {columns[:30]}
+Columns ({len(columns)}): {columns[:40]}
 Sample Rows:
 {json.dumps(preview_rows[:5], default=str)}
 
@@ -361,6 +418,7 @@ Return a JSON object identifying which column name corresponds to:
 - "credit_col": column holding credit amounts (optional)
 - "amount_col": column holding signed or net amounts (optional)
 - "dr_cr_col": column indicating DR or CR (optional)
+- "reasoning": brief explanation of column choices
 
 Schema:
 {{
@@ -369,7 +427,8 @@ Schema:
   "debit_col": "string or null",
   "credit_col": "string or null",
   "amount_col": "string or null",
-  "dr_cr_col": "string or null"
+  "dr_cr_col": "string or null",
+  "reasoning": "string"
 }}
 """
             res = client.models.generate_content(
@@ -439,11 +498,13 @@ Schema:
         entity_code: str,
         period: str = "31-Mar-2024",
         currency: str = "INR",
-        duplicate_policy: str = "keep"
+        duplicate_policy: str = "keep",
+        entity_name: Optional[str] = None,
+        column_overrides: Optional[Dict[str, str]] = None
     ) -> RawTrialBalance:
         df = df.dropna(how="all").copy()
         if df.empty:
-            return RawTrialBalance(entity_code=entity_code, period=period, currency=currency, rows=[])
+            return RawTrialBalance(entity_code=entity_code, entity_name=entity_name, period=period, currency=currency, rows=[])
 
         cols = [str(c).strip() for c in df.columns]
         code_col = cls._find_column(cols, cls.ACCOUNT_CODE_ALIASES)
@@ -460,7 +521,12 @@ Schema:
 
         if not code_col:
             # Stage 2: Agentic Brain layout inspection fallback
-            ai_layout = cls._parse_complex_layout_with_gemini(df)
+            ai_layout = cls._parse_complex_layout_with_gemini(
+                df,
+                entity_code=entity_code,
+                entity_name=entity_name,
+                entity_currency=currency
+            )
             if ai_layout and ai_layout.get("code_col"):
                 code_col = ai_layout.get("code_col")
                 desc_col = ai_layout.get("desc_col")
@@ -477,10 +543,23 @@ Schema:
                     )
 
         desc_col = desc_col if 'desc_col' in locals() and desc_col else cls._find_column(cols, cls.DESCRIPTION_ALIASES)
-        debit_col = debit_col if 'debit_col' in locals() and debit_col else cls._find_column(cols, cls.DEBIT_ALIASES, exclude_indicators=True)
-        credit_col = credit_col if 'credit_col' in locals() and credit_col else cls._find_column(cols, cls.CREDIT_ALIASES, exclude_indicators=True)
-        amount_col = amount_col if 'amount_col' in locals() and amount_col else cls._find_column(cols, cls.AMOUNT_ALIASES)
+        debit_col = debit_col if 'debit_col' in locals() and debit_col else cls._find_currency_specific_column(cols, cls.DEBIT_ALIASES, target_currency=currency, exclude_indicators=True)
+        credit_col = credit_col if 'credit_col' in locals() and credit_col else cls._find_currency_specific_column(cols, cls.CREDIT_ALIASES, target_currency=currency, exclude_indicators=True)
+        amount_col = amount_col if 'amount_col' in locals() and amount_col else cls._find_currency_specific_column(cols, cls.AMOUNT_ALIASES, target_currency=currency)
         dr_cr_col = dr_cr_col if 'dr_cr_col' in locals() and dr_cr_col else cls._find_column(cols, cls.DR_CR_INDICATOR_ALIASES)
+
+        # Apply manual column overrides if provided
+        if column_overrides:
+            if column_overrides.get("account_code") or column_overrides.get("code_col"):
+                code_col = column_overrides.get("account_code") or column_overrides.get("code_col")
+            if column_overrides.get("account_description") or column_overrides.get("desc_col"):
+                desc_col = column_overrides.get("account_description") or column_overrides.get("desc_col")
+            if column_overrides.get("debit") or column_overrides.get("debit_col"):
+                debit_col = column_overrides.get("debit") or column_overrides.get("debit_col")
+            if column_overrides.get("credit") or column_overrides.get("credit_col"):
+                credit_col = column_overrides.get("credit") or column_overrides.get("credit_col")
+            if column_overrides.get("amount") or column_overrides.get("amount_col"):
+                amount_col = column_overrides.get("amount") or column_overrides.get("amount_col")
 
         # Check for wide dimensional layout (e.g. 75 cost center/subsidiary columns)
         numeric_cols = [c for c in cols if c not in (code_col, desc_col, dr_cr_col)]
@@ -546,11 +625,21 @@ Schema:
                         curr.amount = round((curr.amount or 0.0) + (r.amount or 0.0), 2)
             rows = list(agg_map.values())
 
+        detected = {}
+        if code_col: detected["account_code"] = code_col
+        if desc_col: detected["account_description"] = desc_col
+        if debit_col: detected["debit"] = debit_col
+        if credit_col: detected["credit"] = credit_col
+        if amount_col: detected["amount"] = amount_col
+
         return RawTrialBalance(
             entity_code=entity_code,
+            entity_name=entity_name,
             period=period,
             currency=currency,
-            rows=rows
+            rows=rows,
+            detected_columns=detected,
+            detection_trace=f"Mapped columns for {entity_name or entity_code} ({currency}): Code={code_col}, Desc={desc_col}, Debit={debit_col}, Credit={credit_col}, Amount={amount_col}"
         )
 
     @classmethod
@@ -561,7 +650,9 @@ Schema:
         entity_code: str,
         period: str = "31-Mar-2024",
         currency: str = "INR",
-        duplicate_policy: str = "keep"
+        duplicate_policy: str = "keep",
+        entity_name: Optional[str] = None,
+        column_overrides: Optional[Dict[str, str]] = None
     ) -> RawTrialBalance:
         fn_lower = filename.lower()
         if fn_lower.endswith(".csv"):
@@ -605,4 +696,14 @@ Schema:
         else:
             raise ValueError(f"Unsupported file format '{filename}'. Please upload .xlsx, .xls, or .csv.")
 
-        return cls.parse_dataframe(df, entity_code, period, currency, duplicate_policy=duplicate_policy)
+        res = cls.parse_dataframe(
+            df,
+            entity_code,
+            period,
+            currency,
+            duplicate_policy=duplicate_policy,
+            entity_name=entity_name,
+            column_overrides=column_overrides
+        )
+        res.source_filename = filename
+        return res

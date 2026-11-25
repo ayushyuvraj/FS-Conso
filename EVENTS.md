@@ -257,14 +257,34 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Test Suite: 8/8 PASSED in `tests/test_ingestion_gate.py` and `tests/test_run_manager.py`.
   - Live server verification: Uvicorn serving on `http://127.0.0.1:8000` with HTTP 200 OK.
 
-### [2026-11-25 22:36] Milestone: Upload Modal UI Copy Simplification
+### [2026-11-25 23:20] Milestone: Agentic Ingestion Pipeline, Dynamic Currency Parsing & Perimeter Gating
 - **Requirements Implemented**:
-  1. Simplified upload dialog title: Renamed `"Batch Document Dispatcher"` to `"Upload Documents"`.
-  2. Simplified action button: Renamed `"Dispatch & Ingest Batch"` to `"Upload"`.
-  3. Synchronized JavaScript submit lifecycle so the button returns to `"Upload"` post-dispatch.
+  1. **Perimeter Completeness Gating**:
+     - Evaluated active Company Profile entity hierarchy (`P`, `S1`, `S2`) against uploaded trial balances in `ConsolidationState`.
+     - Blocked `/api/run-pipeline` with a structured 400 error identifying missing perimeter entities when incomplete.
+     - Enforced frontend pre-flight verification in `triggerRunPipeline()`, displaying an explanatory warning toast and opening `#modal-batch-upload`.
+  2. **Hybrid Entity Identification & Escalation**:
+     - Multi-pass deterministic matcher in `FileClassifier` matching entity codes, full legal names, and slug permutations against the active entity roster.
+     - Escalation to Gemini Agentic Brain when confidence is below `ai_confidence_threshold` (0.85).
+     - Flagging for Human-in-the-Loop (`needs_review`) when ambiguity remains.
+  3. **Dynamic Currency-Aware Column Parsing**:
+     - Implemented `_find_currency_specific_column` in `FlexibleTBParser` resolving currency-specific column headers (e.g., `Amount_INR` vs `Amount_USD`) tailored to each entity's functional currency.
+     - Tolerates arbitrary column ordering (GL Code in Col A or Col H) and extra columns.
+     - Supports both 2-column (`Debit`/`Credit`) and single signed-column (`Amount`) accounting formats.
+  4. **Step 1 Unified Perimeter Table & Two-Line Entity Cell**:
+     - Renders every perimeter entity in Step 1 table: uploaded rows display GL accounts, debits, credits, and `Tallied (0.00)`; missing entities show quiet `Pending Upload` badges.
+     - Two-line entity cell design: primary bold legal entity name on top, entity code pill and ownership percentage below, with functional currency badge.
+     - Live **Perimeter Readiness Strip** summarizing total vs ingested entities.
+  5. **Post-Upload Mapping Review Modal (HITL)**:
+     - Added `#modal-hitl-mapping` dialog and `/api/confirm-ingestion-mappings` endpoint for user review and 1-click confirmation of ambiguous files.
+  6. **Agent Observability & Traces**:
+     - Persists classification decisions, column mappings, and extraction lineage to `session.state.agent_traces` and `session.state.audit_trail`.
 - **Verification**:
-  - Automated tests: 8/8 PASSED.
-  - Live server: Verified on `http://127.0.0.1:8000`.
+  - New test suite: `tests/test_agentic_ingestion.py` (5/5 PASSED).
+  - Full regression test suite: 13/13 PASSED across all suites.
+  - End-to-end multi-entity ingestion verified with multi-currency files.
+  - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Live portal HTTP 200 OK on `http://127.0.0.1:8000`.
 
 
 
