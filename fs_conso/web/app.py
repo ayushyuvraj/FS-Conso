@@ -669,7 +669,7 @@ async def upload_batch(
         raise HTTPException(status_code=400, detail="No active Company Profile found. Please create a Company Profile first.")
     hierarchy = prof.entity_hierarchy or EntityHierarchy(parent_code=prof.company_code or prof.company_id)
     known_ents = list(hierarchy.entities.keys()) if hierarchy.entities else []
-    target_period = period or prof.current_period or config.current_period
+    target_period = period or (session.state.period if session.state and session.state.period else None) or prof.current_period or config.current_period
 
     files_data = []
     for f in files:
@@ -756,6 +756,8 @@ async def upload_batch(
 
         session.state.current_step = 1
         session.state.completed_steps = []
+        if session.active_company_id and session.active_run_id and session.state:
+            run_manager.save_run_state(session.active_company_id, session.active_run_id, session.state)
 
     return {
         "success": True,
@@ -932,6 +934,8 @@ async def upload_trial_balance(
 
         session.state.current_step = 1
         session.state.completed_steps = []
+        if session.active_company_id and session.active_run_id and session.state:
+            run_manager.save_run_state(session.active_company_id, session.active_run_id, session.state)
         session.state.is_blocked = False
         session.state.error_message = None
 

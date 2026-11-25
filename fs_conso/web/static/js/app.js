@@ -13,6 +13,7 @@ let isLauncherActive = true;
 let isNavigatingDirectly = false;
 let activeRunId = null;
 let activeRunName = null;
+let activeRunPeriod = null;
 let auditRunsList = [];
 let auditRunSearchQuery = "";
 let auditFilterCompany = "ALL";
@@ -183,7 +184,82 @@ function handleDateFormatChange(val) {
         localStorage.setItem("fs_conso_date_format", currentDateFormat);
     } catch (_) { }
     renderCompanyTableBody();
+    renderHeaderStatus();
+    updateBatchUploadPeriodDisplay();
+    if (activeNavSection === 'AUDIT') fetchAndRenderAuditRuns();
     showToast("Date Format Updated", `Timestamps formatted as ${currentDateFormat}`, "info");
+}
+
+function parseLocalDate(dateVal) {
+    if (!dateVal) return null;
+    if (dateVal instanceof Date) return isNaN(dateVal.getTime()) ? null : dateVal;
+    const str = String(dateVal).trim();
+    if (!str) return null;
+
+    // Check YYYY-MM-DD or YYYY/MM/DD
+    const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+        const y = parseInt(isoMatch[1], 10);
+        const m = parseInt(isoMatch[2], 10) - 1;
+        const d = parseInt(isoMatch[3], 10);
+        return new Date(y, m, d);
+    }
+
+    // Check DD-MM-YYYY or DD/MM/YYYY
+    const dmyMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (dmyMatch) {
+        const d = parseInt(dmyMatch[1], 10);
+        const m = parseInt(dmyMatch[2], 10) - 1;
+        const y = parseInt(dmyMatch[3], 10);
+        return new Date(y, m, d);
+    }
+
+    // Check DD-Mon-YYYY (e.g. 31-Mar-2024 or 31 Mar 2024)
+    const monNames = {
+        jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+        jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+    };
+    const namedMonthMatch = str.match(/^(\d{1,2})[- ]([A-Za-z]{3,9})[- ](\d{4})/);
+    if (namedMonthMatch) {
+        const d = parseInt(namedMonthMatch[1], 10);
+        const monKey = namedMonthMatch[2].slice(0, 3).toLowerCase();
+        const y = parseInt(namedMonthMatch[3], 10);
+        if (monNames[monKey] !== undefined) {
+            return new Date(y, monNames[monKey], d);
+        }
+    }
+
+    // Fallback standard parse
+    const parsed = new Date(str.replace(" ", "T"));
+    if (!isNaN(parsed.getTime())) return parsed;
+    const fallback = new Date(str);
+    return isNaN(fallback.getTime()) ? null : fallback;
+}
+
+function formatDateOnly(dateVal) {
+    if (!dateVal) return "—";
+    const d = parseLocalDate(dateVal);
+    if (!d || isNaN(d.getTime())) return String(dateVal);
+
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthStr = monthNames[d.getMonth()];
+
+    switch (currentDateFormat) {
+        case "DD-MM-YYYY HH:mm":
+            return `${day}-${month}-${year}`;
+        case "MM/DD/YYYY hh:mm A":
+            return `${month}/${day}/${year}`;
+        case "DD MMM YYYY, HH:mm":
+            return `${day} ${monthStr} ${year}`;
+        case "MMM DD, YYYY, hh:mm A":
+            return `${monthStr} ${day}, ${year}`;
+        case "YYYY-MM-DD HH:mm":
+        default:
+            return `${year}-${month}-${day}`;
+    }
 }
 
 function formatDateTime(dateVal) {
@@ -896,8 +972,11 @@ function renderHeaderStatus() {
         }
     }
 
+    if (appStatus.current_period) {
+        activeRunPeriod = appStatus.current_period;
+    }
     if (dispPeriod) {
-        dispPeriod.textContent = (!isLauncherActive && appStatus.active_company_id) ? (appStatus.current_period || "Pending Run") : "—";
+        dispPeriod.textContent = (!isLauncherActive && appStatus.active_company_id) ? (appStatus.current_period ? formatDateOnly(appStatus.current_period) : "Pending Run") : "—";
     }
     if (dispCurr) {
         dispCurr.textContent = (!isLauncherActive && appStatus.active_company_id) ? (appStatus.reporting_currency || "—") : "—";
@@ -2182,14 +2261,44 @@ function inspectLineageFromStatement(title) {
 // BATCH UPLOAD MODAL
 let selectedBatchFiles = [];
 
+function updateBatchUploadPeriodDisplay() {
+    const dispEl = document.getElementById("batch-upload-period-disp");
+    const hiddenInput = document.getElementById("batch-upload-period");
+    const formatBadge = document.getElementById("batch-upload-format-badge");
+
+    const activePeriod = (appStatus && appStatus.current_period) || activeRunPeriod || "";
+    if (hiddenInput) {
+        hiddenInput.value = activePeriod;
+    }
+    if (dispEl) {
+        dispEl.textContent = activePeriod ? formatDateOnly(activePeriod) : "—";
+    }
+    if (formatBadge) {
+        let fmtName = "ISO";
+        switch (currentDateFormat) {
+            case "DD-MM-YYYY HH:mm": fmtName = "DD-MM-YYYY"; break;
+            case "MM/DD/YYYY hh:mm A": fmtName = "MM/DD/YYYY"; break;
+            case "DD MMM YYYY, HH:mm": fmtName = "DD MMM YYYY"; break;
+            case "MMM DD, YYYY, hh:mm A": fmtName = "MMM DD, YYYY"; break;
+            default: fmtName = "YYYY-MM-DD"; break;
+        }
+        formatBadge.textContent = fmtName;
+    }
+}
+
 function openBatchUploadModal() {
     const modal = document.getElementById("modal-batch-upload");
     if (modal) {
         modal.classList.remove("hidden");
-        document.getElementById("form-batch-upload").reset();
         selectedBatchFiles = [];
-        document.getElementById("batch-file-label").textContent = "Drop batch files here or click to browse";
-        document.getElementById("batch-selected-files-list").innerHTML = "";
+        const fileInput = document.getElementById("batch-file-input");
+        if (fileInput) fileInput.value = "";
+        const fileLabel = document.getElementById("batch-file-label");
+        if (fileLabel) fileLabel.textContent = "Drop batch files here or click to browse";
+        const filesList = document.getElementById("batch-selected-files-list");
+        if (filesList) filesList.innerHTML = "";
+
+        updateBatchUploadPeriodDisplay();
     }
 }
 
@@ -2632,6 +2741,7 @@ async function triggerStartFreshRun() {
         isLauncherActive = false;
         activeRunId = data.run.run_id;
         activeRunName = data.run.run_name;
+        activeRunPeriod = runDate || data.run.run_date || "";
 
         await fetchStatus();
         await loadPipelineData();
@@ -2654,6 +2764,7 @@ async function triggerStartFreshRun() {
 
 function returnToLauncher() {
     isLauncherActive = true;
+    activeRunPeriod = null;
     try {
         fetch("/api/runs/launcher-mode", { method: "POST" });
     } catch (_) {}
@@ -2883,6 +2994,7 @@ async function triggerResumeRun(runId) {
         isLauncherActive = false;
         activeRunId = data.run_id;
         activeRunName = data.run_name;
+        activeRunPeriod = data.run_date || (data.state && data.state.period) || "";
 
         await fetchStatus();
         await loadPipelineData();
@@ -2916,6 +3028,7 @@ async function triggerViewRun(runId) {
         isLauncherActive = false;
         activeRunId = data.run_id;
         activeRunName = data.run_name;
+        activeRunPeriod = data.run_date || (data.state && data.state.period) || "";
 
         await fetchStatus();
         await loadPipelineData();
@@ -2937,6 +3050,15 @@ function renderObservabilityConsole() {
 
 // PIPELINE EXECUTION TRIGGER
 async function triggerRunPipeline() {
+    // Gate Check: If files have not been uploaded, open the Batch Document Dispatcher modal
+    const rawTbs = (pipelineData && pipelineData.raw_tbs) ? pipelineData.raw_tbs : [];
+    const uploadedEntities = (appStatus && appStatus.uploaded_entities) ? appStatus.uploaded_entities : [];
+    if (rawTbs.length === 0 && uploadedEntities.length === 0) {
+        showToast("Upload Required", "Please upload entity trial balances before running consolidation.", "info");
+        openBatchUploadModal();
+        return;
+    }
+
     const btn = document.getElementById("btn-run-pipeline");
     const progressModal = document.getElementById("pipeline-progress");
     const progressTitle = document.getElementById("progress-step-title");

@@ -235,5 +235,28 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Automated tests: 4/4 PASSED in 4.43s.
   - Git checkpoint and remote push: commit `d7bf649`.
 
+### [2026-11-25 22:30] Milestone: Ingestion File Gate & Dynamic Read-Only Reporting Period Display
+- **Requirements Implemented**:
+  1. **Ingestion Run Consolidation Gate Check**:
+     - In `triggerRunPipeline()`, added an automated verification check for uploaded trial balance files (`pipelineData.raw_tbs` and `appStatus.uploaded_entities`).
+     - If no files have been uploaded when clicking "Run Consolidation" (either from the Step 1 toolbar or the sidebar action button), the portal immediately triggers a friendly notification toast ("Upload Required") and opens the "Batch Document Dispatcher" modal (`#modal-batch-upload`).
+  2. **Dynamic Read-Only Target Reporting Period in Batch Upload Modal**:
+     - Replaced the editable `<input id="batch-upload-period" type="text" ...>` with an informational, non-editable luxury display element (`#batch-upload-period-disp`).
+     - Added an informational lock badge ("Locked for active run") preventing unauthorized alteration of the active run's cutoff period.
+     - Preserved existing batch file ingestion API contracts using a hidden input (`<input id="batch-upload-period" type="hidden">`) that automatically carries the active run period.
+  3. **Universal Date Format Synchronization**:
+     - Implemented `parseLocalDate(dateVal)` and `formatDateOnly(dateVal)` in `app.js` supporting all 5 global date preference formats configured via the Settings drawer:
+       - ISO 8601 (`YYYY-MM-DD`)
+       - UK / Europe / India (`DD-MM-YYYY`)
+       - US Corporate (`MM/DD/YYYY`)
+       - International Audit (`DD MMM YYYY`)
+       - Americas Compact (`MMM DD, YYYY`)
+     - Integrated `updateBatchUploadPeriodDisplay()` so the modal period and the top header period update immediately in real time whenever the user switches the date format in Settings.
+- **Verification**:
+  - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Test Suite: 8/8 PASSED in `tests/test_ingestion_gate.py` and `tests/test_run_manager.py`.
+  - Live server verification: Uvicorn serving on `http://127.0.0.1:8000` with HTTP 200 OK.
+
+
 
 
