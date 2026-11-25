@@ -19,12 +19,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     initDialogAndDrawerResizers();
     initTableColumnResizers();
     initTableObserver();
+    populateProfileCurrencySelects();
     await fetchCompanies();
     await fetchStatus();
     await syncCachedApiKeyIfAvailable();
     loadPipelineData();
     initDropZone();
     initBatchDropZone();
+    initCOADropZone();
 });
 
 function initSidebar() {
@@ -129,6 +131,126 @@ async function syncCachedApiKeyIfAvailable() {
     } catch (_) { }
 }
 
+// -------------------------------------------------------------
+// Company Profile State, Reference Helpers & Shake Validation
+// -------------------------------------------------------------
+let selectedCOAFile = null;
+let editingProfileHasExistingCOA = false;
+let subsidiaryDrafts = [];
+let pendingDeleteCompanyId = null;
+
+function buildCurrencyOptionsHtml(selectedCode = "") {
+    const placeholder = `<option value="" ${!selectedCode ? 'selected' : ''}>Select currency...</option>`;
+    const opts = (typeof TOP_CURRENCIES !== "undefined" ? TOP_CURRENCIES : []).map(c =>
+        `<option value="${escapeHtml(c.code)}" ${c.code === selectedCode ? 'selected' : ''}>${escapeHtml(c.code)} — ${escapeHtml(c.name)} (${escapeHtml(c.symbol)})</option>`
+    ).join("");
+    return placeholder + opts;
+}
+
+function buildCountryOptionsHtml(selectedCountry = "") {
+    const placeholder = `<option value="" ${!selectedCountry ? 'selected' : ''}>Select country (optional)...</option>`;
+    const opts = (typeof ALL_COUNTRIES !== "undefined" ? ALL_COUNTRIES : []).map(country =>
+        `<option value="${escapeHtml(country)}" ${country === selectedCountry ? 'selected' : ''}>${escapeHtml(country)}</option>`
+    ).join("");
+    return placeholder + opts;
+}
+
+function populateProfileCurrencySelects() {
+    const repSel = document.getElementById("profile-reporting-currency");
+    if (repSel) {
+        repSel.innerHTML = buildCurrencyOptionsHtml("");
+    }
+}
+
+function triggerFieldShake(el, message) {
+    if (!el) return;
+    el.classList.remove("shake-error");
+    void el.offsetWidth; // Force reflow so repeated invalid submits re-trigger shake
+    el.classList.add("input-invalid", "shake-error");
+
+    const parent = el.parentElement;
+    const hint = parent ? parent.querySelector(".field-error-hint") : null;
+    if (hint && message) {
+        hint.textContent = message;
+        hint.classList.remove("hidden");
+    }
+}
+
+function clearFieldError(el) {
+    if (!el) return;
+    el.classList.remove("input-invalid", "shake-error");
+    const parent = el.parentElement;
+    const hint = parent ? parent.querySelector(".field-error-hint") : null;
+    if (hint) {
+        hint.textContent = "";
+        hint.classList.add("hidden");
+    }
+}
+
+function validateOwnershipValue(raw) {
+    const trimmed = String(raw || "").trim();
+    if (!trimmed) return { valid: false, message: "Ownership % is required." };
+    if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) {
+        return { valid: false, message: "Enter a percentage up to 2 decimals (e.g. 75.50)." };
+    }
+    const num = Number(trimmed);
+    if (!Number.isFinite(num) || num <= 0 || num > 100) {
+        return { valid: false, message: "Must be between 0.01% and 100.00%." };
+    }
+    return { valid: true, value: Number(num.toFixed(2)) };
+}
+
+function validateFieldOnBlur(el) {
+    if (!el) return true;
+    const id = el.id || "";
+    const role = el.dataset.role || "";
+    const val = (el.value || "").trim();
+
+    if (id === "profile-company-name") {
+        if (!val) { triggerFieldShake(el, "Company name is required."); return false; }
+        clearFieldError(el); return true;
+    }
+    if (id === "profile-company-code") {
+        if (!val) { triggerFieldShake(el, "Company code is required."); return false; }
+        const editId = document.getElementById("profile-edit-company-id")?.value.trim();
+        const duplicate = availableCompanies.find(c =>
+            c.company_id !== editId && (c.company_code || "").toUpperCase() === val.toUpperCase()
+        );
+        if (duplicate) { triggerFieldShake(el, `Code '${val.toUpperCase()}' is already in use.`); return false; }
+        clearFieldError(el); return true;
+    }
+    if (id === "profile-reporting-currency") {
+        if (!val) { triggerFieldShake(el, "Reporting currency is required."); return false; }
+        clearFieldError(el); return true;
+    }
+    if (id === "profile-subsidiary-count") {
+        const n = Number(val);
+        if (val === "" || !Number.isInteger(n) || n < 0 || n > 100) {
+            triggerFieldShake(el, "Enter a whole number from 0 to 100.");
+            return false;
+        }
+        clearFieldError(el); return true;
+    }
+    if (role === "sub-entity-name") {
+        if (!val) { triggerFieldShake(el, "Entity name is required."); return false; }
+        clearFieldError(el); return true;
+    }
+    if (role === "sub-currency") {
+        if (!val) { triggerFieldShake(el, "Entity currency is required."); return false; }
+        clearFieldError(el); return true;
+    }
+    if (role === "sub-ownership") {
+        const res = validateOwnershipValue(val);
+        if (!res.valid) { triggerFieldShake(el, res.message); return false; }
+        clearFieldError(el); return true;
+    }
+    if (role === "sub-acq-date") {
+        if (!val) { triggerFieldShake(el, "Acquisition date is required."); return false; }
+        clearFieldError(el); return true;
+    }
+    return true;
+}
+
 async function fetchCompanies() {
     try {
         const res = await fetch("/api/companies");
@@ -146,8 +268,8 @@ function populateCompanySelector(activeId) {
     const sel = document.getElementById("select-company");
     if (!sel) return;
     sel.innerHTML = availableCompanies.map(c => `
-        <option value="${c.company_id}" class="bg-slate-900 text-white" ${c.company_id === activeId ? 'selected' : ''}>
-            ${escapeHtml(c.company_name)} (${c.company_id})
+        <option value="${escapeHtml(c.company_id)}" class="bg-slate-900 text-white" ${c.company_id === activeId ? 'selected' : ''}>
+            ${escapeHtml(c.company_name)} (${escapeHtml(c.company_code || c.company_id)})
         </option>
     `).join("");
 }
@@ -155,7 +277,7 @@ function populateCompanySelector(activeId) {
 async function handleCompanySwitch(companyId) {
     if (!companyId || companyId === appStatus.active_company_id) return;
     try {
-        showToast("Switching Company", `Loading workspace for ${companyId}...`, "info");
+        showToast("Switching Company", `Loading profile for ${companyId}...`, "info");
         const res = await fetch("/api/companies/switch", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -168,89 +290,459 @@ async function handleCompanySwitch(companyId) {
             await fetchCompanies();
             await fetchStatus();
             await loadPipelineData();
-            showToast("Company Switched", `Active workspace is now ${appStatus.active_company_name || companyId}.`, "success");
+            showToast("Active Profile Switched", `Active profile is now ${appStatus.active_company_name || companyId}.`, "success");
             if (activeNavSection === 'COMPANIES') {
                 renderCompanyWorkspace();
             } else {
                 switchStep(1);
             }
         } else {
-            showToast("Switch Failed", data.detail || "Could not switch company workspace.", "error");
+            showToast("Switch Failed", data.detail || "Could not switch company profile.", "error");
         }
     } catch (err) {
         showToast("Error", "Error switching company: " + err, "error");
     }
 }
 
-function openNewCompanyModal() {
-    const modal = document.getElementById("modal-new-company");
-    if (modal) modal.classList.remove("hidden");
+function captureSubsidiaryDraftsFromDOM() {
+    const cards = document.querySelectorAll("#subsidiaries-container .subsidiary-card");
+    cards.forEach((card, idx) => {
+        subsidiaryDrafts[idx] = {
+            entity_code: card.dataset.entityCode || "",
+            entity_name: card.querySelector('[data-role="sub-entity-name"]')?.value || "",
+            company_reg_number: card.querySelector('[data-role="sub-reg-no"]')?.value || "",
+            country_of_inc: card.querySelector('[data-role="sub-country"]')?.value || "",
+            date_of_inc: card.querySelector('[data-role="sub-inc-date"]')?.value || "",
+            input_currency: card.querySelector('[data-role="sub-currency"]')?.value || "",
+            ownership_pct: card.querySelector('[data-role="sub-ownership"]')?.value || "",
+            acquisition_date: card.querySelector('[data-role="sub-acq-date"]')?.value || ""
+        };
+    });
 }
 
-function closeNewCompanyModal() {
-    const modal = document.getElementById("modal-new-company");
-    if (modal) modal.classList.add("hidden");
+function handleSubsidiaryCountChange(rawValue) {
+    const countInput = document.getElementById("profile-subsidiary-count");
+    if (rawValue === "" || rawValue === null || rawValue === undefined) {
+        return;
+    }
+    const count = parseInt(rawValue, 10);
+    if (!Number.isInteger(count) || count < 0 || count > 100) {
+        triggerFieldShake(countInput, "Enter a whole number between 0 and 100.");
+        return;
+    }
+    clearFieldError(countInput);
+    captureSubsidiaryDraftsFromDOM();
+
+    while (subsidiaryDrafts.length < count) {
+        subsidiaryDrafts.push({
+            entity_code: "",
+            entity_name: "",
+            company_reg_number: "",
+            country_of_inc: "",
+            date_of_inc: "",
+            input_currency: "",
+            ownership_pct: "",
+            acquisition_date: ""
+        });
+    }
+    subsidiaryDrafts = subsidiaryDrafts.slice(0, count);
+    renderSubsidiaryRows(count);
 }
 
-async function submitCreateCompany(e) {
-    e.preventDefault();
-    const id = document.getElementById("new-company-id").value.trim().toLowerCase();
-    const name = document.getElementById("new-company-name").value.trim();
-    const curr = document.getElementById("new-company-curr").value.trim();
-    const period = document.getElementById("new-company-period").value.trim();
+function renderSubsidiaryRows(count) {
+    const section = document.getElementById("subsidiaries-section");
+    const container = document.getElementById("subsidiaries-container");
+    const badge = document.getElementById("subsidiaries-count-badge");
+    if (!section || !container) return;
 
-    if (!id || !name) {
-        showToast("Missing Fields", "Company ID and Name are required.", "warning");
+    if (count <= 0) {
+        section.classList.add("hidden");
+        container.innerHTML = "";
+        if (badge) badge.textContent = "0 Entities";
         return;
     }
 
-    try {
-        const res = await fetch("/api/companies/create", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                company_id: id,
-                company_name: name,
-                reporting_currency: curr,
-                current_period: period
-            })
-        });
-        const data = await res.json();
-        if (data.success) {
-            closeNewCompanyModal();
-            showToast("Company Created", `Workspace for ${name} created successfully.`, "success");
-            await fetchCompanies();
-            await fetchStatus();
-            await loadPipelineData();
-            switchStep(1);
-        } else {
-            showToast("Creation Failed", data.detail || "Failed to create company.", "error");
-        }
-    } catch (err) {
-        showToast("Network Error", "Failed to create company: " + err, "error");
+    section.classList.remove("hidden");
+    if (badge) badge.textContent = `${count} ${count === 1 ? 'Subsidiary' : 'Subsidiaries'}`;
+
+    container.innerHTML = subsidiaryDrafts.map((sub, idx) => `
+        <div class="subsidiary-card rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3" data-sub-index="${idx}" data-entity-code="${escapeHtml(sub.entity_code || '')}">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <span class="w-5 h-5 rounded-full bg-kpmg-blue text-white text-[10px] font-bold flex items-center justify-center">${idx + 1}</span>
+                    <span class="font-bold text-xs text-kpmg-navy">Subsidiary #${idx + 1}</span>
+                    ${sub.entity_code ? `<span class="font-mono text-[10px] px-2 py-0.5 rounded bg-slate-200/80 text-slate-700">${escapeHtml(sub.entity_code)}</span>` : ''}
+                </div>
+                <span class="text-[10px] text-slate-500">Fields marked <span class="text-rose-600 font-bold">*</span> are mandatory</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div class="lg:col-span-2">
+                    <label class="font-semibold text-slate-700 block mb-1">Entity Name <span class="text-rose-600">*</span></label>
+                    <input type="text" data-role="sub-entity-name" value="${escapeHtml(sub.entity_name)}"
+                        placeholder="e.g. Acme Diagnostics Pvt Ltd"
+                        oninput="clearFieldError(this)" onblur="validateFieldOnBlur(this)"
+                        class="w-full h-9 px-3 rounded-lg border border-slate-300 bg-white text-xs text-slate-900 focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
+                    <div class="field-error-hint hidden"></div>
+                </div>
+                <div>
+                    <label class="font-semibold text-slate-700 block mb-1">Registration Number <span class="text-slate-400 font-normal">(Optional)</span></label>
+                    <input type="text" data-role="sub-reg-no" value="${escapeHtml(sub.company_reg_number)}"
+                        placeholder="e.g. U85110KA2020PTC..."
+                        class="w-full h-9 px-3 rounded-lg border border-slate-300 bg-white font-mono text-xs text-slate-900 focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
+                </div>
+                <div>
+                    <label class="font-semibold text-slate-700 block mb-1">Country of Incorporation <span class="text-slate-400 font-normal">(Optional)</span></label>
+                    <select data-role="sub-country"
+                        class="w-full h-9 px-2.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-900 focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
+                        ${buildCountryOptionsHtml(sub.country_of_inc)}
+                    </select>
+                </div>
+                <div>
+                    <label class="font-semibold text-slate-700 block mb-1">Date of Incorporation <span class="text-slate-400 font-normal">(Optional)</span></label>
+                    <input type="date" data-role="sub-inc-date" value="${escapeHtml(sub.date_of_inc)}"
+                        class="w-full h-9 px-3 rounded-lg border border-slate-300 bg-white font-mono text-xs text-slate-900 focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
+                </div>
+                <div>
+                    <label class="font-semibold text-slate-700 block mb-1">Entity Currency <span class="text-rose-600">*</span></label>
+                    <select data-role="sub-currency"
+                        onchange="validateFieldOnBlur(this)"
+                        class="w-full h-9 px-2.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-900 focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
+                        ${buildCurrencyOptionsHtml(sub.input_currency)}
+                    </select>
+                    <div class="field-error-hint hidden"></div>
+                </div>
+                <div>
+                    <label class="font-semibold text-slate-700 block mb-1">Ownership % <span class="text-rose-600">*</span></label>
+                    <div class="relative">
+                        <input type="text" inputmode="decimal" data-role="sub-ownership" value="${escapeHtml(sub.ownership_pct !== '' && sub.ownership_pct !== undefined ? String(sub.ownership_pct) : '')}"
+                            placeholder="e.g. 75.50"
+                            oninput="clearFieldError(this)" onblur="validateFieldOnBlur(this)"
+                            class="w-full h-9 pl-3 pr-7 rounded-lg border border-slate-300 bg-white font-mono text-xs text-slate-900 focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
+                        <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-mono text-slate-400 pointer-events-none">%</span>
+                    </div>
+                    <div class="field-error-hint hidden"></div>
+                </div>
+                <div>
+                    <label class="font-semibold text-slate-700 block mb-1">Acquisition Date <span class="text-rose-600">*</span></label>
+                    <input type="date" data-role="sub-acq-date" value="${escapeHtml(sub.acquisition_date)}"
+                        onchange="validateFieldOnBlur(this)" onblur="validateFieldOnBlur(this)"
+                        class="w-full h-9 px-3 rounded-lg border border-slate-300 bg-white font-mono text-xs text-slate-900 focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
+                    <div class="field-error-hint hidden"></div>
+                </div>
+            </div>
+        </div>
+    `).join("");
+}
+
+function resetCOAError() {
+    const dropZone = document.getElementById("coa-drop-zone");
+    const errEl = document.getElementById("coa-file-error");
+    if (dropZone) dropZone.classList.remove("input-invalid", "shake-error");
+    if (errEl) {
+        errEl.textContent = "";
+        errEl.classList.add("hidden");
     }
 }
 
-async function triggerLoadDemo() {
+function showCOAShakeError(message) {
+    const dropZone = document.getElementById("coa-drop-zone");
+    const errEl = document.getElementById("coa-file-error");
+    if (dropZone) {
+        dropZone.classList.remove("shake-error");
+        void dropZone.offsetWidth;
+        dropZone.classList.add("input-invalid", "shake-error");
+    }
+    if (errEl) {
+        errEl.textContent = message;
+        errEl.classList.remove("hidden");
+    }
+}
+
+function handleCOAFileSelected(input) {
+    if (input.files && input.files.length > 0) {
+        selectedCOAFile = input.files[0];
+        updateCOADropZoneLabel();
+        resetCOAError();
+    }
+}
+
+function updateCOADropZoneLabel(existingFilename = null, existingCount = 0) {
+    const label = document.getElementById("coa-file-label");
+    const sublabel = document.getElementById("coa-file-sublabel");
+    if (!label || !sublabel) return;
+
+    if (selectedCOAFile) {
+        label.innerHTML = `<span class="text-emerald-700">✓ Selected Base COA:</span> <span class="font-mono text-kpmg-navy">${escapeHtml(selectedCOAFile.name)}</span> (${(selectedCOAFile.size / 1024).toFixed(1)} KB)`;
+        sublabel.textContent = "Click or drop another .xlsx, .xls, or .csv file to replace.";
+    } else if (existingFilename) {
+        label.innerHTML = `<span class="text-kpmg-blue">Current Base COA:</span> <span class="font-mono text-kpmg-navy">${escapeHtml(existingFilename)}</span> (${existingCount} accounts)`;
+        sublabel.textContent = "Upload a new .xlsx, .xls, or .csv file only if you want to replace the Chart of Accounts for future runs.";
+    } else {
+        label.innerHTML = `Upload Base Chart of Accounts (.xlsx, .xls, .csv) <span class="text-rose-600">*</span>`;
+        sublabel.textContent = "This Chart of Accounts acts as the foundational ledger structure for all future consolidation runs of this company.";
+    }
+}
+
+function initCOADropZone() {
+    const dropZone = document.getElementById("coa-drop-zone");
+    if (!dropZone || dropZone.dataset.initialized) return;
+    dropZone.dataset.initialized = "true";
+
+    ['dragenter', 'dragover'].forEach(evt => {
+        dropZone.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add("dragover");
+        });
+    });
+    ['dragleave', 'drop'].forEach(evt => {
+        dropZone.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove("dragover");
+        });
+    });
+    dropZone.addEventListener("drop", (e) => {
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) {
+            selectedCOAFile = files[0];
+            updateCOADropZoneLabel();
+            resetCOAError();
+        }
+    });
+}
+
+function openCreateProfileModal() {
+    const modal = document.getElementById("modal-company-profile");
+    if (!modal) return;
+    document.getElementById("form-company-profile").reset();
+    document.getElementById("profile-edit-company-id").value = "";
+    document.getElementById("modal-profile-title").textContent = "Create Company Profile";
+    document.getElementById("btn-save-profile").textContent = "Create Profile";
+
+    const codeInput = document.getElementById("profile-company-code");
+    if (codeInput) codeInput.readOnly = false;
+
+    populateProfileCurrencySelects();
+    document.getElementById("profile-subsidiary-count").value = "0";
+    subsidiaryDrafts = [];
+    renderSubsidiaryRows(0);
+
+    selectedCOAFile = null;
+    editingProfileHasExistingCOA = false;
+    const coaInput = document.getElementById("profile-coa-input");
+    if (coaInput) coaInput.value = "";
+    updateCOADropZoneLabel();
+    resetCOAError();
+
+    modal.querySelectorAll(".input-invalid, .shake-error").forEach(el => clearFieldError(el));
+    modal.classList.remove("hidden");
+    setTimeout(() => document.getElementById("profile-company-name")?.focus(), 50);
+}
+
+function openEditProfileModal(companyId) {
+    const comp = availableCompanies.find(c => c.company_id === companyId);
+    if (!comp) return;
+    const modal = document.getElementById("modal-company-profile");
+    if (!modal) return;
+
+    document.getElementById("form-company-profile").reset();
+    document.getElementById("profile-edit-company-id").value = comp.company_id;
+    document.getElementById("modal-profile-title").textContent = `Edit Profile — ${comp.company_name}`;
+    document.getElementById("btn-save-profile").textContent = "Save Changes";
+
+    document.getElementById("profile-company-name").value = comp.company_name || "";
+    const codeInput = document.getElementById("profile-company-code");
+    codeInput.value = comp.company_code || "";
+    codeInput.readOnly = false;
+
+    const repSel = document.getElementById("profile-reporting-currency");
+    repSel.innerHTML = buildCurrencyOptionsHtml(comp.reporting_currency || "");
+
+    const subs = comp.subsidiaries || [];
+    document.getElementById("profile-subsidiary-count").value = String(subs.length);
+    subsidiaryDrafts = subs.map(s => ({
+        entity_code: s.entity_code || "",
+        entity_name: s.entity_name || "",
+        company_reg_number: s.company_reg_number || "",
+        country_of_inc: s.country_of_inc || "",
+        date_of_inc: s.date_of_inc || "",
+        input_currency: s.input_currency || "",
+        ownership_pct: s.ownership_pct !== undefined && s.ownership_pct !== null ? Number(s.ownership_pct).toFixed(2) : "",
+        acquisition_date: s.acquisition_date || ""
+    }));
+    renderSubsidiaryRows(subs.length);
+
+    selectedCOAFile = null;
+    editingProfileHasExistingCOA = (comp.coa_account_count || 0) > 0;
+    const coaInput = document.getElementById("profile-coa-input");
+    if (coaInput) coaInput.value = "";
+    updateCOADropZoneLabel(comp.coa_filename || "Base Chart of Accounts", comp.coa_account_count || 0);
+    resetCOAError();
+
+    modal.querySelectorAll(".input-invalid, .shake-error").forEach(el => clearFieldError(el));
+    modal.classList.remove("hidden");
+}
+
+function closeCompanyProfileModal() {
+    const modal = document.getElementById("modal-company-profile");
+    if (modal) modal.classList.add("hidden");
+}
+
+async function submitCompanyProfile(e) {
+    e.preventDefault();
+    const editId = document.getElementById("profile-edit-company-id").value.trim();
+    const nameEl = document.getElementById("profile-company-name");
+    const codeEl = document.getElementById("profile-company-code");
+    const currEl = document.getElementById("profile-reporting-currency");
+    const countEl = document.getElementById("profile-subsidiary-count");
+
+    let firstInvalid = null;
+    const recordInvalid = (el) => { if (!firstInvalid && el) firstInvalid = el; };
+
+    if (!validateFieldOnBlur(nameEl)) recordInvalid(nameEl);
+    if (!validateFieldOnBlur(codeEl)) recordInvalid(codeEl);
+    if (!validateFieldOnBlur(currEl)) recordInvalid(currEl);
+    if (!validateFieldOnBlur(countEl)) recordInvalid(countEl);
+
+    const subCount = parseInt(countEl.value, 10);
+    const cards = Array.from(document.querySelectorAll("#subsidiaries-container .subsidiary-card"));
+    const subsidiariesPayload = [];
+
+    cards.forEach((card) => {
+        const entNameEl = card.querySelector('[data-role="sub-entity-name"]');
+        const regEl = card.querySelector('[data-role="sub-reg-no"]');
+        const countryEl = card.querySelector('[data-role="sub-country"]');
+        const incDateEl = card.querySelector('[data-role="sub-inc-date"]');
+        const subCurrEl = card.querySelector('[data-role="sub-currency"]');
+        const ownEl = card.querySelector('[data-role="sub-ownership"]');
+        const acqEl = card.querySelector('[data-role="sub-acq-date"]');
+
+        if (!validateFieldOnBlur(entNameEl)) recordInvalid(entNameEl);
+        if (!validateFieldOnBlur(subCurrEl)) recordInvalid(subCurrEl);
+        if (!validateFieldOnBlur(ownEl)) recordInvalid(ownEl);
+        if (!validateFieldOnBlur(acqEl)) recordInvalid(acqEl);
+
+        const ownCheck = validateOwnershipValue(ownEl?.value);
+        subsidiariesPayload.push({
+            entity_code: card.dataset.entityCode || null,
+            entity_name: (entNameEl?.value || "").trim(),
+            company_reg_number: (regEl?.value || "").trim() || null,
+            country_of_inc: (countryEl?.value || "").trim() || null,
+            date_of_inc: (incDateEl?.value || "").trim() || null,
+            input_currency: (subCurrEl?.value || "").trim(),
+            ownership_pct: ownCheck.valid ? ownCheck.value : 0,
+            acquisition_date: (acqEl?.value || "").trim()
+        });
+    });
+
+    if (!editId && !selectedCOAFile) {
+        showCOAShakeError("Default Chart of Accounts file (.xlsx, .xls, .csv) is mandatory.");
+        recordInvalid(document.getElementById("coa-drop-zone"));
+    }
+
+    if (firstInvalid) {
+        firstInvalid.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (typeof firstInvalid.focus === "function") firstInvalid.focus();
+        showToast("Incomplete Profile", "Please fill in all highlighted mandatory fields.", "warning");
+        return;
+    }
+
+    const payload = {
+        company_name: nameEl.value.trim(),
+        company_code: codeEl.value.trim().toUpperCase(),
+        reporting_currency: currEl.value.trim().toUpperCase(),
+        number_of_subsidiaries: Number.isInteger(subCount) ? subCount : 0,
+        subsidiaries: subsidiariesPayload
+    };
+
+    const formData = new FormData();
+    formData.append("profile_json", JSON.stringify(payload));
+    if (selectedCOAFile) {
+        formData.append("coa_file", selectedCOAFile);
+    }
+
+    const saveBtn = document.getElementById("btn-save-profile");
+    const origBtnText = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.textContent = editId ? "Saving Changes..." : "Creating Profile...";
+
     try {
-        showToast("Loading Demo", "Loading benchmark 4-entity conglomerate...", "info");
-        const res = await fetch("/api/companies/load-demo", { method: "POST" });
+        const url = editId ? `/api/companies/${encodeURIComponent(editId)}` : "/api/companies/create";
+        const method = editId ? "PUT" : "POST";
+        const res = await fetch(url, { method, body: formData });
+        
+        let data = {};
+        const resText = await res.text();
+        try {
+            data = JSON.parse(resText);
+        } catch (_) {
+            data = { detail: resText || `Server returned HTTP ${res.status} ${res.statusText}` };
+        }
+
+        if (res.ok && data.success) {
+            closeCompanyProfileModal();
+            showToast(
+                editId ? "Profile Updated" : "Profile Created",
+                `${payload.company_name} (${payload.company_code}) saved with ${data.company.coa_account_count} COA accounts.`,
+                "success"
+            );
+            await fetchCompanies();
+            await fetchStatus();
+            await loadPipelineData();
+            renderCompanyWorkspace();
+        } else {
+            const rawMsg = (data && (data.detail || data.message)) || `Server returned HTTP ${res.status}`;
+            const msg = typeof rawMsg === "object" ? JSON.stringify(rawMsg) : String(rawMsg);
+            if (msg.toLowerCase().includes("chart of accounts") || msg.toLowerCase().includes("coa")) {
+                showCOAShakeError(msg);
+            } else if (msg.toLowerCase().includes("code")) {
+                triggerFieldShake(codeEl, msg);
+            }
+            showToast("Validation Error", msg, "error");
+        }
+    } catch (err) {
+        showToast("Network Error", "Failed to save company profile: " + err.message, "error");
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = origBtnText;
+    }
+}
+
+function openDeleteProfileModal(companyId) {
+    const comp = availableCompanies.find(c => c.company_id === companyId);
+    if (!comp) return;
+    pendingDeleteCompanyId = companyId;
+    document.getElementById("delete-profile-name").textContent = comp.company_name || companyId;
+    document.getElementById("delete-profile-code").textContent = comp.company_code || companyId;
+    document.getElementById("modal-delete-profile").classList.remove("hidden");
+}
+
+function closeDeleteProfileModal() {
+    pendingDeleteCompanyId = null;
+    document.getElementById("modal-delete-profile").classList.add("hidden");
+}
+
+async function confirmDeleteProfile() {
+    if (!pendingDeleteCompanyId) return;
+    const targetId = pendingDeleteCompanyId;
+    try {
+        const res = await fetch(`/api/companies/${encodeURIComponent(targetId)}`, { method: "DELETE" });
         const data = await res.json();
-        if (data.success) {
+        if (res.ok && data.success) {
+            closeDeleteProfileModal();
+            showToast("Profile Deleted", "Company profile has been removed.", "info");
             statementsData = null;
             currentLineageTrace = null;
             await fetchCompanies();
             await fetchStatus();
             await loadPipelineData();
-            showToast("Demo Loaded", "Reference Company P Healthcare loaded.", "success");
-            if (activeNavSection === 'COMPANIES') {
-                renderCompanyWorkspace();
-            } else {
-                switchStep(1);
-            }
+            renderCompanyWorkspace();
+        } else {
+            showToast("Delete Failed", data.detail || "Could not delete profile.", "error");
         }
     } catch (err) {
-        showToast("Demo Load Error", "" + err, "error");
+        showToast("Network Error", "Failed to delete profile: " + err, "error");
     }
 }
 
@@ -291,11 +783,11 @@ function renderHeaderStatus() {
     const dispPeriod = document.getElementById("disp-period");
     const dispCurr = document.getElementById("disp-curr");
 
-    if (dispPeriod && appStatus.current_period) {
-        dispPeriod.textContent = appStatus.current_period;
+    if (dispPeriod) {
+        dispPeriod.textContent = appStatus.active_company_id ? (appStatus.current_period || "Pending Run") : "—";
     }
-    if (dispCurr && appStatus.reporting_currency) {
-        dispCurr.textContent = appStatus.reporting_currency;
+    if (dispCurr) {
+        dispCurr.textContent = appStatus.reporting_currency || "—";
     }
 
     // Active Company Titles & Badges
@@ -303,14 +795,17 @@ function renderHeaderStatus() {
     const sidebarEntityBadge = document.getElementById("sidebar-entity-badge");
     const miniCompanyCode = document.getElementById("sidebar-mini-company-code");
 
-    const compName = appStatus.active_company_name || "Company P Healthcare Corp";
+    const compName = appStatus.active_company_name || "No Active Profile";
     if (headerCompany) headerCompany.textContent = compName;
     if (miniCompanyCode) {
-        const initials = compName.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
-        miniCompanyCode.textContent = initials || "CP";
+        if (appStatus.active_company_code) {
+            miniCompanyCode.textContent = appStatus.active_company_code.slice(0, 3);
+        } else {
+            miniCompanyCode.textContent = "—";
+        }
     }
     if (sidebarEntityBadge) {
-        const count = appStatus.all_entities ? appStatus.all_entities.length : 4;
+        const count = appStatus.all_entities ? appStatus.all_entities.length : 0;
         sidebarEntityBadge.textContent = `${count} Entities`;
     }
 
@@ -436,146 +931,157 @@ function switchSection(section) {
 
 function renderCompanyWorkspace() {
     const container = document.getElementById("company-perimeter-content");
-    const titleEl = document.getElementById("company-profile-title");
-    const descEl = document.getElementById("company-profile-desc");
+    const countPill = document.getElementById("company-count-pill");
     if (!container) return;
 
-    const compName = appStatus.active_company_name || "Company P Healthcare Corp";
-    const compId = appStatus.active_company_id || "company-p";
-    const curr = appStatus.reporting_currency || "INR";
-    const period = appStatus.current_period || "31-Mar-2024";
+    const companies = availableCompanies || [];
+    if (countPill) {
+        countPill.textContent = `${companies.length} ${companies.length === 1 ? 'Company' : 'Companies'}`;
+    }
 
-    if (titleEl) titleEl.textContent = `${compName} (${compId})`;
-    if (descEl) descEl.textContent = `Consolidation Perimeter, Functional Currencies & Reporting Governance for ${period}.`;
-
-    const allEntities = appStatus.all_entities || ['Company_P', 'Company S1', 'Company S2', 'Company S3'];
-    const uploadedEntities = appStatus.uploaded_entities || [];
-    const missingPrereqs = appStatus.missing_prerequisites || [];
-
-    container.innerHTML = `
-        <!-- Governance & Scope Metrics Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="p-4 rounded-xl border border-kpmg-border bg-slate-50/70">
-                <div class="text-[11px] font-semibold text-kpmg-muted uppercase tracking-wider">Perimeter Scope</div>
-                <div class="text-2xl font-bold font-mono text-kpmg-navy mt-1">${allEntities.length} <span class="text-xs font-normal text-kpmg-muted">Entities</span></div>
-                <div class="text-[11px] text-emerald-700 font-medium mt-1 flex items-center space-x-1">
-                    <span>${uploadedEntities.length} Ingested</span>
+    if (companies.length === 0) {
+        container.innerHTML = `
+            <div class="border border-dashed border-slate-300 rounded-2xl bg-slate-50/60 p-12 text-center space-y-4">
+                <div class="w-12 h-12 rounded-xl bg-blue-50 border border-blue-200 text-kpmg-blue flex items-center justify-center mx-auto">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
                 </div>
-            </div>
-
-            <div class="p-4 rounded-xl border border-kpmg-border bg-slate-50/70">
-                <div class="text-[11px] font-semibold text-kpmg-muted uppercase tracking-wider">Presentation Currency</div>
-                <div class="text-2xl font-bold font-mono text-[#00338D] mt-1">${escapeHtml(curr)}</div>
-                <div class="text-[11px] text-kpmg-muted mt-1">Target reporting group</div>
-            </div>
-
-            <div class="p-4 rounded-xl border border-kpmg-border bg-slate-50/70">
-                <div class="text-[11px] font-semibold text-kpmg-muted uppercase tracking-wider">Target Period</div>
-                <div class="text-2xl font-bold font-mono text-kpmg-text mt-1">${escapeHtml(period)}</div>
-                <div class="text-[11px] text-kpmg-muted mt-1">Annual Financial Year</div>
-            </div>
-
-            <div class="p-4 rounded-xl border border-kpmg-border bg-slate-50/70">
-                <div class="text-[11px] font-semibold text-kpmg-muted uppercase tracking-wider">Prerequisite Health</div>
-                <div class="text-2xl font-bold font-mono ${missingPrereqs.length === 0 ? 'text-emerald-600' : 'text-amber-600'} mt-1">
-                    ${missingPrereqs.length === 0 ? '100% Ready' : 'Attention'}
+                <div class="max-w-md mx-auto space-y-1">
+                    <h3 class="font-bold text-sm text-kpmg-navy">No Company Profiles Added Yet</h3>
+                    <p class="text-xs text-kpmg-muted leading-relaxed">
+                        Create your first company profile with its reporting currency, subsidiary ownership structure, and base Chart of Accounts to begin consolidation.
+                    </p>
                 </div>
-                <div class="text-[11px] text-kpmg-muted mt-1">${missingPrereqs.length === 0 ? 'All data tables validated' : missingPrereqs.length + ' files missing'}</div>
-            </div>
-        </div>
-
-        <!-- Perimeter Legal Entities Table -->
-        <div class="border border-kpmg-border rounded-xl overflow-hidden shadow-xs">
-            <div class="px-5 py-3.5 bg-slate-50 border-b border-kpmg-border flex items-center justify-between">
                 <div>
-                    <h3 class="font-bold text-xs uppercase tracking-wider text-kpmg-navy">Legal Entities & Ownership Structure</h3>
-                    <p class="text-[11px] text-kpmg-muted mt-0.5">Corporate perimeter governing IFRS 10 / Ind AS 110 consolidation</p>
+                    <button onclick="openCreateProfileModal()" class="px-4 py-2 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition btn-tactile inline-flex items-center space-x-1.5 shadow-xs cursor-pointer">
+                        <span>+ Create Profile</span>
+                    </button>
                 </div>
-                <span class="px-2.5 py-1 rounded text-xs font-semibold bg-blue-50 text-[#00338D] border border-blue-200">
-                    ${allEntities.length} Total Registered
-                </span>
             </div>
+        `;
+        return;
+    }
 
-            <table class="fin-table">
-                <thead>
-                    <tr>
-                        <th class="w-12">#</th>
-                        <th>Legal Entity Name</th>
-                        <th>Entity Code</th>
-                        <th>Corporate Role</th>
-                        <th>Currency</th>
-                        <th>Consolidation Method</th>
-                        <th>Ingestion State</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${allEntities.map((ent, idx) => {
-                        const isParent = idx === 0 || ent.toLowerCase().includes("company_p") || ent.toLowerCase().includes("parent");
-                        const isUploaded = uploadedEntities.some(u => u.toLowerCase().replace(/[\s_]/g, '') === ent.toLowerCase().replace(/[\s_]/g, ''));
-                        return `
+    container.innerHTML = companies.map(comp => {
+        const isActive = comp.company_id === appStatus.active_company_id;
+        const subs = comp.subsidiaries || [];
+        const whollyOwnedCount = subs.filter(s => Number(s.ownership_pct) >= 100).length;
+        const nciCount = subs.length - whollyOwnedCount;
+        const uniqueCurrencies = Array.from(new Set([
+            comp.reporting_currency,
+            ...subs.map(s => s.input_currency).filter(Boolean)
+        ]));
+        const coaAccounts = comp.coa_account_count || 0;
+        const coaFile = comp.coa_filename || "Chart of Accounts";
+
+        const subsidiaryRowsHtml = subs.length > 0 ? `
+            <div class="border-t border-slate-200 overflow-x-auto">
+                <table class="fin-table">
+                    <thead>
+                        <tr>
+                            <th class="w-10">#</th>
+                            <th>Entity Name</th>
+                            <th>Reg. Number</th>
+                            <th>Country of Inc.</th>
+                            <th>Date of Inc.</th>
+                            <th class="text-center">Currency</th>
+                            <th class="num-cell">Ownership %</th>
+                            <th class="num-cell">NCI %</th>
+                            <th class="text-center">Acquisition Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${subs.map((s, idx) => `
                             <tr class="hover:bg-slate-50/80 transition">
-                                <td class="font-mono text-kpmg-muted text-[11px]">${idx + 1}</td>
-                                <td class="font-bold text-kpmg-navy flex items-center space-x-2 py-2.5">
-                                    <span class="w-2 h-2 rounded-full ${isParent ? 'bg-[#00338D]' : 'bg-blue-400'}"></span>
-                                    <span>${escapeHtml(ent.replace(/_/g, ' '))}</span>
+                                <td class="font-mono text-[11px] text-slate-400">${idx + 1}</td>
+                                <td class="font-semibold text-kpmg-navy py-2.5">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-kpmg-electric flex-shrink-0"></span>
+                                        <span>${escapeHtml(s.entity_name)}</span>
+                                    </div>
                                 </td>
-                                <td class="font-mono text-[11px] text-kpmg-muted">${escapeHtml(ent)}</td>
-                                <td>
-                                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${isParent ? 'bg-[#00338D] text-white shadow-xs' : 'bg-slate-100 text-slate-700'}">
-                                        ${isParent ? 'Holding Entity (Parent)' : 'Operating Subsidiary'}
-                                    </span>
+                                <td class="font-mono text-[11px] text-slate-600">${s.company_reg_number ? escapeHtml(s.company_reg_number) : '<span class="text-slate-400">—</span>'}</td>
+                                <td class="text-xs text-slate-700">${s.country_of_inc ? escapeHtml(s.country_of_inc) : '<span class="text-slate-400">—</span>'}</td>
+                                <td class="font-mono text-[11px] text-slate-600">${s.date_of_inc ? escapeHtml(s.date_of_inc) : '<span class="text-slate-400">—</span>'}</td>
+                                <td class="text-center">
+                                    <span class="px-2 py-0.5 rounded bg-blue-50 text-kpmg-blue border border-blue-200/70 font-mono text-[11px] font-bold">${escapeHtml(s.input_currency)}</span>
                                 </td>
-                                <td class="font-mono font-bold text-xs text-[#00338D]">${isParent ? escapeHtml(curr) : (ent.includes('S1') ? 'USD' : ent.includes('S2') ? 'EUR' : curr)}</td>
-                                <td class="text-xs text-kpmg-muted">${isParent ? 'Full (100% Direct)' : 'Full Consolidation (NCI Recognized)'}</td>
-                                <td>
-                                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${isUploaded ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}">
-                                        ${isUploaded ? '✓ Ingested' : 'Missing File'}
-                                    </span>
-                                </td>
+                                <td class="num-cell font-mono font-bold text-kpmg-navy">${Number(s.ownership_pct).toFixed(2)}%</td>
+                                <td class="num-cell font-mono text-slate-500">${Number(s.nci_pct).toFixed(2)}%</td>
+                                <td class="text-center font-mono text-[11px] text-slate-700">${s.acquisition_date ? escapeHtml(s.acquisition_date) : '<span class="text-slate-400">—</span>'}</td>
                             </tr>
-                        `;
-                    }).join("")}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Master Data Status Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="p-5 rounded-xl border border-kpmg-border bg-white shadow-xs space-y-3">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-2">
-                        <span class="w-2 h-2 rounded-full bg-[#00338D]"></span>
-                        <h4 class="font-bold text-xs uppercase tracking-wider text-kpmg-navy">Chart of Accounts (COA) Status</h4>
-                    </div>
-                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Standardized</span>
-                </div>
-                <p class="text-xs text-kpmg-muted leading-relaxed">
-                    Corporate Chart of Accounts loaded for multi-entity GL standardization. Mappings are validated by Gemini Brain and cached in learning memory.
-                </p>
-                <div class="pt-2 border-t border-kpmg-border flex items-center justify-between text-xs">
-                    <span class="text-kpmg-muted font-mono">Hierarchy: 5-Level Financial Statements</span>
-                    <button onclick="switchNavSection('PIPELINE'); switchStep(2);" class="text-[#00338D] font-bold hover:underline">Review Mappings &rarr;</button>
-                </div>
+                        `).join("")}
+                    </tbody>
+                </table>
             </div>
-
-            <div class="p-5 rounded-xl border border-kpmg-border bg-white shadow-xs space-y-3">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-2">
-                        <span class="w-2 h-2 rounded-full bg-[#0091DA]"></span>
-                        <h4 class="font-bold text-xs uppercase tracking-wider text-kpmg-navy">Exchange Rate Matrices (IAS 21)</h4>
-                    </div>
-                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-[#00338D] border border-blue-200">Active Rates</span>
-                </div>
-                <p class="text-xs text-kpmg-muted leading-relaxed">
-                    Closing, Average, and Historical FX rate tables configured for translation of foreign operations into ${escapeHtml(curr)}.
-                </p>
-                <div class="pt-2 border-t border-kpmg-border flex items-center justify-between text-xs">
-                    <span class="text-kpmg-muted font-mono">Rates: Closing &bull; Average &bull; Historical</span>
-                    <button onclick="switchNavSection('PIPELINE'); switchStep(3);" class="text-[#00338D] font-bold hover:underline">View FX Translation &rarr;</button>
-                </div>
+        ` : `
+            <div class="px-5 py-3.5 border-t border-slate-200 bg-slate-50/50 text-xs text-slate-500 flex items-center justify-between">
+                <span>Standalone Parent Entity — 0 Subsidiaries configured</span>
+                <button onclick="openEditProfileModal('${escapeHtml(comp.company_id)}')" class="text-kpmg-blue font-semibold hover:underline cursor-pointer">+ Add Subsidiaries</button>
             </div>
-        </div>
-    `;
+        `;
+
+        return `
+            <article class="rounded-xl border ${isActive ? 'border-kpmg-blue/50 shadow-sm ring-1 ring-kpmg-blue/10' : 'border-slate-200 shadow-xs'} bg-white overflow-hidden transition">
+                <!-- Company Snapshot Header -->
+                <div class="px-5 py-4 bg-slate-50/70 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <span class="px-2.5 py-1 rounded-md bg-kpmg-navy text-white font-mono text-xs font-bold tracking-wide">${escapeHtml(comp.company_code || comp.company_id)}</span>
+                        <h3 class="text-base font-bold text-kpmg-navy">${escapeHtml(comp.company_name)}</h3>
+                        <span class="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-blue-50 text-kpmg-blue border border-blue-200">${escapeHtml(comp.reporting_currency)}</span>
+                        ${isActive
+                            ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Active Profile</span>`
+                            : `<button onclick="handleCompanySwitch('${escapeHtml(comp.company_id)}')" class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white hover:bg-blue-50 text-slate-600 hover:text-kpmg-blue border border-slate-300 transition cursor-pointer">Set Active</button>`
+                        }
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="openEditProfileModal('${escapeHtml(comp.company_id)}')"
+                            class="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-kpmg-navy border border-slate-300 text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer">
+                            <span>Edit / Update COA</span>
+                        </button>
+                        <button onclick="openDeleteProfileModal('${escapeHtml(comp.company_id)}')"
+                            class="px-3 py-1.5 rounded-lg bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 hover:border-rose-200 text-xs font-medium transition cursor-pointer">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Snapshot Key Metrics Strip -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 bg-white">
+                    <div class="p-4">
+                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Parent &amp; Reporting</div>
+                        <div class="text-sm font-bold text-kpmg-navy mt-1 font-mono">${escapeHtml(comp.company_code || comp.company_id)} &bull; ${escapeHtml(comp.reporting_currency)}</div>
+                        <div class="text-[11px] text-slate-500 mt-0.5">Group functional base currency</div>
+                    </div>
+                    <div class="p-4">
+                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Corporate Scope</div>
+                        <div class="text-sm font-bold text-kpmg-navy mt-1 font-mono">${subs.length} ${subs.length === 1 ? 'Subsidiary' : 'Subsidiaries'} <span class="text-xs font-normal text-slate-500">(+1 Parent)</span></div>
+                        <div class="text-[11px] text-slate-500 mt-0.5">${subs.length > 0 ? `${whollyOwnedCount} wholly owned &bull; ${nciCount} with NCI` : 'No subsidiaries'}</div>
+                    </div>
+                    <div class="p-4">
+                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Currency Footprint</div>
+                        <div class="text-sm font-bold text-kpmg-blue mt-1 font-mono">${escapeHtml(uniqueCurrencies.join(", "))}</div>
+                        <div class="text-[11px] text-slate-500 mt-0.5">${uniqueCurrencies.length} ${uniqueCurrencies.length === 1 ? 'currency' : 'currencies'} in perimeter</div>
+                    </div>
+                    <div class="p-4">
+                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Base Chart of Accounts</div>
+                        <div class="text-sm font-bold ${coaAccounts > 0 ? 'text-emerald-700' : 'text-amber-600'} mt-1 font-mono">${coaAccounts} GL Accounts</div>
+                        <div class="text-[11px] text-slate-500 mt-0.5 truncate" title="${escapeHtml(coaFile)}">${escapeHtml(coaFile)}${comp.coa_uploaded_at ? ` &bull; ${escapeHtml(comp.coa_uploaded_at)}` : ''}</div>
+                    </div>
+                </div>
+
+                <!-- Subsidiaries Snapshot Table -->
+                ${subsidiaryRowsHtml}
+
+                <!-- Snapshot Footer -->
+                <div class="px-5 py-2.5 bg-slate-50/70 border-t border-slate-200 flex flex-wrap items-center justify-between text-[11px] text-slate-500 gap-2">
+                    <span>Created: <strong class="font-mono text-slate-700">${escapeHtml(comp.created_at || '—')}</strong></span>
+                    <span>Last Updated: <strong class="font-mono text-slate-700">${escapeHtml(comp.updated_at || '—')}</strong></span>
+                </div>
+            </article>
+        `;
+    }).join("");
 }
 
 function renderStepperState() {

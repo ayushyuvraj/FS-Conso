@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import openpyxl
 import pandas as pd
 
+from fs_conso.config import config
 from fs_conso.core.company_manager import company_manager
 from fs_conso.core.file_parser import FlexibleTBParser
 from fs_conso.models.coa import AccountClassification, ChartOfAccounts, COAItem, RollUpOperator
@@ -21,11 +22,31 @@ TrialBalanceLoader = FlexibleTBParser
 
 
 def get_active_profile(company_id: str = "company-p") -> CompanyProfile:
-    """Retrieves active company profile or initializes demo benchmark profile."""
+    """Retrieves active company profile; for legacy benchmark tests loads Conso.xlsx in-memory without seeding disk."""
     prof = company_manager.get_company(company_id)
-    if prof is None:
-        prof = company_manager.ensure_default_demo_company()
-    return prof
+    if prof is not None:
+        return prof
+
+    conso_path = config.project_root / "Conso.xlsx"
+    if company_id == "company-p" and conso_path.exists():
+        return CompanyProfile(
+            company_id="company-p",
+            company_code="COMPANY_P",
+            company_name="Company P Healthcare Corp",
+            reporting_currency="INR",
+            current_period="31-Mar-2024",
+            group_coa=ConsoMasterLoader.load_coa(conso_path),
+            entity_hierarchy=ConsoMasterLoader.load_entity_hierarchy(conso_path),
+            fx_tables_by_date={"31-Mar-2024": ConsoMasterLoader.load_default_fx_rates()},
+        )
+
+    return CompanyProfile(
+        company_id=company_id,
+        company_code=company_id.upper(),
+        company_name=company_id,
+        group_coa=ChartOfAccounts(),
+        entity_hierarchy=EntityHierarchy(parent_code=company_id),
+    )
 
 
 def load_coa_for_company(company_id: str = "company-p") -> ChartOfAccounts:

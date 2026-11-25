@@ -479,3 +479,33 @@ body.modal-resizing * {
     color: var(--kpmg-blue) !important;
 }
 
+/* Tactile Shake Validation Physics (Emil Kowalski dampened spring oscillation) */
+@keyframes field-shake {
+    0% { transform: translateX(0); }
+    16% { transform: translateX(-6px); }
+    34% { transform: translateX(5px); }
+    52% { transform: translateX(-4px); }
+    70% { transform: translateX(3px); }
+    86% { transform: translateX(-1.5px); }
+    100% { transform: translateX(0); }
+}
+
+.shake-error {
+    animation: field-shake 0.38s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.input-invalid {
+    border-color: #E11D48 !important;
+    background-color: #FFF1F2 !important;
+    box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.14) !important;
+}
+
+.field-error-hint {
+    color: #BE123C;
+    font-size: 11px;
+    font-weight: 500;
+    margin-top: 4px;
+    line-height: 1.3;
+}
+
+

@@ -75,7 +75,7 @@
 
         <!-- Center: Company Name (Absolute Center of Screen) -->
         <div class="hidden sm:flex items-center justify-center absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none max-w-[45vw] text-center">
-            <span id="header-active-company-name" class="font-bold text-sm md:text-base tracking-tight text-kpmg-navy truncate pointer-events-auto">Company P Healthcare Corp</span>
+            <span id="header-active-company-name" class="font-bold text-sm md:text-base tracking-tight text-kpmg-navy truncate pointer-events-auto">No Active Profile</span>
         </div>
 
         <!-- Right Actions: HITL Review, Period, API Key -->
@@ -88,10 +88,10 @@
             </button>
 
             <!-- Active Period & Currency (Clean, Boxless) -->
-            <div class="hidden md:flex items-center space-x-2 text-xs">
-                <span class="font-mono text-slate-700 font-medium" id="disp-period">31-Mar-2024</span>
+            <div id="header-period-curr-wrap" class="hidden md:flex items-center space-x-2 text-xs">
+                <span class="font-mono text-slate-700 font-medium" id="disp-period">—</span>
                 <span class="text-slate-300">•</span>
-                <span class="font-mono text-kpmg-blue font-bold" id="disp-curr">INR</span>
+                <span class="font-mono text-kpmg-blue font-bold" id="disp-curr">—</span>
             </div>
 
             <!-- Gemini Status Dot (Top Right) -->
@@ -166,9 +166,6 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                         </svg>
                         <span>Batch Ingest Files</span>
-                    </button>
-                    <button onclick="triggerLoadDemo()" class="w-full h-7 px-3 rounded bg-transparent hover:bg-slate-100 text-slate-500 hover:text-slate-800 text-[11px] font-medium transition flex items-center justify-center space-x-1">
-                        <span>Reset Benchmark Demo</span>
                     </button>
                 </div>
             </div>
@@ -298,32 +295,28 @@
             </div>
         </div>
 
-        <!-- Section C: Company Profile (Full Width, Zero Outer Box) -->
+        <!-- Section C: Company Profile (Full Width, Clean Snapshot Directory) -->
         <div id="view-companies" class="hidden space-y-6 w-full">
             <div class="space-y-6 w-full">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-kpmg-border pb-4 gap-3">
                     <div>
                         <div class="flex items-center space-x-3">
                             <h2 class="text-xl font-bold text-kpmg-navy">Company Profile</h2>
-                            <span id="company-profile-title" class="font-semibold text-sm text-slate-600 bg-slate-100 px-2 py-0.5 rounded">C1 (client_1)</span>
-                            <span id="company-profile-badge" class="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Active</span>
+                            <span id="company-count-pill" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">0 Companies</span>
                         </div>
-                        <p class="text-xs text-kpmg-muted mt-1" id="company-profile-desc">Multi-entity consolidation scope, legal entities, ownership percentages, and Chart of Accounts structure.</p>
+                        <p class="text-xs text-kpmg-muted mt-1" id="company-profile-desc">Manage parent company profiles, subsidiary ownership structures, and base Charts of Accounts.</p>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <button onclick="openNewCompanyModal()" class="px-3.5 py-2 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition btn-tactile flex items-center space-x-1.5 shadow-xs">
-                            <span>+ Create Workspace</span>
-                        </button>
-                        <button onclick="openBatchUploadModal()" class="px-3.5 py-2 rounded-lg bg-white border border-kpmg-border hover:bg-gray-50 text-kpmg-text text-xs font-medium transition flex items-center space-x-1.5 shadow-xs">
-                            <span>Upload Files</span>
+                        <button id="btn-create-profile" onclick="openCreateProfileModal()" class="px-4 py-2 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition btn-tactile flex items-center space-x-1.5 shadow-xs cursor-pointer">
+                            <span>+ Create Profile</span>
                         </button>
                     </div>
                 </div>
 
-                <!-- Entity Perimeter Hierarchy Card Grid -->
+                <!-- Added Companies Snapshot Directory -->
                 <div id="company-perimeter-content" class="space-y-6 w-full">
                     <div class="flex items-center justify-center h-48 text-kpmg-muted text-xs">
-                        Loading corporate perimeter structure...
+                        Loading company profiles...
                     </div>
                 </div>
             </div>
@@ -468,46 +461,130 @@
         </div>
     </div>
 
-    <!-- 8. New Company Modal -->
-    <div id="modal-new-company"
+    <!-- 8. Create / Edit Company Profile Modal -->
+    <div id="modal-company-profile"
         class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/65 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="modal-dialog-card relative bg-white rounded-xl shadow-2xl border border-kpmg-border max-w-md w-full overflow-hidden transform transition-all flex flex-col">
+        <div class="modal-dialog-card relative bg-white rounded-xl shadow-2xl border border-kpmg-border max-w-5xl w-full max-h-[90vh] overflow-hidden transform transition-all flex flex-col">
             <div class="h-14 px-6 glass-kpmg-drawer-header text-white flex items-center justify-between flex-shrink-0">
-                <span class="font-bold text-sm text-white">Create New Company Workspace</span>
-                <button type="button" onclick="closeNewCompanyModal()" class="text-white/70 hover:text-white text-lg font-bold">&times;</button>
+                <div class="flex items-center space-x-2.5">
+                    <svg class="w-4 h-4 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    <span id="modal-profile-title" class="font-bold text-sm text-white">Create Company Profile</span>
+                </div>
+                <button type="button" onclick="closeCompanyProfileModal()" class="text-white/70 hover:text-white text-lg font-bold leading-none cursor-pointer">&times;</button>
             </div>
-            <form onsubmit="submitCreateCompany(event)" class="p-6 space-y-4 text-xs flex-1 overflow-y-auto">
-                <div>
-                    <label class="font-bold text-kpmg-text block mb-1">Company Slug / ID</label>
-                    <input id="new-company-id" type="text" placeholder="e.g. company-y" required
-                        class="w-full h-9 px-3 rounded border border-kpmg-border font-mono text-xs focus:ring-2 focus:ring-kpmg-electric focus:outline-none">
-                </div>
-                <div>
-                    <label class="font-bold text-kpmg-text block mb-1">Company Display Name</label>
-                    <input id="new-company-name" type="text" placeholder="e.g. Company Y Conglomerate" required
-                        class="w-full h-9 px-3 rounded border border-kpmg-border text-xs focus:ring-2 focus:ring-kpmg-electric focus:outline-none">
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="font-bold text-kpmg-text block mb-1">Presentation Currency</label>
-                        <select id="new-company-curr" class="w-full h-9 px-2 rounded border border-kpmg-border text-xs">
-                            <option value="INR" selected>INR (₹)</option>
-                            <option value="USD">USD ($)</option>
-                            <option value="EUR">EUR (€)</option>
-                            <option value="SGD">SGD (S$)</option>
-                        </select>
+
+            <form id="form-company-profile" novalidate onsubmit="submitCompanyProfile(event)" class="flex flex-col flex-1 min-h-0">
+                <input id="profile-edit-company-id" type="hidden" value="">
+
+                <div class="p-6 space-y-6 text-xs flex-1 overflow-y-auto">
+                    <!-- Section 1: Parent Company Details -->
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-kpmg-navy">1. Parent Company Details</h3>
+                            <span class="text-[11px] text-slate-500">All fields in this section are mandatory (<span class="text-rose-600 font-bold">*</span>)</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div>
+                                <label for="profile-company-name" class="font-semibold text-slate-700 block mb-1">Company Name <span class="text-rose-600">*</span></label>
+                                <input id="profile-company-name" type="text" placeholder="e.g. Acme Holdings Ltd"
+                                    oninput="clearFieldError(this)" onblur="validateFieldOnBlur(this)"
+                                    class="w-full h-9 px-3 rounded-lg border border-slate-300 text-xs text-slate-900 focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
+                                <div class="field-error-hint hidden"></div>
+                            </div>
+                            <div>
+                                <label for="profile-company-code" class="font-semibold text-slate-700 block mb-1">Company Code <span class="text-rose-600">*</span></label>
+                                <input id="profile-company-code" type="text" placeholder="e.g. ACME"
+                                    oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''); clearFieldError(this)"
+                                    onblur="validateFieldOnBlur(this)"
+                                    class="w-full h-9 px-3 rounded-lg border border-slate-300 font-mono text-xs text-slate-900 focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
+                                <div class="field-error-hint hidden"></div>
+                            </div>
+                            <div>
+                                <label for="profile-reporting-currency" class="font-semibold text-slate-700 block mb-1">Reporting Currency <span class="text-rose-600">*</span></label>
+                                <select id="profile-reporting-currency" onchange="validateFieldOnBlur(this)"
+                                    class="w-full h-9 px-2.5 rounded-lg border border-slate-300 text-xs text-slate-900 bg-white focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
+                                </select>
+                                <div class="field-error-hint hidden"></div>
+                            </div>
+                            <div>
+                                <label for="profile-subsidiary-count" class="font-semibold text-slate-700 block mb-1">Number of Subsidiaries <span class="text-rose-600">*</span></label>
+                                <input id="profile-subsidiary-count" type="number" min="0" max="100" step="1" value="0"
+                                    oninput="handleSubsidiaryCountChange(this.value)"
+                                    onblur="validateFieldOnBlur(this)"
+                                    class="w-full h-9 px-3 rounded-lg border border-slate-300 font-mono text-xs text-slate-900 focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
+                                <div class="field-error-hint hidden"></div>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <label class="font-bold text-kpmg-text block mb-1">Reporting Period</label>
-                        <input id="new-company-period" type="text" value="31-Mar-2024" required
-                            class="w-full h-9 px-3 rounded border border-kpmg-border text-xs">
+
+                    <!-- Section 2: Dynamic Subsidiary Details -->
+                    <div id="subsidiaries-section" class="hidden space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                            <div class="flex items-center space-x-2">
+                                <h3 class="text-xs font-bold uppercase tracking-wider text-kpmg-navy">2. Subsidiary Details</h3>
+                                <span id="subsidiaries-count-badge" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-kpmg-blue border border-blue-200">0 Entities</span>
+                            </div>
+                            <span class="text-[11px] text-slate-500">Mandatory: Entity Name, Currency, Ownership %, Acquisition Date</span>
+                        </div>
+                        <div id="subsidiaries-container" class="space-y-3"></div>
+                    </div>
+
+                    <!-- Section 3: Base Chart of Accounts Upload -->
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-kpmg-navy">Default Chart of Accounts (Base COA)</h3>
+                            <a href="/api/companies/coa-template" class="text-[11px] font-semibold text-kpmg-blue hover:text-kpmg-navy hover:underline flex items-center space-x-1">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                <span>Download Sample COA Template</span>
+                            </a>
+                        </div>
+                        <div id="coa-drop-zone" class="luxury-dropzone p-5 text-center cursor-pointer" onclick="document.getElementById('profile-coa-input').click()">
+                            <div class="flex flex-col sm:flex-row items-center justify-center sm:space-x-4 space-y-2 sm:space-y-0">
+                                <svg class="h-8 w-8 text-[#00338D] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <div class="text-center sm:text-left">
+                                    <p class="text-xs font-semibold text-slate-800" id="coa-file-label">Upload Base Chart of Accounts (.xlsx, .xls, .csv) <span class="text-rose-600">*</span></p>
+                                    <p class="text-[11px] text-slate-500 mt-0.5" id="coa-file-sublabel">This Chart of Accounts acts as the foundational ledger structure for all future consolidation runs of this company.</p>
+                                </div>
+                            </div>
+                            <input id="profile-coa-input" type="file" accept=".xlsx,.xls,.csv" class="hidden" onclick="event.stopPropagation()" onchange="handleCOAFileSelected(this)">
+                        </div>
+                        <div id="coa-file-error" class="field-error-hint hidden"></div>
                     </div>
                 </div>
-                <div class="pt-3 flex justify-end space-x-3 border-t border-kpmg-border">
-                    <button type="button" onclick="closeNewCompanyModal()" class="px-4 h-9 rounded bg-white border border-kpmg-border text-xs">Cancel</button>
-                    <button type="submit" class="px-5 h-9 rounded-lg bg-kpmg-blue text-white font-semibold text-xs btn-tactile">Create Workspace</button>
+
+                <div class="px-6 py-4 flex items-center justify-between border-t border-slate-200 bg-slate-50 flex-shrink-0">
+                    <span class="text-[11px] text-slate-500">All fields are validated before saving.</span>
+                    <div class="flex items-center space-x-3">
+                        <button type="button" onclick="closeCompanyProfileModal()" class="px-4 h-9 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-medium transition cursor-pointer">Cancel</button>
+                        <button id="btn-save-profile" type="submit" class="px-5 h-9 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white font-semibold text-xs btn-tactile shadow-xs cursor-pointer">Create Profile</button>
+                    </div>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="modal-delete-profile"
+        class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/65 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                <h3 class="font-bold text-sm text-kpmg-navy">Delete Company Profile</h3>
+                <button type="button" onclick="closeDeleteProfileModal()" class="text-slate-400 hover:text-slate-700 text-lg font-bold leading-none">&times;</button>
+            </div>
+            <div class="p-6 text-xs text-slate-700 space-y-2">
+                <p>Are you sure you want to delete <strong id="delete-profile-name" class="text-kpmg-navy"></strong> (<code id="delete-profile-code" class="font-mono text-kpmg-blue"></code>)?</p>
+                <p class="text-slate-500">This removes its master profile, subsidiary list, and uploaded Base Chart of Accounts.</p>
+            </div>
+            <div class="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end space-x-3">
+                <button type="button" onclick="closeDeleteProfileModal()" class="px-4 h-8 rounded-lg bg-white border border-slate-300 text-slate-700 text-xs font-medium hover:bg-slate-100">Cancel</button>
+                <button id="btn-confirm-delete-profile" type="button" onclick="confirmDeleteProfile()" class="px-4 h-8 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition">Delete Profile</button>
+            </div>
         </div>
     </div>
 
@@ -523,6 +600,7 @@
     <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none max-w-sm"></div>
 
     <!-- App Scripts -->
+    <script src="/static/js/reference_data.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 

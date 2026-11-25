@@ -28,10 +28,14 @@ class CompanyProfile(BaseModel):
     - Approved historical account mappings memory (learning cache)
     - Active period configurations
     """
-    company_id: str = Field(..., description="Unique slug/ID for workspace (e.g., 'company-p', 'company-x')")
+    company_id: str = Field(..., description="Unique slug/ID for workspace (e.g., 'acme-corp')")
+    company_code: str = Field("", description="Normalized company code (e.g., 'ACME')")
     company_name: str = Field(..., description="Display name of enterprise/group")
-    reporting_currency: str = Field("INR", description="Group presentation currency")
-    current_period: str = Field("31-Mar-2024", description="Default active reporting period")
+    reporting_currency: str = Field("INR", description="Group reporting currency")
+    current_period: Optional[str] = Field(None, description="Optional active reporting period")
+    number_of_subsidiaries: int = Field(0, ge=0, description="Declared count of subsidiaries")
+    coa_filename: Optional[str] = Field(None, description="Uploaded base Chart of Accounts filename")
+    coa_uploaded_at: Optional[str] = Field(None, description="Timestamp when base COA was uploaded")
     
     # Master data structures
     group_coa: Optional[ChartOfAccounts] = None
@@ -53,6 +57,8 @@ class CompanyProfile(BaseModel):
     def get_fx_table_for_period(self, period: Optional[str] = None) -> Optional[FXRateTable]:
         """Resolves the FXRateTable for the given period or active current period."""
         p = period or self.current_period
+        if not p:
+            return None
         return self.fx_tables_by_date.get(p)
 
     def set_fx_table_for_period(self, period: str, table: FXRateTable) -> None:

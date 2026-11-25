@@ -10,7 +10,7 @@ class LegalEntity(BaseModel):
     entity_name: str = Field(..., description="Full legal name of the entity")
     entity_short_name: Optional[str] = None
     company_reg_number: Optional[str] = None
-    country_of_inc: str = "India"
+    country_of_inc: Optional[str] = None
     date_of_inc: Optional[date] = None
     input_currency: str = Field("INR", description="Functional/Local currency of this entity")
     parent_entity_code: Optional[str] = Field(None, description="Direct parent entity code")

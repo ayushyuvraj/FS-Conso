@@ -1,6 +1,9 @@
 """Multi-Company workspace and master data persistence manager."""
 
 import json
+import re
+import shutil
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import openpyxl
@@ -19,6 +22,13 @@ class CompanyManager:
         self.workspaces_dir = workspaces_dir or workspaces_root or (config.project_root / "inputs" / "workspaces")
         self.workspaces_dir.mkdir(parents=True, exist_ok=True)
 
+    @staticmethod
+    def slugify_code(code: str) -> str:
+        slug = re.sub(r"[^a-z0-9_-]+", "-", str(code).strip().lower()).strip("-_")
+        if not slug:
+            raise ValueError(f"Invalid company code '{code}': must contain alphanumeric characters.")
+        return slug
+
     def _company_dir(self, company_id: str) -> Path:
         slug = "".join(c if c.isalnum() or c in ("-", "_") else "-" for c in str(company_id).lower()).strip("-")
         if not slug:
@@ -28,34 +38,68 @@ class CompanyManager:
             raise ValueError(f"Directory traversal detected in company_id '{company_id}'.")
         return target_dir
 
+    def _build_company_summary(self, cdir: Path, pdata: Dict[str, Any]) -> Dict[str, Any]:
+        """Builds a complete snapshot summary dictionary for UI and API responses."""
+        entities_dict: Dict[str, Any] = {}
+        if (cdir / "entities.json").exists():
+            edata = json.loads((cdir / "entities.json").read_text(encoding="utf-8"))
+            entities_dict = edata.get("entities", {}) or {}
+
+        subsidiaries: List[Dict[str, Any]] = []
+        for ent_code, ent in entities_dict.items():
+            if ent.get("consolidation_method") == "Parent" or ent.get("parent_entity_code") is None:
+                continue
+            holding = float(ent.get("holding_percentage", 1.0))
+            ownership_pct = round(holding * 100.0, 2)
+            nci_pct = round(max(0.0, 100.0 - ownership_pct), 2)
+            subsidiaries.append({
+                "entity_code": ent.get("entity_code", ent_code),
+                "entity_name": ent.get("entity_name", ent_code),
+                "company_reg_number": ent.get("company_reg_number") or "",
+                "country_of_inc": ent.get("country_of_inc") or "",
+                "date_of_inc": ent.get("date_of_inc") or "",
+                "input_currency": ent.get("input_currency", pdata.get("reporting_currency", "INR")),
+                "ownership_pct": ownership_pct,
+                "nci_pct": nci_pct,
+                "acquisition_date": ent.get("acquisition_date") or "",
+                "consolidation_method": ent.get("consolidation_method", "Full Consolidation"),
+            })
+
+        coa_count = 0
+        if (cdir / "coa.json").exists():
+            cdata = json.loads((cdir / "coa.json").read_text(encoding="utf-8"))
+            coa_count = len(cdata.get("items", {}))
+
+        comp_id = pdata.get("company_id", cdir.name)
+        return {
+            "company_id": comp_id,
+            "company_code": pdata.get("company_code") or str(comp_id).upper(),
+            "company_name": pdata.get("company_name"),
+            "reporting_currency": pdata.get("reporting_currency", "INR"),
+            "current_period": pdata.get("current_period"),
+            "number_of_subsidiaries": pdata.get("number_of_subsidiaries", len(subsidiaries)),
+            "entity_count": len(entities_dict) if entities_dict else (1 + len(subsidiaries)),
+            "coa_account_count": coa_count,
+            "coa_filename": pdata.get("coa_filename"),
+            "coa_uploaded_at": pdata.get("coa_uploaded_at"),
+            "subsidiaries": subsidiaries,
+            "created_at": pdata.get("created_at"),
+            "updated_at": pdata.get("updated_at"),
+        }
+
     def list_companies(self) -> List[Dict[str, Any]]:
-        """Lists all stored company profiles with high-level summaries."""
+        """Lists all stored company profiles with high-level summaries and subsidiary snapshots."""
         companies = []
+        if not self.workspaces_dir.exists():
+            return companies
         for cdir in self.workspaces_dir.iterdir():
             if cdir.is_dir() and (cdir / "profile.json").exists():
                 try:
                     pdata = json.loads((cdir / "profile.json").read_text(encoding="utf-8"))
-                    entity_count = 0
-                    if (cdir / "entities.json").exists():
-                        edata = json.loads((cdir / "entities.json").read_text(encoding="utf-8"))
-                        entity_count = len(edata.get("entities", {}))
-                    coa_count = 0
-                    if (cdir / "coa.json").exists():
-                        cdata = json.loads((cdir / "coa.json").read_text(encoding="utf-8"))
-                        coa_count = len(cdata.get("items", {}))
-
-                    companies.append({
-                        "company_id": pdata.get("company_id"),
-                        "company_name": pdata.get("company_name"),
-                        "reporting_currency": pdata.get("reporting_currency", "INR"),
-                        "current_period": pdata.get("current_period", "31-Mar-2024"),
-                        "entity_count": entity_count,
-                        "coa_account_count": coa_count,
-                        "updated_at": pdata.get("updated_at")
-                    })
+                    companies.append(self._build_company_summary(cdir, pdata))
                 except Exception:
                     continue
-        return sorted(companies, key=lambda x: x.get("company_name", ""))
+        return sorted(companies, key=lambda x: (x.get("company_name") or "").lower())
 
     def get_company(self, company_id: str) -> Optional[CompanyProfile]:
         """Loads complete CompanyProfile from its isolated workspace directory."""
@@ -104,26 +148,26 @@ class CompanyManager:
         cdir.mkdir(parents=True, exist_ok=True)
 
         # Save main profile
-        pdata = profile.model_dump(exclude={"group_coa", "entity_hierarchy", "fx_tables_by_date"})
+        pdata = profile.model_dump(mode="json", exclude={"group_coa", "entity_hierarchy", "fx_tables_by_date"})
         (cdir / "profile.json").write_text(json.dumps(pdata, indent=2), encoding="utf-8")
 
         # Save COA
         if profile.group_coa:
             (cdir / "coa.json").write_text(
-                json.dumps(profile.group_coa.model_dump(), indent=2),
+                json.dumps(profile.group_coa.model_dump(mode="json"), indent=2),
                 encoding="utf-8"
             )
 
         # Save Entities
         if profile.entity_hierarchy:
             (cdir / "entities.json").write_text(
-                json.dumps(profile.entity_hierarchy.model_dump(), indent=2),
+                json.dumps(profile.entity_hierarchy.model_dump(mode="json"), indent=2),
                 encoding="utf-8"
             )
 
         # Save FX Tables
         if profile.fx_tables_by_date:
-            fx_data = {p: tbl.model_dump() for p, tbl in profile.fx_tables_by_date.items()}
+            fx_data = {p: tbl.model_dump(mode="json") for p, tbl in profile.fx_tables_by_date.items()}
             (cdir / "fx_rates.json").write_text(
                 json.dumps(fx_data, indent=2),
                 encoding="utf-8"
@@ -134,21 +178,219 @@ class CompanyManager:
         company_id: str,
         company_name: str,
         reporting_currency: str = "INR",
-        current_period: str = "31-Mar-2024"
+        current_period: Optional[str] = None,
+        company_code: Optional[str] = None,
     ) -> CompanyProfile:
         """Creates a fresh, empty company profile."""
+        norm_code = (company_code or company_id).strip().upper()
         profile = CompanyProfile(
             company_id=company_id,
+            company_code=norm_code,
             company_name=company_name,
             reporting_currency=reporting_currency,
             current_period=current_period,
             group_coa=ChartOfAccounts(),
-            entity_hierarchy=EntityHierarchy(parent_code=company_id, reporting_currency=reporting_currency),
+            entity_hierarchy=EntityHierarchy(parent_code=norm_code, reporting_currency=reporting_currency),
             fx_tables_by_date={},
             historical_mappings=[]
         )
         self.save_company(profile)
         return profile
+
+    @staticmethod
+    def _parse_flexible_date(val: Any) -> Optional[date]:
+        if val is None:
+            return None
+        if isinstance(val, date):
+            return val
+        s = str(val).strip()
+        if not s or s.lower() in ("none", "null", "nan", "dd-mm-yyyy", "yyyy-mm-dd", "optional"):
+            return None
+        # Try ISO format first (YYYY-MM-DD or YYYY/MM/DD)
+        s_clean = s[:10].replace("/", "-")
+        try:
+            return date.fromisoformat(s_clean)
+        except Exception:
+            pass
+        # Try DD-MM-YYYY or DD/MM/YYYY
+        m = re.match(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$", s)
+        if m:
+            try:
+                return date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+            except Exception:
+                pass
+        # Try standard named-month formats
+        for fmt in ("%d-%b-%Y", "%d-%B-%Y", "%d/%b/%Y", "%d/%B/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except Exception:
+                continue
+        raise ValueError(f"Could not parse date '{val}'. Expected format: YYYY-MM-DD or DD-MM-YYYY.")
+
+    @staticmethod
+    def _generate_entity_code(entity_name: str, index: int, used_codes: set) -> str:
+        base = re.sub(r"[^A-Z0-9]+", "_", entity_name.strip().upper()).strip("_")
+        if not base:
+            base = f"SUB_{index}"
+        base = base[:20].strip("_") or f"SUB_{index}"
+        candidate = base
+        suffix = 2
+        while candidate in used_codes:
+            candidate = f"{base[:16]}_{suffix}"
+            suffix += 1
+        used_codes.add(candidate)
+        return candidate
+
+    def create_or_update_profile(
+        self,
+        company_name: str,
+        company_code: str,
+        reporting_currency: str,
+        subsidiaries: List[Dict[str, Any]],
+        coa: Optional[ChartOfAccounts] = None,
+        coa_filename: Optional[str] = None,
+        existing_company_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Creates a new CompanyProfile or updates an existing one with parent, N subsidiaries, and Base COA."""
+        clean_name = company_name.strip()
+        clean_code = company_code.strip().upper()
+        clean_curr = reporting_currency.strip().upper()
+        if not clean_name:
+            raise ValueError("Company name is required.")
+        if not clean_code:
+            raise ValueError("Company code is required.")
+        if not clean_curr:
+            raise ValueError("Reporting currency is required.")
+
+        target_id = existing_company_id or self.slugify_code(clean_code)
+        existing = self.get_company(target_id)
+        if existing_company_id is None and existing is not None:
+            raise ValueError(f"A company profile with code '{clean_code}' already exists.")
+        if existing_company_id is not None and existing is None:
+            raise ValueError(f"Company profile '{existing_company_id}' not found.")
+
+        # Check duplicate company_code against other profiles
+        for other in self.list_companies():
+            if other["company_id"] != target_id and (other.get("company_code") or "").upper() == clean_code:
+                raise ValueError(f"Company code '{clean_code}' is already used by '{other.get('company_name')}'.")
+
+        hierarchy = EntityHierarchy(parent_code=clean_code, reporting_currency=clean_curr)
+        used_codes = {clean_code}
+        hierarchy.add_entity(
+            LegalEntity(
+                entity_code=clean_code,
+                entity_name=clean_name,
+                entity_short_name=clean_code,
+                input_currency=clean_curr,
+                holding_percentage=1.0,
+                consolidation_method="Parent",
+            )
+        )
+
+        for idx, sub in enumerate(subsidiaries, start=1):
+            ent_name = str(sub.get("entity_name") or "").strip()
+            ent_curr = str(sub.get("input_currency") or "").strip().upper()
+            reg_num = str(sub.get("company_reg_number") or "").strip() or None
+            country = str(sub.get("country_of_inc") or "").strip() or None
+            inc_date = self._parse_flexible_date(sub.get("date_of_inc"))
+            acq_date = self._parse_flexible_date(sub.get("acquisition_date"))
+            raw_pct = sub.get("ownership_pct")
+
+            if not ent_name:
+                raise ValueError(f"Subsidiary #{idx}: Entity name is mandatory.")
+            if not ent_curr:
+                raise ValueError(f"Subsidiary #{idx}: Entity currency is mandatory.")
+            if raw_pct is None or str(raw_pct).strip() == "":
+                raise ValueError(f"Subsidiary #{idx}: Ownership percentage is mandatory.")
+            try:
+                pct_val = round(float(raw_pct), 2)
+            except (TypeError, ValueError):
+                raise ValueError(f"Subsidiary #{idx}: Ownership percentage must be a valid number.")
+            if pct_val <= 0.0 or pct_val > 100.0:
+                raise ValueError(f"Subsidiary #{idx}: Ownership percentage must be between 0.01% and 100.00%.")
+            if acq_date is None:
+                raise ValueError(f"Subsidiary #{idx}: Acquisition date is mandatory.")
+
+            existing_code = str(sub.get("entity_code") or "").strip().upper()
+            if existing_code and existing_code not in used_codes:
+                ent_code = existing_code
+                used_codes.add(ent_code)
+            else:
+                ent_code = self._generate_entity_code(ent_name, idx, used_codes)
+
+            holding_ratio = round(pct_val / 100.0, 4)
+            hierarchy.add_entity(
+                LegalEntity(
+                    entity_code=ent_code,
+                    entity_name=ent_name,
+                    entity_short_name=ent_code,
+                    company_reg_number=reg_num,
+                    country_of_inc=country,
+                    date_of_inc=inc_date,
+                    input_currency=ent_curr,
+                    parent_entity_code=clean_code,
+                    immediate_parent=clean_code,
+                    ultimate_parent=clean_code,
+                    holding_percentage=holding_ratio,
+                    acquisition_date=acq_date,
+                    consolidation_method="Full Consolidation" if holding_ratio > 0.5 else "Equity Method",
+                )
+            )
+
+        now_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if existing:
+            resolved_coa = coa if coa is not None else existing.group_coa
+            resolved_coa_fn = coa_filename if coa is not None else existing.coa_filename
+            resolved_coa_ts = now_ts if coa is not None else existing.coa_uploaded_at
+            profile = CompanyProfile(
+                company_id=target_id,
+                company_code=clean_code,
+                company_name=clean_name,
+                reporting_currency=clean_curr,
+                current_period=existing.current_period,
+                number_of_subsidiaries=len(subsidiaries),
+                coa_filename=resolved_coa_fn,
+                coa_uploaded_at=resolved_coa_ts,
+                group_coa=resolved_coa,
+                entity_hierarchy=hierarchy,
+                fx_tables_by_date=existing.fx_tables_by_date,
+                historical_mappings=existing.historical_mappings,
+                period_statuses=existing.period_statuses,
+                created_at=existing.created_at,
+                updated_at=now_ts,
+            )
+        else:
+            if coa is None:
+                raise ValueError("Default Chart of Accounts file is mandatory for creating a profile.")
+            profile = CompanyProfile(
+                company_id=target_id,
+                company_code=clean_code,
+                company_name=clean_name,
+                reporting_currency=clean_curr,
+                current_period=None,
+                number_of_subsidiaries=len(subsidiaries),
+                coa_filename=coa_filename,
+                coa_uploaded_at=now_ts,
+                group_coa=coa,
+                entity_hierarchy=hierarchy,
+                fx_tables_by_date={},
+                historical_mappings=[],
+                created_at=now_ts,
+                updated_at=now_ts,
+            )
+
+        self.save_company(profile)
+        cdir = self._company_dir(target_id)
+        pdata = json.loads((cdir / "profile.json").read_text(encoding="utf-8"))
+        return self._build_company_summary(cdir, pdata)
+
+    def delete_company(self, company_id: str) -> bool:
+        """Deletes a company workspace directory cleanly."""
+        cdir = self._company_dir(company_id)
+        if not cdir.exists():
+            return False
+        shutil.rmtree(cdir)
+        return True
 
     def import_master_workbook(
         self,

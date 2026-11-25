@@ -141,8 +141,19 @@ def test_lineage_tracker_query(sample_conso_tb):
     assert 5 in tiers  # Statement schedule
 
 
-def test_api_agent_traces_and_audit_export():
+def test_api_agent_traces_and_audit_export(sample_conso_tb, monkeypatch):
     """Verifies FastAPI endpoints for agent traces, statements, and audit export."""
+    from fs_conso.web import app as web_app
+    monkeypatch.setattr(
+        web_app.session,
+        "state",
+        ConsolidationState(
+            consolidated_tb=sample_conso_tb,
+            audit_trail=[
+                {"timestamp": "2026-11-24T00:00:00", "stage": "Ingestion", "agent": "ValidatorAgent", "action": "Validated", "status": "PASSED"}
+            ],
+        ),
+    )
     client = TestClient(app)
 
     # Status endpoint includes total_agent_traces

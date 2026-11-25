@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, field_validator
 from fs_conso.agent.graph import build_consolidation_graph
 from fs_conso.agent.state import ConsolidationState
 from fs_conso.config import config
+from fs_conso.core.coa_parser import COAParser
 from fs_conso.core.company_manager import company_manager
 import pandas as pd
 from fs_conso.core.file_classifier import FileClassifier, ClassifiedFile
@@ -54,7 +55,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -84,32 +85,42 @@ pipeline_lock = asyncio.Lock()
 # In-memory session manager with clean multi-company reset capability
 class SessionManager:
     def __init__(self):
-        self.active_company_id: str = "company-p"
+        self.active_company_id: Optional[str] = None
         self.state: Optional[ConsolidationState] = None
         self.graph = build_consolidation_graph()
         self.is_running: bool = False
         self.current_stage: Optional[str] = None
         self.current_node: Optional[str] = None
-        self.initialize_company("company-p", load_samples=True)
+        companies = company_manager.list_companies()
+        if companies:
+            self.initialize_company(companies[0]["company_id"], load_samples=False)
 
-    def initialize_company(self, company_id: str, load_samples: bool = False):
-        self.active_company_id = company_id
+    def initialize_company(self, company_id: Optional[str], load_samples: bool = False):
+        if not company_id:
+            self.active_company_id = None
+            self.state = None
+            self.is_running = False
+            self.current_stage = None
+            self.current_node = None
+            return
+
         prof = company_manager.get_company(company_id)
         if not prof:
-            prof = company_manager.ensure_default_demo_company()
-            self.active_company_id = prof.company_id
+            companies = company_manager.list_companies()
+            if not companies:
+                self.active_company_id = None
+                self.state = None
+                self.is_running = False
+                self.current_stage = None
+                self.current_node = None
+                return
+            prof = company_manager.get_company(companies[0]["company_id"])
 
-        raw_tbs = []
-        if load_samples and company_id == "company-p":
-            sample_dir = config.project_root / "inputs" / "sample_data"
-            if not sample_dir.exists() or not (sample_dir / "TB_Company_P.xlsx").exists():
-                generate_benchmark_dataset(sample_dir)
-            raw_tbs = load_benchmark_raw_tbs(sample_dir)
-
+        self.active_company_id = prof.company_id
         self.state = ConsolidationState(
             company_id=self.active_company_id,
-            period=prof.current_period,
-            raw_tbs=raw_tbs,
+            period=prof.current_period or "",
+            raw_tbs=[],
             current_step=1,
             completed_steps=[],
             is_blocked=False,
@@ -120,11 +131,11 @@ class SessionManager:
         self.current_node = None
 
     def initialize_baseline(self):
-        self.initialize_company("company-p", load_samples=True)
+        self.initialize_company(self.active_company_id, load_samples=False)
 
     def reset(self):
         """Completely restores pristine baseline state for active company."""
-        self.initialize_company(self.active_company_id, load_samples=(self.active_company_id == "company-p"))
+        self.initialize_company(self.active_company_id, load_samples=False)
 
 session = SessionManager()
 
@@ -144,8 +155,40 @@ async def serve_index():
 async def get_status():
     """Returns portal state, active company info, API key status, and current step without secret leaks."""
     has_key = config.validate_api_key_strict()
-    prof = company_manager.get_company(session.active_company_id) or company_manager.ensure_default_demo_company()
-    hierarchy = prof.entity_hierarchy or EntityHierarchy(parent_code=prof.company_id)
+    prof = company_manager.get_company(session.active_company_id) if session.active_company_id else None
+
+    if prof is None:
+        return {
+            "has_active_api_key": has_key,
+            "masked_api_key": config.get_masked_api_key(),
+            "active_company_id": None,
+            "active_company_code": None,
+            "active_company_name": None,
+            "current_period": None,
+            "reporting_currency": None,
+            "ai_confidence_threshold": config.ai_confidence_threshold,
+            "ic_absolute_tolerance": config.ic_absolute_tolerance,
+            "ic_percent_tolerance": config.ic_percent_tolerance,
+            "all_entities": [],
+            "uploaded_entities": [],
+            "missing_prerequisites": [],
+            "hitl_pending_reviews": [],
+            "current_step": 1,
+            "completed_steps": [],
+            "is_blocked": False,
+            "error_message": None,
+            "teacher_score": 0.0,
+            "total_agent_traces": 0,
+            "is_running": False,
+            "current_stage": None,
+            "current_node": None,
+            "token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            "halted_node": None,
+            "halted_stage": None,
+            "remediation_items": [],
+        }
+
+    hierarchy = prof.entity_hierarchy or EntityHierarchy(parent_code=prof.company_code or prof.company_id)
     all_entity_codes = list(hierarchy.entities.keys()) if hierarchy.entities else []
     uploaded_entity_codes = [tb.entity_code for tb in session.state.raw_tbs] if session.state else []
 
@@ -155,11 +198,11 @@ async def get_status():
     if missing_tbs:
         missing_prereqs.append(f"Missing Trial Balance for {len(missing_tbs)} active entities: {', '.join(missing_tbs[:3])}{'...' if len(missing_tbs)>3 else ''}")
 
-    active_period = session.state.period if session.state and session.state.period else prof.current_period
-    fx_table = prof.get_fx_table_for_period(active_period)
+    active_period = (session.state.period if session.state and session.state.period else prof.current_period) or None
+    fx_table = prof.get_fx_table_for_period(active_period) if active_period else None
     missing_fx = FXTranslationEngine.check_missing_rates(list(hierarchy.entities.values()), fx_table, prof.reporting_currency)
     if missing_fx:
-        missing_prereqs.append(f"Missing FX Rates for {active_period} ({', '.join(f'{f}->{t}' for f,t in missing_fx)})")
+        missing_prereqs.append(f"Missing FX Rates{f' for {active_period}' if active_period else ''} ({', '.join(f'{f}->{t}' for f,t in missing_fx)})")
 
     if session.state:
         session.state.missing_prerequisites = missing_prereqs
@@ -168,6 +211,7 @@ async def get_status():
         "has_active_api_key": has_key,
         "masked_api_key": config.get_masked_api_key(),
         "active_company_id": session.active_company_id,
+        "active_company_code": prof.company_code or prof.company_id.upper(),
         "active_company_name": prof.company_name,
         "current_period": active_period,
         "reporting_currency": prof.reporting_currency,
@@ -293,51 +337,195 @@ async def reset_baseline():
 
 # --- Multi-Company Profile Endpoints ---
 
-class CompanyCreateRequest(BaseModel):
-    company_id: str
+class SubsidiaryPayload(BaseModel):
+    entity_code: Optional[str] = None
+    entity_name: str
+    company_reg_number: Optional[str] = None
+    country_of_inc: Optional[str] = None
+    date_of_inc: Optional[str] = None
+    input_currency: str
+    ownership_pct: float
+    acquisition_date: str
+
+    @field_validator("entity_name")
+    @classmethod
+    def validate_entity_name(cls, v: str) -> str:
+        cleaned = (v or "").strip()
+        if not cleaned:
+            raise ValueError("Entity name is mandatory.")
+        return cleaned
+
+    @field_validator("input_currency")
+    @classmethod
+    def validate_entity_currency(cls, v: str) -> str:
+        cleaned = (v or "").strip().upper()
+        if not cleaned:
+            raise ValueError("Entity currency is mandatory.")
+        return cleaned
+
+    @field_validator("ownership_pct")
+    @classmethod
+    def validate_ownership_pct(cls, v: float) -> float:
+        if math.isnan(v) or math.isinf(v):
+            raise ValueError("Ownership percentage must be a finite number.")
+        if v <= 0.0 or v > 100.0:
+            raise ValueError("Ownership percentage must be between 0.01% and 100.00%.")
+        if abs(round(v, 2) - v) > 1e-6:
+            raise ValueError("Ownership percentage supports up to 2 decimal places.")
+        return round(v, 2)
+
+    @field_validator("acquisition_date")
+    @classmethod
+    def validate_acquisition_date(cls, v: str) -> str:
+        cleaned = (v or "").strip()
+        if not cleaned:
+            raise ValueError("Acquisition date is mandatory.")
+        return cleaned
+
+class CompanyProfilePayload(BaseModel):
     company_name: str
-    reporting_currency: str = "INR"
-    current_period: str = "31-Mar-2024"
+    company_code: str
+    reporting_currency: str
+    number_of_subsidiaries: int = Field(0, ge=0, le=100)
+    subsidiaries: List[SubsidiaryPayload] = Field(default_factory=list)
 
 class CompanySwitchRequest(BaseModel):
     company_id: str
 
 @app.get("/api/companies")
 async def list_companies():
-    """Lists all available client company workspaces."""
+    """Lists all available client company profiles."""
     companies = company_manager.list_companies()
-    if not companies:
-        company_manager.ensure_default_demo_company()
-        companies = company_manager.list_companies()
     return {"companies": companies, "active_company_id": session.active_company_id}
+
+@app.get("/api/companies/coa-template")
+async def download_coa_template():
+    """Downloads a clean Excel template for a company's Base Chart of Accounts."""
+    content = COAParser.generate_template_bytes()
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": 'attachment; filename="Base_Chart_of_Accounts_Template.xlsx"',
+            "Cache-Control": "no-cache",
+        },
+    )
 
 @app.post("/api/companies/switch")
 async def switch_company(req: CompanySwitchRequest):
     """Switches active company workspace."""
+    if not company_manager.get_company(req.company_id):
+        raise HTTPException(status_code=404, detail=f"Company profile '{req.company_id}' not found.")
     async with pipeline_lock:
         session.initialize_company(req.company_id, load_samples=False)
     return {"success": True, "active_company_id": session.active_company_id}
 
-@app.post("/api/companies/create")
-async def create_company(req: CompanyCreateRequest):
-    """Creates a new company workspace."""
-    prof = company_manager.create_company(
-        company_id=req.company_id,
-        company_name=req.company_name,
-        reporting_currency=req.reporting_currency,
-        current_period=req.current_period
-    )
-    async with pipeline_lock:
-        session.initialize_company(prof.company_id, load_samples=False)
-    return {"success": True, "company": prof.model_dump(exclude={"group_coa", "entity_hierarchy", "fx_tables_by_date"})}
+def _read_and_parse_coa_upload(file_bytes: bytes, raw_filename: str):
+    if len(file_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded Chart of Accounts file is empty.")
+    if len(file_bytes) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"COA file exceeds maximum {MAX_FILE_SIZE // (1024*1024)}MB limit.")
+    safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", (raw_filename or "coa.xlsx").replace("\\", "/").split("/")[-1])
+    try:
+        coa = COAParser.parse_file(file_bytes, safe_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Failed to parse Chart of Accounts: {sanitize_error_message(str(exc))}")
+    return coa, safe_name
 
-@app.post("/api/companies/load-demo")
-async def load_demo_benchmark():
-    """Loads the reference 4-entity Company P Healthcare benchmark."""
+@app.post("/api/companies/create")
+async def create_company(
+    profile_json: str = Form(...),
+    coa_file: UploadFile = File(...),
+):
+    """Creates a new company profile with parent metadata, N subsidiaries, and mandatory Base COA."""
+    try:
+        payload = CompanyProfilePayload(**json.loads(profile_json))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid profile payload: {sanitize_error_message(str(exc))}")
+
+    if len(payload.subsidiaries) != payload.number_of_subsidiaries:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Expected {payload.number_of_subsidiaries} subsidiary record(s), received {len(payload.subsidiaries)}."
+        )
+
+    coa_bytes = await coa_file.read()
+    coa, safe_coa_name = _read_and_parse_coa_upload(coa_bytes, coa_file.filename or "coa.xlsx")
+
+    try:
+        summary = company_manager.create_or_update_profile(
+            company_name=payload.company_name,
+            company_code=payload.company_code,
+            reporting_currency=payload.reporting_currency,
+            subsidiaries=[s.model_dump() for s in payload.subsidiaries],
+            coa=coa,
+            coa_filename=safe_coa_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     async with pipeline_lock:
-        company_manager.ensure_default_demo_company()
-        session.initialize_company("company-p", load_samples=True)
-    return {"success": True, "message": "Demo benchmark loaded."}
+        session.initialize_company(summary["company_id"], load_samples=False)
+    return {"success": True, "company": summary}
+
+@app.put("/api/companies/{company_id}")
+async def update_company(
+    company_id: str,
+    profile_json: str = Form(...),
+    coa_file: Optional[UploadFile] = File(None),
+):
+    """Updates an existing company profile, subsidiaries, and optionally replaces its Base COA."""
+    try:
+        payload = CompanyProfilePayload(**json.loads(profile_json))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid profile payload: {sanitize_error_message(str(exc))}")
+
+    if len(payload.subsidiaries) != payload.number_of_subsidiaries:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Expected {payload.number_of_subsidiaries} subsidiary record(s), received {len(payload.subsidiaries)}."
+        )
+
+    coa = None
+    safe_coa_name = None
+    if coa_file is not None and coa_file.filename:
+        coa_bytes = await coa_file.read()
+        if len(coa_bytes) > 0:
+            coa, safe_coa_name = _read_and_parse_coa_upload(coa_bytes, coa_file.filename)
+
+    try:
+        summary = company_manager.create_or_update_profile(
+            company_name=payload.company_name,
+            company_code=payload.company_code,
+            reporting_currency=payload.reporting_currency,
+            subsidiaries=[s.model_dump() for s in payload.subsidiaries],
+            coa=coa,
+            coa_filename=safe_coa_name,
+            existing_company_id=company_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if session.active_company_id == company_id:
+        async with pipeline_lock:
+            session.initialize_company(company_id, load_samples=False)
+    return {"success": True, "company": summary}
+
+@app.delete("/api/companies/{company_id}")
+async def delete_company(company_id: str):
+    """Deletes a company profile workspace."""
+    deleted = company_manager.delete_company(company_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Company profile '{company_id}' not found.")
+
+    async with pipeline_lock:
+        if session.active_company_id == company_id:
+            remaining = company_manager.list_companies()
+            next_id = remaining[0]["company_id"] if remaining else None
+            session.initialize_company(next_id, load_samples=False)
+    return {"success": True, "active_company_id": session.active_company_id}
 
 @app.post("/api/companies/import-master")
 async def import_master_workbook(
@@ -376,10 +564,12 @@ async def upload_batch(
     period: Optional[str] = Form(None)
 ):
     """Accepts a batch of 10-15+ files and autonomously classifies & ingests each."""
-    prof = company_manager.get_company(session.active_company_id) or company_manager.ensure_default_demo_company()
-    hierarchy = prof.entity_hierarchy or EntityHierarchy(parent_code=prof.company_id)
+    prof = company_manager.get_company(session.active_company_id) if session.active_company_id else None
+    if prof is None:
+        raise HTTPException(status_code=400, detail="No active Company Profile found. Please create a Company Profile first.")
+    hierarchy = prof.entity_hierarchy or EntityHierarchy(parent_code=prof.company_code or prof.company_id)
     known_ents = list(hierarchy.entities.keys()) if hierarchy.entities else []
-    target_period = period or prof.current_period
+    target_period = period or prof.current_period or config.current_period
 
     files_data = []
     for f in files:
@@ -628,7 +818,9 @@ async def upload_trial_balance(
     # Synchronize into session
     async with pipeline_lock:
         if not session.state:
-            session.initialize_baseline()
+            if not session.active_company_id:
+                raise HTTPException(status_code=400, detail="No active Company Profile found. Please create a Company Profile first.")
+            session.initialize_company(session.active_company_id, load_samples=False)
         replaced = False
         for i, existing in enumerate(session.state.raw_tbs):
             if existing.entity_code.strip().upper() == target_entity:
@@ -666,13 +858,15 @@ async def run_pipeline():
         )
 
     async with pipeline_lock:
-        if not session.state or not session.state.raw_tbs:
-            session.initialize_company(session.active_company_id, load_samples=(session.active_company_id == "company-p"))
+        if not session.active_company_id:
+            raise HTTPException(status_code=400, detail="No active Company Profile found. Please create a Company Profile first.")
+        if not session.state:
+            session.initialize_company(session.active_company_id, load_samples=False)
 
         session.state.company_id = session.active_company_id
         prof = company_manager.get_company(session.active_company_id)
         if prof and not session.state.period:
-            session.state.period = prof.current_period
+            session.state.period = prof.current_period or config.current_period
 
         # Clear prior transient block and flag active run
         session.state.is_blocked = False
@@ -724,7 +918,23 @@ async def run_pipeline():
 async def get_pipeline_data():
     """Returns detailed financial matrices for the active step view with redacted errors."""
     if not session.state:
-        session.initialize_baseline()
+        return {
+            "current_step": 1,
+            "completed_steps": [],
+            "token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            "halted_node": None,
+            "halted_stage": None,
+            "remediation_items": [],
+            "raw_tbs": [],
+            "validation_results": [],
+            "mapping_decisions": [],
+            "translated_tbs": [],
+            "eliminations": None,
+            "consolidated_tb": None,
+            "audit_trail": [],
+            "teacher_evaluation": {},
+            "agent_traces": [],
+        }
 
     st = session.state
     safe_mapping_decisions = []
@@ -787,7 +997,7 @@ async def get_pipeline_data():
 async def get_agent_traces():
     """Returns real LangGraph runtime execution traces with node latencies and sanitized state deltas."""
     if not session.state:
-        session.initialize_baseline()
+        return {"traces": [], "total_nodes_executed": 0, "total_latency_ms": 0.0}
     sanitized_traces = []
     for t in session.state.agent_traces:
         td = t.dict()
@@ -805,9 +1015,7 @@ async def get_agent_traces():
 @app.get("/api/financial-statements")
 async def get_financial_statements():
     """Returns structured IND AS Consolidated Balance Sheet & P&L matrices."""
-    if not session.state:
-        session.initialize_baseline()
-    if not session.state.consolidated_tb:
+    if not session.state or not session.state.consolidated_tb:
         return {
             "success": False,
             "message": "Consolidation not executed yet. Run consolidation pipeline to generate statements.",
@@ -839,7 +1047,7 @@ async def get_cell_lineage_empty():
 async def get_cell_lineage(query: str):
     """Traces cell formula lineage backward from Statement line to Raw Client TB."""
     if not session.state:
-        session.initialize_baseline()
+        return {"success": False, "found": False, "query": query, "message": "No active consolidation run."}
     return LineageTracker.trace_account(query, session.state)
 
 def sanitize_csv_cell(val: Any) -> str:
@@ -856,7 +1064,7 @@ def sanitize_csv_cell(val: Any) -> str:
 async def export_audit_trail(format: str = "json"):
     """Exports full audit trail and agent traces as downloadable JSON or CSV with formula defense."""
     if not session.state:
-        session.initialize_baseline()
+        raise HTTPException(status_code=400, detail="No consolidation run data available to export.")
 
     audit_data = [
         {**ev, "details": sanitize_error_message(ev.get("details", ""))}
