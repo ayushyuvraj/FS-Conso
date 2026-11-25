@@ -6,3 +6,5 @@ __pycache__/
 .env
 inputs/uploads/*
 !inputs/uploads/.gitkeep
+inputs/workspaces/*
+!inputs/workspaces/.gitkeep

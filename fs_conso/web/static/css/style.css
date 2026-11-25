@@ -508,4 +508,46 @@ body.modal-resizing * {
     line-height: 1.3;
 }
 
+/* High-Density Institutional Ledger Table (Option A) */
+.fin-ledger-table th {
+    padding: 0.6rem 0.75rem;
+    white-space: nowrap;
+}
+
+.fin-ledger-table td {
+    padding: 0.65rem 0.75rem;
+    vertical-align: middle;
+}
+
+.fin-ledger-row {
+    transition: background-color 0.15s ease;
+}
+
+.fin-ledger-row:hover {
+    background-color: #F8FAFC !important;
+}
+
+.fin-ledger-row.is-expanded {
+    background-color: #F1F5F9/70 !important;
+}
+
+.chevron-icon {
+    display: inline-block;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chevron-icon.expanded {
+    transform: rotate(90deg);
+}
+
+.company-detail-tray {
+    animation: tray-fade-in 0.2s ease-out;
+}
+
+@keyframes tray-fade-in {
+    from { opacity: 0; transform: translateY(-3px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+
 

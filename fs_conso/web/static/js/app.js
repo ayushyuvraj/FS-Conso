@@ -142,6 +142,12 @@ let editingProfileHasExistingCOA = false;
 let subsidiaryDrafts = [];
 let pendingDeleteCompanyId = null;
 
+// Option A: Directory Search, Sort & Filter State
+let companySearchQuery = "";
+let companySortKey = "name-asc";
+let companyFilterCategory = "ALL"; // 'ALL', 'WITH_SUBS', 'STANDALONE'
+let expandedCompanyIds = new Set();
+
 function buildCurrencyOptionsHtml(selectedCode = "") {
     const placeholder = `<option value="" ${!selectedCode ? 'selected' : ''}>Select currency...</option>`;
     const opts = (typeof TOP_CURRENCIES !== "undefined" ? TOP_CURRENCIES : []).map(c =>
@@ -822,7 +828,7 @@ function renderHeaderStatus() {
 
     if (headerCompany) {
         if (activeNavSection === 'COMPANIES') {
-            headerCompany.textContent = appStatus.active_company_name || "";
+            headerCompany.textContent = "";
         } else {
             headerCompany.textContent = appStatus.active_company_name || "No Active Profile";
         }
@@ -935,7 +941,7 @@ function switchNavSection(section) {
     const headerCompany = document.getElementById("header-active-company-name");
     if (headerCompany) {
         if (section === 'COMPANIES') {
-            headerCompany.textContent = appStatus.active_company_name || "";
+            headerCompany.textContent = "";
         } else {
             headerCompany.textContent = appStatus.active_company_name || "No Active Profile";
         }
@@ -979,17 +985,164 @@ function switchSection(section) {
     }
 }
 
+// -------------------------------------------------------------
+// High-Density Institutional Ledger Directory (Option A)
+// Real-time Search, Sort, Category Filters & 1-Click Expansion
+// -------------------------------------------------------------
+
+function handleCompanySearch(val) {
+    companySearchQuery = (val || "").trim().toLowerCase();
+    const clearBtn = document.getElementById("btn-clear-search");
+    if (clearBtn) clearBtn.classList.toggle("hidden", !companySearchQuery);
+    renderCompanyTableBody();
+}
+
+function clearCompanySearch() {
+    const input = document.getElementById("company-directory-search");
+    if (input) input.value = "";
+    companySearchQuery = "";
+    const clearBtn = document.getElementById("btn-clear-search");
+    if (clearBtn) clearBtn.classList.add("hidden");
+    renderCompanyTableBody();
+}
+
+function setCompanyFilter(category) {
+    companyFilterCategory = category;
+    const chips = {
+        'ALL': document.getElementById("filter-chip-all"),
+        'WITH_SUBS': document.getElementById("filter-chip-with-subs"),
+        'STANDALONE': document.getElementById("filter-chip-standalone")
+    };
+    Object.entries(chips).forEach(([cat, el]) => {
+        if (!el) return;
+        if (cat === category) {
+            el.className = "px-2.5 py-1 rounded-md font-semibold transition cursor-pointer bg-kpmg-navy text-white";
+        } else {
+            el.className = "px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900 transition cursor-pointer";
+        }
+    });
+    renderCompanyTableBody();
+}
+
+function handleCompanySortChange(val) {
+    companySortKey = val;
+    renderCompanyTableBody();
+}
+
+function toggleCompanyExpansion(companyId) {
+    if (!companyId) return;
+    if (expandedCompanyIds.has(companyId)) {
+        expandedCompanyIds.delete(companyId);
+    } else {
+        expandedCompanyIds.add(companyId);
+    }
+    const tray = document.getElementById(`tray-${companyId}`);
+    const chevron = document.getElementById(`chevron-${companyId}`);
+    const row = document.getElementById(`row-${companyId}`);
+    const isNowExpanded = expandedCompanyIds.has(companyId);
+
+    if (tray) tray.classList.toggle("hidden", !isNowExpanded);
+    if (chevron) chevron.classList.toggle("expanded", isNowExpanded);
+    if (row) row.classList.toggle("is-expanded", isNowExpanded);
+
+    updateExpandAllButtonState();
+}
+
+function toggleExpandAllCompanies() {
+    const visibleCompanies = filterAndSortCompanies();
+    if (visibleCompanies.length === 0) return;
+
+    const allExpanded = visibleCompanies.every(c => expandedCompanyIds.has(c.company_id));
+    if (allExpanded) {
+        visibleCompanies.forEach(c => expandedCompanyIds.delete(c.company_id));
+    } else {
+        visibleCompanies.forEach(c => expandedCompanyIds.add(c.company_id));
+    }
+    renderCompanyTableBody();
+}
+
+function updateExpandAllButtonState() {
+    const visibleCompanies = filterAndSortCompanies();
+    const btn = document.getElementById("btn-toggle-expand-all");
+    const label = document.getElementById("expand-all-label");
+    const icon = document.getElementById("expand-all-icon");
+    if (!btn || !label || !icon) return;
+
+    if (visibleCompanies.length > 0 && visibleCompanies.every(c => expandedCompanyIds.has(c.company_id))) {
+        label.textContent = "Collapse All";
+        icon.textContent = "⤡";
+    } else {
+        label.textContent = "Expand All";
+        icon.textContent = "⤢";
+    }
+}
+
+function filterAndSortCompanies() {
+    let list = (availableCompanies || []).slice();
+
+    // 1. Category Filter
+    if (companyFilterCategory === 'WITH_SUBS') {
+        list = list.filter(c => (c.subsidiaries && c.subsidiaries.length > 0));
+    } else if (companyFilterCategory === 'STANDALONE') {
+        list = list.filter(c => (!c.subsidiaries || c.subsidiaries.length === 0));
+    }
+
+    // 2. Search Query Filter
+    if (companySearchQuery) {
+        const q = companySearchQuery;
+        list = list.filter(c => {
+            const nameMatch = (c.company_name || "").toLowerCase().includes(q);
+            const codeMatch = (c.company_code || "").toLowerCase().includes(q);
+            const idMatch = (c.company_id || "").toLowerCase().includes(q);
+            const currMatch = (c.reporting_currency || "").toLowerCase().includes(q);
+            const subMatch = (c.subsidiaries || []).some(s =>
+                (s.entity_name || "").toLowerCase().includes(q) ||
+                (s.company_reg_number || "").toLowerCase().includes(q) ||
+                (s.country_of_inc || "").toLowerCase().includes(q) ||
+                (s.input_currency || "").toLowerCase().includes(q)
+            );
+            return nameMatch || codeMatch || idMatch || currMatch || subMatch;
+        });
+    }
+
+    // 3. Multi-Attribute Sorter
+    list.sort((a, b) => {
+        switch (companySortKey) {
+            case 'name-asc':
+                return (a.company_name || "").localeCompare(b.company_name || "", undefined, { sensitivity: 'base' });
+            case 'name-desc':
+                return (b.company_name || "").localeCompare(a.company_name || "", undefined, { sensitivity: 'base' });
+            case 'code-asc':
+                return (a.company_code || a.company_id || "").localeCompare(b.company_code || b.company_id || "", undefined, { sensitivity: 'base' });
+            case 'subs-desc':
+                return (b.subsidiaries?.length || 0) - (a.subsidiaries?.length || 0);
+            case 'subs-asc':
+                return (a.subsidiaries?.length || 0) - (b.subsidiaries?.length || 0);
+            case 'coa-desc':
+                return (b.coa_account_count || 0) - (a.coa_account_count || 0);
+            case 'date-desc':
+                return (b.updated_at || b.created_at || "").localeCompare(a.updated_at || a.created_at || "");
+            default:
+                return 0;
+        }
+    });
+
+    return list;
+}
+
 function renderCompanyWorkspace() {
     const container = document.getElementById("company-perimeter-content");
     const countPill = document.getElementById("company-count-pill");
+    const toolbar = document.getElementById("company-directory-toolbar");
     if (!container) return;
 
-    const companies = availableCompanies || [];
+    const totalCompanies = availableCompanies || [];
     if (countPill) {
-        countPill.textContent = `${companies.length} ${companies.length === 1 ? 'Company' : 'Companies'}`;
+        countPill.textContent = `${totalCompanies.length} ${totalCompanies.length === 1 ? 'Company' : 'Companies'}`;
     }
 
-    if (companies.length === 0) {
+    if (totalCompanies.length === 0) {
+        if (toolbar) toolbar.classList.add("hidden");
         container.innerHTML = `
             <div class="border border-dashed border-slate-300 rounded-2xl bg-slate-50/60 p-12 text-center space-y-4">
                 <div class="w-12 h-12 rounded-xl bg-blue-50 border border-blue-200 text-kpmg-blue flex items-center justify-center mx-auto">
@@ -1013,9 +1166,41 @@ function renderCompanyWorkspace() {
         return;
     }
 
-    container.innerHTML = companies.map(comp => {
-        const isActive = comp.company_id === appStatus.active_company_id;
+    // Show toolbar and update category badge counts
+    if (toolbar) {
+        toolbar.classList.remove("hidden");
+        toolbar.classList.add("flex");
+    }
+    const countAllEl = document.getElementById("count-filter-all");
+    const countSubsEl = document.getElementById("count-filter-subs");
+    const countStandaloneEl = document.getElementById("count-filter-standalone");
+    if (countAllEl) countAllEl.textContent = String(totalCompanies.length);
+    if (countSubsEl) countSubsEl.textContent = String(totalCompanies.filter(c => c.subsidiaries && c.subsidiaries.length > 0).length);
+    if (countStandaloneEl) countStandaloneEl.textContent = String(totalCompanies.filter(c => !c.subsidiaries || c.subsidiaries.length === 0).length);
+
+    renderCompanyTableBody();
+}
+
+function renderCompanyTableBody() {
+    const container = document.getElementById("company-perimeter-content");
+    if (!container) return;
+
+    const filtered = filterAndSortCompanies();
+    updateExpandAllButtonState();
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="border border-slate-200 rounded-xl bg-slate-50/50 p-8 text-center space-y-2">
+                <p class="text-xs text-slate-600 font-medium">No company profiles match <strong class="text-kpmg-navy">"${escapeHtml(companySearchQuery)}"</strong></p>
+                <button onclick="clearCompanySearch()" class="text-xs text-kpmg-blue font-semibold hover:underline cursor-pointer">Clear search query</button>
+            </div>
+        `;
+        return;
+    }
+
+    const rowsHtml = filtered.map(comp => {
         const subs = comp.subsidiaries || [];
+        const isExpanded = expandedCompanyIds.has(comp.company_id);
         const whollyOwnedCount = subs.filter(s => Number(s.ownership_pct) >= 100).length;
         const nciCount = subs.length - whollyOwnedCount;
         const uniqueCurrencies = Array.from(new Set([
@@ -1025,113 +1210,171 @@ function renderCompanyWorkspace() {
         const coaAccounts = comp.coa_account_count || 0;
         const coaFile = comp.coa_filename || "Chart of Accounts";
 
-        const subsidiaryRowsHtml = subs.length > 0 ? `
-            <div class="border-t border-slate-200 overflow-x-auto">
-                <table class="fin-table">
-                    <thead>
+        const nestedSubsidiaryTable = subs.length > 0 ? `
+            <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead class="bg-slate-100/80 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                         <tr>
-                            <th class="w-10">#</th>
-                            <th>Entity Name</th>
-                            <th>Reg. Number</th>
-                            <th>Country of Inc.</th>
-                            <th>Date of Inc.</th>
-                            <th class="text-center">Currency</th>
-                            <th class="num-cell">Ownership %</th>
-                            <th class="num-cell">NCI %</th>
-                            <th class="text-center">Acquisition Date</th>
+                            <th class="w-8 px-3 py-2 text-center">#</th>
+                            <th class="px-3 py-2">Subsidiary Entity</th>
+                            <th class="px-3 py-2">Reg. Number</th>
+                            <th class="px-3 py-2">Country of Inc.</th>
+                            <th class="px-3 py-2">Date of Inc.</th>
+                            <th class="px-3 py-2 text-center">Currency</th>
+                            <th class="px-3 py-2 text-right">Ownership %</th>
+                            <th class="px-3 py-2 text-right">NCI %</th>
+                            <th class="px-3 py-2 text-center">Acquisition Date</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody class="divide-y divide-slate-100">
                         ${subs.map((s, idx) => `
                             <tr class="hover:bg-slate-50/80 transition">
-                                <td class="font-mono text-[11px] text-slate-400">${idx + 1}</td>
-                                <td class="font-semibold text-kpmg-navy py-2.5">
-                                    <div class="flex items-center space-x-2">
+                                <td class="px-3 py-2 font-mono text-[11px] text-slate-400 text-center">${idx + 1}</td>
+                                <td class="px-3 py-2 font-semibold text-kpmg-navy">
+                                    <div class="flex items-center space-x-1.5">
                                         <span class="w-1.5 h-1.5 rounded-full bg-kpmg-electric flex-shrink-0"></span>
                                         <span>${escapeHtml(s.entity_name)}</span>
                                     </div>
                                 </td>
-                                <td class="font-mono text-[11px] text-slate-600">${s.company_reg_number ? escapeHtml(s.company_reg_number) : '<span class="text-slate-400">—</span>'}</td>
-                                <td class="text-xs text-slate-700">${s.country_of_inc ? escapeHtml(s.country_of_inc) : '<span class="text-slate-400">—</span>'}</td>
-                                <td class="font-mono text-[11px] text-slate-600">${s.date_of_inc ? escapeHtml(s.date_of_inc) : '<span class="text-slate-400">—</span>'}</td>
-                                <td class="text-center">
-                                    <span class="px-2 py-0.5 rounded bg-blue-50 text-kpmg-blue border border-blue-200/70 font-mono text-[11px] font-bold">${escapeHtml(s.input_currency)}</span>
+                                <td class="px-3 py-2 font-mono text-[11px] text-slate-600">${s.company_reg_number ? escapeHtml(s.company_reg_number) : '<span class="text-slate-400">—</span>'}</td>
+                                <td class="px-3 py-2 text-slate-700">${s.country_of_inc ? escapeHtml(s.country_of_inc) : '<span class="text-slate-400">—</span>'}</td>
+                                <td class="px-3 py-2 font-mono text-[11px] text-slate-600">${s.date_of_inc ? escapeHtml(s.date_of_inc) : '<span class="text-slate-400">—</span>'}</td>
+                                <td class="px-3 py-2 text-center">
+                                    <span class="px-2 py-0.5 rounded bg-blue-50 text-kpmg-blue border border-blue-200/70 font-mono text-[10px] font-bold">${escapeHtml(s.input_currency)}</span>
                                 </td>
-                                <td class="num-cell font-mono font-bold text-kpmg-navy">${Number(s.ownership_pct).toFixed(2)}%</td>
-                                <td class="num-cell font-mono text-slate-500">${Number(s.nci_pct).toFixed(2)}%</td>
-                                <td class="text-center font-mono text-[11px] text-slate-700">${s.acquisition_date ? escapeHtml(s.acquisition_date) : '<span class="text-slate-400">—</span>'}</td>
+                                <td class="px-3 py-2 text-right font-mono font-bold text-kpmg-navy">${Number(s.ownership_pct).toFixed(2)}%</td>
+                                <td class="px-3 py-2 text-right font-mono text-slate-500">${Number(s.nci_pct).toFixed(2)}%</td>
+                                <td class="px-3 py-2 text-center font-mono text-[11px] text-slate-700">${s.acquisition_date ? escapeHtml(s.acquisition_date) : '<span class="text-slate-400">—</span>'}</td>
                             </tr>
                         `).join("")}
                     </tbody>
                 </table>
             </div>
         ` : `
-            <div class="px-5 py-3.5 border-t border-slate-200 bg-slate-50/50 text-xs text-slate-500 flex items-center justify-between">
-                <span>Standalone Parent Entity — 0 Subsidiaries configured</span>
-                <button onclick="openEditProfileModal('${escapeHtml(comp.company_id)}')" class="text-kpmg-blue font-semibold hover:underline cursor-pointer">+ Add Subsidiaries</button>
+            <div class="px-4 py-3 rounded-lg border border-slate-200 bg-white text-xs text-slate-500 flex items-center justify-between">
+                <span>Standalone Parent Entity — 0 Subsidiaries configured.</span>
+                <button onclick="event.stopPropagation(); openEditProfileModal('${escapeHtml(comp.company_id)}')" class="text-kpmg-blue font-semibold hover:underline cursor-pointer">+ Add Subsidiaries</button>
             </div>
         `;
 
         return `
-            <article class="rounded-xl border ${isActive ? 'border-kpmg-blue/50 shadow-sm ring-1 ring-kpmg-blue/10' : 'border-slate-200 shadow-xs'} bg-white overflow-hidden transition">
-                <!-- Company Snapshot Header -->
-                <div class="px-5 py-4 bg-slate-50/70 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div class="flex flex-wrap items-center gap-2.5">
-                        <span class="px-2.5 py-1 rounded-md bg-kpmg-navy text-white font-mono text-xs font-bold tracking-wide">${escapeHtml(comp.company_code || comp.company_id)}</span>
-                        <h3 class="text-base font-bold text-kpmg-navy">${escapeHtml(comp.company_name)}</h3>
-                        <span class="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-blue-50 text-kpmg-blue border border-blue-200">${escapeHtml(comp.reporting_currency)}</span>
-                        ${isActive
-                            ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Active Profile</span>`
-                            : `<button onclick="handleCompanySwitch('${escapeHtml(comp.company_id)}')" class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white hover:bg-blue-50 text-slate-600 hover:text-kpmg-blue border border-slate-300 transition cursor-pointer">Set Active</button>`
-                        }
+            <!-- Primary High-Density Company Row (~42px) -->
+            <tr id="row-${escapeHtml(comp.company_id)}"
+                onclick="toggleCompanyExpansion('${escapeHtml(comp.company_id)}')"
+                class="fin-ledger-row ${isExpanded ? 'is-expanded' : ''} cursor-pointer group select-none">
+                
+                <!-- Expand Chevron (1-Click Toggle) -->
+                <td class="px-3 py-2 text-center w-10">
+                    <span id="chevron-${escapeHtml(comp.company_id)}" class="chevron-icon ${isExpanded ? 'expanded' : ''} text-slate-400 group-hover:text-kpmg-blue text-xs font-mono font-bold">▶</span>
+                </td>
+
+                <!-- Company Code -->
+                <td class="px-3 py-2 whitespace-nowrap">
+                    <span class="px-2.5 py-1 rounded bg-kpmg-navy text-white font-mono text-xs font-bold tracking-wide shadow-2xs">${escapeHtml(comp.company_code || comp.company_id)}</span>
+                </td>
+
+                <!-- Company Name -->
+                <td class="px-3 py-2">
+                    <span class="font-bold text-kpmg-navy text-xs group-hover:text-kpmg-blue transition">${escapeHtml(comp.company_name)}</span>
+                </td>
+
+                <!-- Reporting Currency -->
+                <td class="px-3 py-2 text-center whitespace-nowrap">
+                    <span class="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-blue-50 text-kpmg-blue border border-blue-200/80">${escapeHtml(comp.reporting_currency)}</span>
+                </td>
+
+                <!-- Subsidiaries Count & Scope -->
+                <td class="px-3 py-2 whitespace-nowrap">
+                    ${subs.length > 0
+                        ? `<span class="font-semibold text-kpmg-navy text-xs">${subs.length} ${subs.length === 1 ? 'Sub' : 'Subs'}</span> <span class="text-[11px] text-slate-500">(${whollyOwnedCount} wholly owned${nciCount > 0 ? `, ${nciCount} NCI` : ''})</span>`
+                        : `<span class="text-slate-400 text-xs">Standalone (0 subs)</span>`
+                    }
+                </td>
+
+                <!-- Perimeter FX Footprint -->
+                <td class="px-3 py-2 whitespace-nowrap">
+                    <span class="font-mono text-xs font-medium text-slate-700">${escapeHtml(uniqueCurrencies.join(", "))}</span>
+                </td>
+
+                <!-- Base Chart of Accounts -->
+                <td class="px-3 py-2 whitespace-nowrap" title="${escapeHtml(coaFile)}">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full ${coaAccounts > 0 ? 'bg-emerald-500' : 'bg-amber-500'}"></span>
+                        <span class="font-semibold text-xs ${coaAccounts > 0 ? 'text-emerald-700' : 'text-amber-700'}">${coaAccounts} GL Accounts</span>
                     </div>
-                    <div class="flex items-center space-x-2">
+                </td>
+
+                <!-- Last Updated -->
+                <td class="px-3 py-2 whitespace-nowrap font-mono text-[11px] text-slate-500">
+                    ${escapeHtml((comp.updated_at || comp.created_at || '—').slice(0, 16))}
+                </td>
+
+                <!-- 1-Click Actions (Exact 2 Actions: Edit & Delete) -->
+                <td class="px-3 py-2 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+                    <div class="inline-flex items-center space-x-1.5">
                         <button onclick="openEditProfileModal('${escapeHtml(comp.company_id)}')"
-                            class="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-kpmg-navy border border-slate-300 text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer">
-                            <span>Edit / Update COA</span>
+                            class="px-2.5 py-1 rounded-md bg-white hover:bg-slate-100 text-kpmg-navy border border-slate-300 text-xs font-semibold transition cursor-pointer shadow-2xs">
+                            Edit / Update COA
                         </button>
                         <button onclick="openDeleteProfileModal('${escapeHtml(comp.company_id)}')"
-                            class="px-3 py-1.5 rounded-lg bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 hover:border-rose-200 text-xs font-medium transition cursor-pointer">
+                            class="px-2.5 py-1 rounded-md bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 hover:border-rose-200 text-xs font-medium transition cursor-pointer shadow-2xs">
                             Delete
                         </button>
                     </div>
-                </div>
+                </td>
+            </tr>
 
-                <!-- Snapshot Key Metrics Strip -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 bg-white">
-                    <div class="p-4">
-                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Parent &amp; Reporting</div>
-                        <div class="text-sm font-bold text-kpmg-navy mt-1 font-mono">${escapeHtml(comp.company_code || comp.company_id)} &bull; ${escapeHtml(comp.reporting_currency)}</div>
-                        <div class="text-[11px] text-slate-500 mt-0.5">Group functional base currency</div>
-                    </div>
-                    <div class="p-4">
-                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Corporate Scope</div>
-                        <div class="text-sm font-bold text-kpmg-navy mt-1 font-mono">${subs.length} ${subs.length === 1 ? 'Subsidiary' : 'Subsidiaries'} <span class="text-xs font-normal text-slate-500">(+1 Parent)</span></div>
-                        <div class="text-[11px] text-slate-500 mt-0.5">${subs.length > 0 ? `${whollyOwnedCount} wholly owned &bull; ${nciCount} with NCI` : 'No subsidiaries'}</div>
-                    </div>
-                    <div class="p-4">
-                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Currency Footprint</div>
-                        <div class="text-sm font-bold text-kpmg-blue mt-1 font-mono">${escapeHtml(uniqueCurrencies.join(", "))}</div>
-                        <div class="text-[11px] text-slate-500 mt-0.5">${uniqueCurrencies.length} ${uniqueCurrencies.length === 1 ? 'currency' : 'currencies'} in perimeter</div>
-                    </div>
-                    <div class="p-4">
-                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Base Chart of Accounts</div>
-                        <div class="text-sm font-bold ${coaAccounts > 0 ? 'text-emerald-700' : 'text-amber-600'} mt-1 font-mono">${coaAccounts} GL Accounts</div>
-                        <div class="text-[11px] text-slate-500 mt-0.5 truncate" title="${escapeHtml(coaFile)}">${escapeHtml(coaFile)}${comp.coa_uploaded_at ? ` &bull; ${escapeHtml(comp.coa_uploaded_at)}` : ''}</div>
-                    </div>
-                </div>
+            <!-- Expandable Nested Tray for Subsidiaries & Master Details -->
+            <tr id="tray-${escapeHtml(comp.company_id)}" class="company-detail-tray ${isExpanded ? '' : 'hidden'} bg-slate-50/70 border-b border-slate-200">
+                <td colspan="9" class="p-4 pl-10 pr-6">
+                    <div class="space-y-3">
+                        <!-- Summary Ribbon inside Tray -->
+                        <div class="flex flex-wrap items-center justify-between text-xs text-slate-600 gap-2 border-b border-slate-200 pb-2.5">
+                            <div class="flex flex-wrap items-center gap-3">
+                                <span>Parent Code: <strong class="font-mono text-kpmg-navy">${escapeHtml(comp.company_code || comp.company_id)}</strong></span>
+                                <span class="text-slate-300">•</span>
+                                <span>Functional Base: <strong class="font-mono text-kpmg-blue">${escapeHtml(comp.reporting_currency)}</strong></span>
+                                <span class="text-slate-300">•</span>
+                                <span>COA File: <strong class="font-mono text-slate-700">${escapeHtml(coaFile)}</strong> (${coaAccounts} accounts${comp.coa_uploaded_at ? ` • ${escapeHtml(comp.coa_uploaded_at)}` : ''})</span>
+                            </div>
+                            <div class="text-[11px] text-slate-400 font-mono">
+                                Created: ${escapeHtml(comp.created_at || '—')}
+                            </div>
+                        </div>
 
-                <!-- Subsidiaries Snapshot Table -->
-                ${subsidiaryRowsHtml}
-
-                <!-- Snapshot Footer -->
-                <div class="px-5 py-2.5 bg-slate-50/70 border-t border-slate-200 flex flex-wrap items-center justify-between text-[11px] text-slate-500 gap-2">
-                    <span>Created: <strong class="font-mono text-slate-700">${escapeHtml(comp.created_at || '—')}</strong></span>
-                    <span>Last Updated: <strong class="font-mono text-slate-700">${escapeHtml(comp.updated_at || '—')}</strong></span>
-                </div>
-            </article>
+                        <!-- Nested Subsidiary Table -->
+                        ${nestedSubsidiaryTable}
+                    </div>
+                </td>
+            </tr>
         `;
     }).join("");
+
+    container.innerHTML = `
+        <div class="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse fin-ledger-table">
+                    <thead class="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider select-none sticky top-0 z-10">
+                        <tr>
+                            <th class="w-10 px-3 py-2.5 text-center"></th>
+                            <th class="px-3 py-2.5">Code</th>
+                            <th class="px-3 py-2.5">Company Name</th>
+                            <th class="px-3 py-2.5 text-center">Currency</th>
+                            <th class="px-3 py-2.5">Subsidiaries</th>
+                            <th class="px-3 py-2.5">Perimeter FX</th>
+                            <th class="px-3 py-2.5">Base COA</th>
+                            <th class="px-3 py-2.5">Last Updated</th>
+                            <th class="px-3 py-2.5 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-xs text-slate-800">
+                        ${rowsHtml}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
 }
 
 function renderStepperState() {

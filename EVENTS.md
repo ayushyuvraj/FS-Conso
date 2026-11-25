@@ -45,3 +45,19 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Automated tests: 54/54 PASSED.
   - Live server check: HTTP 200 OK.
 
+### [2026-11-25 19:08] Milestone: Option A High-Density Institutional Ledger & Header Clean-up
+- **Requirements Implemented**:
+  1. Complete suppression of client names (such as `Client_1`) in the top navigation header while viewing the Company Profile page.
+  2. Option A High-Density Institutional Ledger Architecture:
+     - Replaced bulky ~450px card layout with sleek single-row (~42px) table layout.
+     - Live multi-attribute search filtering by Company Name, Company Code, Subsidiary Name, Country of Incorporation, and Currency.
+     - Multi-attribute sorting: Name (A-Z, Z-A), Code, Subsidiary Count (high/low), COA Account Count, Recently Updated.
+     - Category filter chips: `All (N)`, `With Subs (N)`, `Standalone (N)`.
+     - 1-Click Expand / Collapse: interactive chevron and row click smoothly expands an inline tray showing the complete subsidiary table and COA/perimeter metadata.
+     - Global "Expand All" / "Collapse All" toggle button.
+     - Removed obsolete "Set Active" / "Active Profile" buttons; row actions strictly limited to `Edit / Update COA` and `Delete`.
+- **Verification**:
+  - Pytest full suite: 54/54 PASSED.
+  - Zero syntax or JavaScript console errors.
+
+
