@@ -216,5 +216,24 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Regression suite: 12/12 PASSED in 6.15s (100% pass rate).
   - Portal server live status: HTTP 200 OK.
 
+### [2026-11-25 22:00] Milestone: Minimalist Institutional Consolidation Launcher Card & Client Name Fix
+- **Requirements Implemented**:
+  1. **Purged All Tutorial / Lecture Clutter**:
+     - Completely removed the "Fresh consolidation run" badge, "Scope & Cutoff", long descriptive paragraphs, and bottom audit explanatory text.
+  2. **Fixed Client Company Name in Dropdown**:
+     - Replaced incorrect variable reference with `availableCompanies` populated from `/api/companies`.
+     - Automatically calls `populateLauncherCompanies()` whenever company profiles are fetched.
+     - Dropdown now immediately displays the exact saved client name (e.g. `Client_1`).
+  3. **High-Taste Institutional Card Redesign**:
+     - Compact, elegant card (`max-w-xl mx-auto py-12`).
+     - Clean side-by-side grid for `Client Company` and `Cutoff Date`.
+     - Quiet live perimeter pill showing currency, subsidiary count, and GL account readiness when a client is selected.
+     - Action button `Start Consolidation` with Emil Kowalski active press physics (`active:scale-[0.98]`).
+- **Verification**:
+  - Node.js syntax check: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Live server verification: HTTP 200 OK, dropdown accurately populated with `Client_1`.
+  - Automated tests: 4/4 PASSED in 4.43s.
+  - Git checkpoint and remote push: commit `d7bf649`.
+
 
 
