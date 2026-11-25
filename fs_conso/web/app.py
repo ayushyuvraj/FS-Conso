@@ -37,6 +37,7 @@ from fs_conso.core.statement_builder import FinancialStatementBuilder
 from fs_conso.core.translator import FXTranslationEngine
 from fs_conso.core.validator import TBValidator
 from fs_conso.models.fx import FXRateEntry, FXRateTable
+from fs_conso.core.run_manager import run_manager
 
 app = FastAPI(
     title="Enterprise Financial Consolidation Portal",
@@ -86,6 +87,9 @@ pipeline_lock = asyncio.Lock()
 class SessionManager:
     def __init__(self):
         self.active_company_id: Optional[str] = None
+        self.active_run_id: Optional[str] = None
+        self.active_run_name: Optional[str] = None
+        self.is_launcher_active: bool = True
         self.state: Optional[ConsolidationState] = None
         self.graph = build_consolidation_graph()
         self.is_running: bool = False
@@ -94,10 +98,13 @@ class SessionManager:
         companies = company_manager.list_companies()
         if companies:
             self.initialize_company(companies[0]["company_id"], load_samples=False)
+            self.is_launcher_active = True
 
     def initialize_company(self, company_id: Optional[str], load_samples: bool = False):
         if not company_id:
             self.active_company_id = None
+            self.active_run_id = None
+            self.active_run_name = None
             self.state = None
             self.is_running = False
             self.current_stage = None
@@ -109,6 +116,8 @@ class SessionManager:
             companies = company_manager.list_companies()
             if not companies:
                 self.active_company_id = None
+                self.active_run_id = None
+                self.active_run_name = None
                 self.state = None
                 self.is_running = False
                 self.current_stage = None
@@ -157,13 +166,16 @@ async def get_status():
     has_key = config.validate_api_key_strict()
     prof = company_manager.get_company(session.active_company_id) if session.active_company_id else None
 
-    if prof is None:
+    if session.is_launcher_active or prof is None:
         return {
             "has_active_api_key": has_key,
             "masked_api_key": config.get_masked_api_key(),
             "active_company_id": None,
             "active_company_code": None,
             "active_company_name": None,
+            "active_run_id": None,
+            "active_run_name": None,
+            "is_launcher_active": True,
             "current_period": None,
             "reporting_currency": None,
             "ai_confidence_threshold": config.ai_confidence_threshold,
@@ -213,6 +225,9 @@ async def get_status():
         "active_company_id": session.active_company_id,
         "active_company_code": prof.company_code or prof.company_id.upper(),
         "active_company_name": prof.company_name,
+        "active_run_id": session.active_run_id,
+        "active_run_name": session.active_run_name,
+        "is_launcher_active": False,
         "current_period": active_period,
         "reporting_currency": prof.reporting_currency,
         "ai_confidence_threshold": config.ai_confidence_threshold,
@@ -392,6 +407,14 @@ class CompanyProfilePayload(BaseModel):
 class CompanySwitchRequest(BaseModel):
     company_id: str
 
+class CreateRunRequest(BaseModel):
+    company_id: str
+    run_date: str
+
+class ResumeRunRequest(BaseModel):
+    run_id: str
+    company_id: Optional[str] = None
+
 @app.get("/api/companies")
 async def list_companies():
     """Lists all available client company profiles."""
@@ -420,6 +443,82 @@ async def switch_company(req: CompanySwitchRequest):
     async with pipeline_lock:
         session.initialize_company(prof.company_id, load_samples=False)
     return {"success": True, "active_company_id": session.active_company_id}
+
+@app.get("/api/runs")
+async def list_consolidation_runs(company_id: Optional[str] = None):
+    """Lists consolidation runs across companies or for a specific company."""
+    runs = run_manager.list_runs(company_id)
+    return {"runs": runs, "active_run_id": session.active_run_id}
+
+@app.post("/api/runs/create")
+async def create_new_run(req: CreateRunRequest):
+    """Creates a fresh consolidation run record with sequential naming and initialized state."""
+    prof = company_manager.get_company(req.company_id)
+    if not prof:
+        raise HTTPException(status_code=404, detail=f"Company profile '{req.company_id}' not found.")
+    async with pipeline_lock:
+        rec = run_manager.create_run(prof.company_id, req.run_date)
+        session.active_company_id = prof.company_id
+        session.active_run_id = rec["run_id"]
+        session.active_run_name = rec["run_name"]
+        session.is_launcher_active = False
+        session.initialize_company(prof.company_id, load_samples=False)
+        session.state.period = req.run_date
+        run_manager.save_run_state(prof.company_id, rec["run_id"], session.state)
+    return {"success": True, "run": rec}
+
+@app.post("/api/runs/resume")
+async def resume_consolidation_run(req: ResumeRunRequest):
+    """Resumes an existing consolidation run and restores full execution state."""
+    rec = run_manager.get_run(req.run_id, req.company_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail=f"Run '{req.run_id}' not found.")
+    async with pipeline_lock:
+        company_id = rec["company_id"]
+        prof = company_manager.get_company(company_id)
+        if not prof:
+            raise HTTPException(status_code=404, detail=f"Company profile '{company_id}' not found.")
+        session.active_company_id = prof.company_id
+        session.active_run_id = rec["run_id"]
+        session.active_run_name = rec["run_name"]
+        session.is_launcher_active = False
+        
+        state_dict = rec.get("state")
+        if state_dict:
+            try:
+                session.state = ConsolidationState(**state_dict)
+            except Exception:
+                session.initialize_company(prof.company_id, load_samples=False)
+                session.state.period = rec.get("run_date", "")
+                session.state.current_step = rec.get("current_step", 1)
+                session.state.completed_steps = rec.get("completed_steps", [])
+        else:
+            session.initialize_company(prof.company_id, load_samples=False)
+            session.state.period = rec.get("run_date", "")
+            session.state.current_step = rec.get("current_step", 1)
+            session.state.completed_steps = rec.get("completed_steps", [])
+
+        target_step = session.state.current_step or 1
+        return {
+            "success": True,
+            "run_id": session.active_run_id,
+            "run_name": session.active_run_name,
+            "company_id": session.active_company_id,
+            "company_name": prof.company_name,
+            "run_date": rec.get("run_date", ""),
+            "reporting_currency": prof.reporting_currency,
+            "current_step": target_step,
+            "completed_steps": session.state.completed_steps,
+            "is_completed": rec.get("is_completed", False),
+        }
+
+@app.post("/api/runs/launcher-mode")
+async def enter_launcher_mode():
+    """Puts session in fresh run launcher mode with cleared top bar."""
+    session.is_launcher_active = True
+    session.active_run_id = None
+    session.active_run_name = None
+    return {"success": True, "is_launcher_active": True}
 
 def _read_and_parse_coa_upload(file_bytes: bytes, raw_filename: str):
     if len(file_bytes) == 0:
@@ -898,6 +997,8 @@ async def run_pipeline():
             session.current_node = None
             raise HTTPException(status_code=500, detail=f"Consolidation pipeline failed: {err_msg}")
         finally:
+            if session.active_company_id and session.active_run_id and session.state:
+                run_manager.save_run_state(session.active_company_id, session.active_run_id, session.state)
             session.is_running = False
 
     return {

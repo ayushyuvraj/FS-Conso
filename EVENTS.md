@@ -188,5 +188,33 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Portal server live status: HTTP 200 OK (`active_company_id: c1`, `is_ready: True`).
   - Git checkpoint and remote push: tagged `checkpoint-consolidation-toolbar-ghost-actions`.
 
+### [2026-11-25 21:30] Milestone: Preliminary Consolidation Run Launcher & Audit Run Ledger Resumption Hub
+- **Requirements Implemented**:
+  1. **Preliminary Consolidation Run Launcher Screen**:
+     - Dedicated `#view-conso-launcher` card presented whenever the user navigates to *Consolidation*.
+     - Header top bar displays blank values for Client Name (`""`), Date (`""`), and Currency (`""`) while on the preliminary launcher.
+     - Dropdown populated dynamically from all client company profiles created in Company Profile (`#launcher-company-select`).
+     - Calendar date picker for selecting the consolidation cutoff date (`#launcher-run-date`).
+     - Real-time company master data snapshot card showing parent code, reporting currency, subsidiary count, and Base COA status upon selection.
+     - Primary button `Start Consolidation Run` enables only after both company and run date are selected.
+     - On launch, generates a sequentially named run (`<Client Name> - Run <N> - <Date>`), initializes `ConsolidationState`, populates top bar indicators, and routes into Step 1 (Ingestion).
+  2. **Audit Section Redesign (Consolidation Run Ledger)**:
+     - Replaced legacy telemetry/observability graphs with an institutional, high-density Consolidation Run Ledger table styled identically to the Company Profile table.
+     - Displays Run Name/Code, Client Company, Cutoff Date, Scope (entity count), Step Status, and Created Timestamp.
+     - Filterable by Client Company, Status (`All`, `In Progress`, `Completed`), and full-text search.
+  3. **Run Resumption and Viewing Hub**:
+     - In-progress runs (`current_step < 6` or incomplete): interactive **Resume** button restores full run state, unlocks prior completed steps, updates top bar indicators, and drops the user directly onto the exact step where work was left off.
+     - Completed runs (`is_completed == True`): **View** button loads financial statements in view-only mode at Step 6.
+     - Added a clean `New Run` button on the consolidation stepper bar to return to the launcher at any time.
+  4. **Persistence & Lifecycle Backend**:
+     - Added `fs_conso/core/run_manager.py` managing isolated per-company run persistence under `inputs/workspaces/{company_id}/runs/{run_id}.json`.
+     - Added FastAPI routes: `GET /api/runs`, `POST /api/runs/create`, `POST /api/runs/resume`, `POST /api/runs/launcher-mode`.
+     - Automatic run state synchronization on pipeline execution and file uploads.
+- **Verification**:
+  - Node.js syntax check: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Automated tests: `tests/test_run_manager.py`: 4/4 PASSED in 5.42s.
+  - Regression suite: 12/12 PASSED in 6.15s (100% pass rate).
+  - Portal server live status: HTTP 200 OK.
+
 
 

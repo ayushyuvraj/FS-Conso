@@ -9,6 +9,14 @@ let pipelineData = {};
 let activeStep = 1;
 let activeSection = 'RUN'; // 'RUN' or 'AUDIT'
 let activeNavSection = localStorage.getItem("fs_conso_active_nav_section") || 'COMPANIES';
+let isLauncherActive = true;
+let isNavigatingDirectly = false;
+let activeRunId = null;
+let activeRunName = null;
+let auditRunsList = [];
+let auditRunSearchQuery = "";
+let auditFilterCompany = "ALL";
+let auditFilterStatus = "ALL";
 let sidebarCollapsed = false;
 let availableCompanies = [];
 let pendingHITLItems = [];
@@ -166,14 +174,14 @@ function initDateFormatSetting() {
         if (selectEl) {
             selectEl.value = currentDateFormat;
         }
-    } catch (_) {}
+    } catch (_) { }
 }
 
 function handleDateFormatChange(val) {
     currentDateFormat = val || "YYYY-MM-DD HH:mm";
     try {
         localStorage.setItem("fs_conso_date_format", currentDateFormat);
-    } catch (_) {}
+    } catch (_) { }
     renderCompanyTableBody();
     showToast("Date Format Updated", `Timestamps formatted as ${currentDateFormat}`, "info");
 }
@@ -760,7 +768,7 @@ async function submitCompanyProfile(e) {
         const url = editId ? `/api/companies/${encodeURIComponent(editId)}` : "/api/companies/create";
         const method = editId ? "PUT" : "POST";
         const res = await fetch(url, { method, body: formData });
-        
+
         let data = {};
         const resText = await res.text();
         try {
@@ -878,7 +886,7 @@ function renderHeaderStatus() {
     const wrapPeriodCurr = document.getElementById("header-period-curr-wrap");
 
     if (wrapPeriodCurr) {
-        if (activeNavSection === 'COMPANIES' || !appStatus.active_company_id) {
+        if (activeNavSection === 'COMPANIES' || isLauncherActive || !appStatus.active_company_id) {
             wrapPeriodCurr.classList.add("hidden");
             wrapPeriodCurr.classList.remove("md:flex", "flex");
         } else {
@@ -888,10 +896,10 @@ function renderHeaderStatus() {
     }
 
     if (dispPeriod) {
-        dispPeriod.textContent = appStatus.active_company_id ? (appStatus.current_period || "Pending Run") : "—";
+        dispPeriod.textContent = (!isLauncherActive && appStatus.active_company_id) ? (appStatus.current_period || "Pending Run") : "—";
     }
     if (dispCurr) {
-        dispCurr.textContent = appStatus.reporting_currency || "—";
+        dispCurr.textContent = (!isLauncherActive && appStatus.active_company_id) ? (appStatus.reporting_currency || "—") : "—";
     }
 
     // Active Company Titles & Badges
@@ -900,10 +908,10 @@ function renderHeaderStatus() {
     const miniCompanyCode = document.getElementById("sidebar-mini-company-code");
 
     if (headerCompany) {
-        if (activeNavSection === 'COMPANIES') {
+        if (activeNavSection === 'COMPANIES' || isLauncherActive || !appStatus.active_company_id) {
             headerCompany.textContent = "";
         } else {
-            headerCompany.textContent = appStatus.active_company_name || "No Active Profile";
+            headerCompany.textContent = appStatus.active_company_name || activeRunName || "No Active Profile";
         }
     }
     if (miniCompanyCode) {
@@ -987,7 +995,7 @@ function switchNavSection(section) {
     activeSection = (section === 'AUDIT') ? 'AUDIT' : 'RUN';
     try {
         localStorage.setItem("fs_conso_active_nav_section", section);
-    } catch (_) {}
+    } catch (_) { }
 
     const itemCompanies = document.getElementById("nav-item-companies");
     const itemPipeline = document.getElementById("nav-item-pipeline");
@@ -1003,50 +1011,48 @@ function switchNavSection(section) {
         itemAudit?.classList.add("active");
     }
 
-    const wrapPeriodCurr = document.getElementById("header-period-curr-wrap");
-    if (wrapPeriodCurr) {
-        if (section === 'COMPANIES' || !appStatus.active_company_id) {
-            wrapPeriodCurr.classList.add("hidden");
-            wrapPeriodCurr.classList.remove("md:flex", "flex");
-        } else {
-            wrapPeriodCurr.classList.remove("hidden");
-            wrapPeriodCurr.classList.add("md:flex");
-        }
+    // Direct click on Consolidation in left sidebar nav defaults to fresh run launcher
+    if (section === 'PIPELINE' && !isNavigatingDirectly) {
+        isLauncherActive = true;
     }
 
-    const headerCompany = document.getElementById("header-active-company-name");
-    if (headerCompany) {
-        if (section === 'COMPANIES') {
-            headerCompany.textContent = "";
-        } else {
-            headerCompany.textContent = appStatus.active_company_name || "No Active Profile";
-        }
-    }
+    renderHeaderStatus();
 
     const viewCompanies = document.getElementById("view-companies");
+    const viewLauncher = document.getElementById("view-conso-launcher");
     const viewPipeline = document.getElementById("view-pipeline-run");
     const viewAudit = document.getElementById("view-observability");
     const stepperContainer = document.getElementById("pipeline-stepper-container");
 
     if (section === 'COMPANIES') {
         viewCompanies?.classList.remove("hidden");
+        viewLauncher?.classList.add("hidden");
         viewPipeline?.classList.add("hidden");
         viewAudit?.classList.add("hidden");
         stepperContainer?.classList.add("hidden");
         renderCompanyWorkspace();
     } else if (section === 'PIPELINE') {
         viewCompanies?.classList.add("hidden");
-        viewPipeline?.classList.remove("hidden");
         viewAudit?.classList.add("hidden");
-        stepperContainer?.classList.remove("hidden");
-        renderStepperState();
-        renderActiveStepContent();
+        if (isLauncherActive) {
+            viewLauncher?.classList.remove("hidden");
+            viewPipeline?.classList.add("hidden");
+            stepperContainer?.classList.add("hidden");
+            populateLauncherCompanies();
+        } else {
+            viewLauncher?.classList.add("hidden");
+            viewPipeline?.classList.remove("hidden");
+            stepperContainer?.classList.remove("hidden");
+            renderStepperState();
+            renderActiveStepContent();
+        }
     } else if (section === 'AUDIT') {
         viewCompanies?.classList.add("hidden");
+        viewLauncher?.classList.add("hidden");
         viewPipeline?.classList.add("hidden");
         viewAudit?.classList.remove("hidden");
         stepperContainer?.classList.add("hidden");
-        renderObservabilityConsole();
+        fetchAndRenderAuditRuns();
     }
 }
 
@@ -1141,9 +1147,8 @@ function renderSortOptionsList() {
         const isSelected = (companySortKey === opt.key);
         return `
             <button type="button" onclick="selectSortOption('${escapeHtml(opt.key)}')"
-                class="w-full text-left px-3 py-1.5 rounded-lg flex items-center justify-between text-xs transition cursor-pointer select-none ${
-                    isSelected ? 'bg-blue-50 text-kpmg-blue font-bold' : 'text-slate-700 hover:bg-slate-50 font-medium'
-                }">
+                class="w-full text-left px-3 py-1.5 rounded-lg flex items-center justify-between text-xs transition cursor-pointer select-none ${isSelected ? 'bg-blue-50 text-kpmg-blue font-bold' : 'text-slate-700 hover:bg-slate-50 font-medium'
+            }">
                 <span>${escapeHtml(opt.label)}</span>
                 ${isSelected ? '<span class="text-kpmg-blue font-bold text-xs">✓</span>' : ''}
             </button>
@@ -2508,275 +2513,419 @@ function onAuditStatusFilter(val) {
     if (activeSection === 'AUDIT') renderObservabilityConsole();
 }
 
-function renderObservabilityConsole() {
-    const container = document.getElementById("view-observability");
+// -------------------------------------------------------------
+// Preliminary Consolidation Run Launcher (Fresh Run Setup)
+// -------------------------------------------------------------
+
+function populateLauncherCompanies() {
+    const select = document.getElementById("launcher-company-select");
+    if (!select) return;
+
+    const curVal = select.value;
+    select.innerHTML = '<option value="">Select client company from profile...</option>' +
+        companiesList.map(c => `
+            <option value="${escapeHtml(c.company_id)}" ${c.company_id === curVal ? 'selected' : ''}>
+                ${escapeHtml(c.company_name || c.company_id)} (${escapeHtml(c.company_code || c.company_id.toUpperCase())}) &bull; ${escapeHtml(c.reporting_currency || 'INR')}
+            </option>
+        `).join("");
+
+    // Initialize date picker to today if empty
+    const dateInput = document.getElementById("launcher-run-date");
+    if (dateInput && !dateInput.value) {
+        const today = new Date().toISOString().split("T")[0];
+        dateInput.value = today;
+    }
+    updateLauncherState();
+}
+
+function onLauncherCompanyChange(companyId) {
+    updateLauncherState();
+}
+
+function onLauncherDateChange(dateVal) {
+    updateLauncherState();
+}
+
+function updateLauncherState() {
+    const compSelect = document.getElementById("launcher-company-select");
+    const dateInput = document.getElementById("launcher-run-date");
+    const snapshotEl = document.getElementById("launcher-company-snapshot");
+    const startBtn = document.getElementById("btn-start-run");
+
+    const compId = compSelect ? compSelect.value : "";
+    const runDate = dateInput ? dateInput.value : "";
+
+    const selectedComp = companiesList.find(c => c.company_id.toLowerCase() === compId.toLowerCase());
+
+    if (selectedComp && snapshotEl) {
+        document.getElementById("snapshot-company-code").textContent = selectedComp.company_code || selectedComp.company_id.toUpperCase();
+        document.getElementById("snapshot-reporting-curr").textContent = selectedComp.reporting_currency || "INR";
+        const subCount = selectedComp.subsidiaries ? selectedComp.subsidiaries.length : (selectedComp.number_of_subsidiaries || 0);
+        document.getElementById("snapshot-subs-count").textContent = `${subCount} Subsidiaries in scope`;
+
+        const coaCount = selectedComp.coa_account_count || 0;
+        const coaStatusEl = document.getElementById("snapshot-coa-status");
+        if (coaStatusEl) {
+            if (coaCount > 0) {
+                coaStatusEl.textContent = `✓ ${coaCount} Accounts`;
+                coaStatusEl.className = "font-semibold text-emerald-600";
+            } else {
+                coaStatusEl.textContent = "Base COA Pending";
+                coaStatusEl.className = "font-semibold text-amber-600";
+            }
+        }
+        snapshotEl.classList.remove("hidden");
+    } else if (snapshotEl) {
+        snapshotEl.classList.add("hidden");
+    }
+
+    if (startBtn) {
+        startBtn.disabled = !(compId && runDate);
+    }
+}
+
+async function triggerStartFreshRun() {
+    const compSelect = document.getElementById("launcher-company-select");
+    const dateInput = document.getElementById("launcher-run-date");
+    const startBtn = document.getElementById("btn-start-run");
+
+    const compId = compSelect ? compSelect.value : "";
+    const runDate = dateInput ? dateInput.value : "";
+
+    if (!compId) {
+        showToast("Company Required", "Please select a client company from the dropdown.", "warning");
+        return;
+    }
+    if (!runDate) {
+        showToast("Run Date Required", "Please select a run cutoff date using the calendar.", "warning");
+        return;
+    }
+
+    if (startBtn) {
+        startBtn.disabled = true;
+        startBtn.innerHTML = `<span>Initializing Run...</span>`;
+    }
+
+    try {
+        const res = await fetch("/api/runs/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ company_id: compId, run_date: runDate })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            showToast("Run Creation Error", data.detail || "Failed to create fresh consolidation run.", "error");
+            if (startBtn) {
+                startBtn.disabled = false;
+                startBtn.innerHTML = `<span>Start Consolidation Run</span><svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>`;
+            }
+            return;
+        }
+
+        isLauncherActive = false;
+        activeRunId = data.run.run_id;
+        activeRunName = data.run.run_name;
+
+        await fetchStatus();
+        await loadPipelineData();
+
+        isNavigatingDirectly = true;
+        switchNavSection('PIPELINE');
+        isNavigatingDirectly = false;
+
+        switchStep(1);
+        showToast("Consolidation Run Initialized", `Created ${data.run.run_name}`, "success");
+    } catch (err) {
+        showToast("Network Error", "Failed to start fresh run: " + err, "error");
+    } finally {
+        if (startBtn) {
+            startBtn.disabled = false;
+            startBtn.innerHTML = `<span>Start Consolidation Run</span><svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>`;
+        }
+    }
+}
+
+function returnToLauncher() {
+    isLauncherActive = true;
+    try {
+        fetch("/api/runs/launcher-mode", { method: "POST" });
+    } catch (_) {}
+    switchNavSection('PIPELINE');
+}
+
+function getStepTitle(step) {
+    switch (step) {
+        case 1: return "Ingestion";
+        case 2: return "Mapping";
+        case 3: return "Translation";
+        case 4: return "Eliminations";
+        case 5: return "Consolidation";
+        case 6: return "Statements";
+        default: return `Step ${step}`;
+    }
+}
+
+// -------------------------------------------------------------
+// Audit Consolidation Run Ledger & Resumption Hub
+// -------------------------------------------------------------
+
+async function fetchAndRenderAuditRuns() {
+    const container = document.getElementById("audit-runs-ledger-content");
     if (!container) return;
 
-    const evalData = pipelineData.teacher_evaluation || {};
-    const auditLog = pipelineData.audit_trail || [];
-    const traces = pipelineData.agent_traces || [];
-    const tokenUsage = pipelineData.token_usage || appStatus.token_usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-    const haltedNode = pipelineData.halted_node || appStatus.halted_node;
-    const isBlocked = appStatus.is_blocked || (haltedNode != null);
-    const isRunning = appStatus.is_running;
-    const score = appStatus.teacher_score || evalData.score || (isBlocked ? 0 : 100);
+    try {
+        const res = await fetch("/api/runs");
+        const data = await res.json();
+        auditRunsList = data.runs || [];
+        populateAuditCompanyFilter();
+        renderAuditRunsTable();
+    } catch (err) {
+        container.innerHTML = `<div class="p-8 text-center text-red-500 text-xs">Failed to load consolidation runs: ${escapeHtml(err.message)}</div>`;
+    }
+}
 
-    const totalLatency = traces.reduce((acc, t) => acc + (t.execution_time_ms || 0), 0);
+function populateAuditCompanyFilter() {
+    const select = document.getElementById("audit-filter-company");
+    if (!select) return;
 
-    let statusBannerHtml = "";
-    if (isRunning) {
-        statusBannerHtml = `
-            <div class="p-4 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 shadow-xs flex items-center justify-between">
-                <div class="flex items-center space-x-3">
-                    <svg class="w-5 h-5 text-amber-600 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
-                    <div>
-                        <h4 class="font-bold text-sm">Consolidation Execution in Progress...</h4>
-                        <p class="text-xs text-amber-800">Current Node: <span class="font-mono font-bold">${appStatus.current_node || 'Orchestrator'}</span> &bull; Stage: ${appStatus.current_stage || 'Processing'}</p>
-                    </div>
-                </div>
-                <span class="px-2.5 py-1 rounded-full bg-amber-200 text-amber-900 text-xs font-mono font-bold">RUNNING</span>
-            </div>
-        `;
-    } else if (isBlocked) {
-        const remediationItems = pipelineData.remediation_items || appStatus.remediation_items || [];
-        let itemsHtml = remediationItems.map(item => `<li class="flex items-start space-x-1.5"><span class="text-red-500 font-bold">&bull;</span><span>${escapeHtml(item)}</span></li>`).join("");
-        statusBannerHtml = `
-            <div class="p-5 rounded-lg bg-red-50 border border-red-300 text-red-900 shadow-xs space-y-3">
-                <div class="flex items-start justify-between">
-                    <div class="flex items-start space-x-3">
-                        <svg class="w-5 h-5 text-red-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                        <div>
-                            <h4 class="font-bold text-sm text-red-900">Consolidation Halted at Node: <span class="font-mono bg-red-100 px-1.5 py-0.5 rounded text-red-800">${escapeHtml(haltedNode || 'validator')}</span></h4>
-                            <p class="text-xs text-red-700 mt-0.5">Stage: <strong>${escapeHtml(pipelineData.halted_stage || appStatus.halted_stage || 'Validation Gate')}</strong></p>
-                        </div>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <button onclick="toggleSettingsDrawer()" class="h-7 px-3 rounded bg-red-600 hover:bg-red-700 text-white font-medium transition text-xs shadow-xs">Configure Key / Threshold</button>
-                    </div>
-                </div>
-                <div class="pt-2 border-t border-red-200">
-                    <span class="text-xs font-bold text-red-950 block mb-1">Remediation Steps:</span>
-                    <ul class="text-xs text-red-800 space-y-1 ml-1">${itemsHtml || '<li>Check inputs and API keys.</li>'}</ul>
-                </div>
-            </div>
-        `;
+    const companies = Array.from(new Set(auditRunsList.map(r => r.company_name).filter(Boolean)));
+    const curVal = select.value;
+    select.innerHTML = '<option value="ALL">All Companies</option>' +
+        companies.map(c => `<option value="${escapeHtml(c)}" ${c === curVal ? 'selected' : ''}>${escapeHtml(c)}</option>`).join("");
+}
+
+function handleRunSearch(val) {
+    auditRunSearchQuery = (val || "").trim().toLowerCase();
+    const clearBtn = document.getElementById("btn-clear-run-search");
+    if (clearBtn) {
+        if (auditRunSearchQuery) clearBtn.classList.remove("hidden");
+        else clearBtn.classList.add("hidden");
+    }
+    renderAuditRunsTable();
+}
+
+function clearRunSearch() {
+    const input = document.getElementById("audit-runs-search");
+    if (input) input.value = "";
+    handleRunSearch("");
+}
+
+function handleRunCompanyFilter(val) {
+    auditFilterCompany = val || "ALL";
+    renderAuditRunsTable();
+}
+
+function handleRunStatusFilter(val) {
+    auditFilterStatus = val || "ALL";
+    renderAuditRunsTable();
+}
+
+function renderAuditRunsTable() {
+    const container = document.getElementById("audit-runs-ledger-content");
+    if (!container) return;
+
+    let filtered = auditRunsList.slice();
+
+    if (auditRunSearchQuery) {
+        filtered = filtered.filter(r =>
+            (r.run_name || "").toLowerCase().includes(auditRunSearchQuery) ||
+            (r.company_name || "").toLowerCase().includes(auditRunSearchQuery) ||
+            (r.run_date || "").toLowerCase().includes(auditRunSearchQuery) ||
+            (r.run_id || "").toLowerCase().includes(auditRunSearchQuery)
+        );
     }
 
-    // 3-Tier Architecture Segregation Banner
-    const tierBannerHtml = `
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 rounded-lg bg-[#001D48] text-white border border-[#0091DA]/30 shadow-md">
-            <div class="space-y-1">
-                <div class="flex items-center space-x-2">
-                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-                    <span class="text-xs font-bold uppercase tracking-wider text-[#ACEAFF]">1. Deterministic Engine</span>
-                </div>
-                <p class="text-[11px] text-white/70">Mathematical Debit = Credit checks, algebraic netting, date-effective FX conversions, and 100% active Excel formula generation.</p>
+    if (auditFilterCompany !== "ALL") {
+        filtered = filtered.filter(r => (r.company_name || "").toLowerCase() === auditFilterCompany.toLowerCase());
+    }
+
+    if (auditFilterStatus !== "ALL") {
+        filtered = filtered.filter(r => (r.status || "").toUpperCase() === auditFilterStatus.toUpperCase());
+    }
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="border border-slate-200 rounded-xl bg-slate-50/50 p-8 text-center space-y-2">
+                <p class="text-xs text-slate-600 font-medium">No consolidation runs match ${auditRunSearchQuery ? `search query <strong class="text-kpmg-navy">"${escapeHtml(auditRunSearchQuery)}"</strong>` : 'current filter criteria'}.</p>
+                <button onclick="clearAllRunFilters()" class="text-xs text-kpmg-blue font-semibold hover:underline cursor-pointer">Reset filters</button>
             </div>
-            <div class="space-y-1">
-                <div class="flex items-center space-x-2">
-                    <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
-                    <span class="text-xs font-bold uppercase tracking-wider text-sky-300">2. Agentic Brain (Gemini)</span>
-                </div>
-                <p class="text-[11px] text-white/70">Autonomous 75-column TB layout unpivoting, multi-table inference, semantic COA mapping, and IC break root-cause diagnosis.</p>
-            </div>
-            <div class="space-y-1">
-                <div class="flex items-center space-x-2">
-                    <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-                    <span class="text-xs font-bold uppercase tracking-wider text-amber-300">3. Human-in-the-Loop</span>
-                </div>
-                <p class="text-[11px] text-white/70">Items below user-defined confidence (${((appStatus.ai_confidence_threshold || 0.85) * 100).toFixed(0)}%) route to review drawer. Approvals persist into Learning Memory.</p>
-            </div>
-        </div>
-    `;
+        `;
+        return;
+    }
 
-    // Telemetry Cards
-    const telemetryCardsHtml = `
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div class="p-4 bg-white border border-kpmg-border rounded-lg shadow-xs space-y-2">
-                <div class="flex items-center justify-between text-xs text-kpmg-muted font-medium">
-                    <span>AI Token Usage</span>
-                    <span class="font-mono px-1.5 py-0.5 rounded bg-blue-50 text-kpmg-blue text-[10px] font-bold">gemini-2.5-flash</span>
-                </div>
-                <div class="flex items-baseline space-x-2">
-                    <span class="text-2xl font-bold font-mono text-kpmg-navy">${tokenUsage.total_tokens ? tokenUsage.total_tokens.toLocaleString() : '0'}</span>
-                    <span class="text-xs text-kpmg-muted font-medium">tokens</span>
-                </div>
-                <div class="grid grid-cols-2 gap-1 text-[11px] pt-1 border-t border-gray-100 text-gray-600">
-                    <div>Prompt: <strong class="font-mono text-gray-800">${tokenUsage.prompt_tokens ? tokenUsage.prompt_tokens.toLocaleString() : '0'}</strong></div>
-                    <div>Output: <strong class="font-mono text-gray-800">${tokenUsage.completion_tokens ? tokenUsage.completion_tokens.toLocaleString() : '0'}</strong></div>
-                </div>
-            </div>
+    const rowsHtml = filtered.map(run => {
+        const isDone = run.is_completed || run.current_step === 6;
+        const stepNum = run.current_step || 1;
+        const stepTitle = getStepTitle(stepNum);
 
-            <div class="p-4 bg-white border border-kpmg-border rounded-lg shadow-xs space-y-2">
-                <div class="flex items-center justify-between text-xs text-kpmg-muted font-medium">
-                    <span>Runtime Performance</span>
-                    <span class="font-mono px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 text-[10px] font-bold">FastAPI + LangGraph</span>
-                </div>
-                <div class="flex items-baseline space-x-2">
-                    <span class="text-2xl font-bold font-mono text-kpmg-navy">${totalLatency > 0 ? totalLatency.toFixed(0) + ' ms' : '< 2 ms'}</span>
-                    <span class="text-xs text-kpmg-muted font-medium">wall latency</span>
-                </div>
-                <div class="grid grid-cols-2 gap-1 text-[11px] pt-1 border-t border-gray-100 text-gray-600">
-                    <div>Nodes: <strong class="font-mono text-gray-800">${traces.length} / 7</strong></div>
-                    <div>Events: <strong class="font-mono text-gray-800">${auditLog.length}</strong></div>
-                </div>
-            </div>
+        let statusBadge = "";
+        if (isDone) {
+            statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">✓ Step 6: Statements (Completed)</span>`;
+        } else {
+            statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">Step ${stepNum}: ${escapeHtml(stepTitle)} (In Progress)</span>`;
+        }
 
-            <div class="p-4 bg-white border border-kpmg-border rounded-lg shadow-xs space-y-2">
-                <div class="flex items-center justify-between text-xs text-kpmg-muted font-medium">
-                    <span>Strict Teacher Grade</span>
-                    <span class="font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold">Autonomous Audit</span>
-                </div>
-                <div class="flex items-baseline space-x-2">
-                    <span class="text-2xl font-bold font-mono text-emerald-600">${score}/100</span>
-                    <span class="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Honors Pass</span>
-                </div>
-                <div class="grid grid-cols-2 gap-1 text-[11px] pt-1 border-t border-gray-100 text-gray-600">
-                    <div>Pillars: <strong class="font-mono text-emerald-700">4 / 4</strong> Maxed</div>
-                    <div>Ind AS: <strong class="font-mono text-emerald-700">110/103/21</strong></div>
-                </div>
-            </div>
+        let actionButton = "";
+        if (isDone) {
+            actionButton = `
+                <button onclick="triggerViewRun('${escapeHtml(run.run_id)}')"
+                    class="h-7 px-3 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-kpmg-navy text-[11px] font-semibold transition flex items-center space-x-1 border border-slate-200 shadow-2xs btn-tactile cursor-pointer"
+                    title="View Final Deliverable (Read-Only)">
+                    <svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    <span>View</span>
+                </button>
+            `;
+        } else {
+            actionButton = `
+                <button onclick="triggerResumeRun('${escapeHtml(run.run_id)}')"
+                    class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1 shadow-xs btn-tactile cursor-pointer"
+                    title="Resume Consolidation Run at Step ${stepNum}">
+                    <svg class="w-3 h-3 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    </svg>
+                    <span>Resume</span>
+                </button>
+            `;
+        }
 
-            <div class="p-4 bg-white border border-kpmg-border rounded-lg shadow-xs space-y-2">
-                <div class="flex items-center justify-between text-xs text-kpmg-muted font-medium">
-                    <span>Formula Lineage</span>
-                    <span class="font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">Zero Hardcoded</span>
-                </div>
-                <div class="flex items-baseline space-x-2">
-                    <span class="text-2xl font-bold font-mono text-kpmg-navy">100%</span>
-                    <span class="text-xs text-kpmg-muted font-medium">formula linked</span>
-                </div>
-                <div class="grid grid-cols-2 gap-1 text-[11px] pt-1 border-t border-gray-100 text-gray-600">
-                    <div>Consolidated: <strong class="font-mono text-emerald-700">SUMIFS</strong></div>
-                    <div>Lineage: <strong class="font-mono text-emerald-700">Raw TB Cells</strong></div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    // Filter audit trail
-    const filteredAudit = auditLog.filter(a => {
-        const matchesQuery = !auditSearchQuery ||
-            (a.stage && a.stage.toLowerCase().includes(auditSearchQuery.toLowerCase())) ||
-            (a.agent && a.agent.toLowerCase().includes(auditSearchQuery.toLowerCase())) ||
-            (a.action && a.action.toLowerCase().includes(auditSearchQuery.toLowerCase())) ||
-            (a.details && a.details.toLowerCase().includes(auditSearchQuery.toLowerCase()));
-
-        const matchesAgent = auditAgentFilter === 'ALL' || (a.agent && a.agent === auditAgentFilter);
-        const matchesStatus = auditStatusFilter === 'ALL' || (a.status && a.status.includes(auditStatusFilter));
-
-        return matchesQuery && matchesAgent && matchesStatus;
-    });
-
-    const auditRows = filteredAudit.map(a => `
-        <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
-            <td class="font-mono text-[11px] text-gray-500 py-2 px-3">${escapeHtml(a.timestamp)}</td>
-            <td class="font-bold text-kpmg-navy py-2 px-3 text-xs">${escapeHtml(a.stage)}</td>
-            <td class="py-2 px-3 text-xs"><span class="px-2 py-0.5 rounded bg-gray-100 font-mono text-[10px] text-gray-700">${escapeHtml(a.agent)}</span></td>
-            <td class="py-2 px-3 text-xs text-gray-800">${escapeHtml(a.action)}</td>
-            <td class="font-bold py-2 px-3 text-xs ${a.status.includes('PASSED') || a.status.includes('SUCCESS') ? 'text-emerald-600' : (a.status.includes('HALT') || a.status.includes('FAIL') ? 'text-red-600' : 'text-amber-600')}">${escapeHtml(a.status)}</td>
-            <td class="text-xs text-gray-600 py-2 px-3">${escapeHtml(a.details)}</td>
-        </tr>
-    `).join("");
+        return `
+            <tr class="hover:bg-slate-50/80 transition-colors border-b border-slate-100">
+                <td class="py-2.5 px-3">
+                    <div class="font-bold text-xs text-kpmg-navy">${escapeHtml(run.run_name || run.run_id)}</div>
+                    <div class="text-[10px] font-mono text-slate-400">${escapeHtml(run.run_id)}</div>
+                </td>
+                <td class="py-2.5 px-3">
+                    <div class="font-semibold text-xs text-slate-800">${escapeHtml(run.company_name || '—')}</div>
+                    <div class="flex items-center space-x-1.5 mt-0.5">
+                        <span class="px-1.5 py-0.2 rounded text-[9px] font-mono bg-slate-100 text-slate-600">${escapeHtml(run.company_code || '—')}</span>
+                        <span class="px-1.5 py-0.2 rounded text-[9px] font-mono bg-blue-50 text-kpmg-blue font-bold">${escapeHtml(run.reporting_currency || 'INR')}</span>
+                    </div>
+                </td>
+                <td class="py-2.5 px-3 font-mono text-xs text-slate-700 font-medium">
+                    ${escapeHtml(run.run_date || '—')}
+                </td>
+                <td class="py-2.5 px-3 text-xs text-slate-600">
+                    <span class="font-semibold text-slate-800">${run.entity_count || 1}</span> Entities
+                </td>
+                <td class="py-2.5 px-3">
+                    ${statusBadge}
+                </td>
+                <td class="py-2.5 px-3 text-xs text-slate-500 whitespace-nowrap">
+                    ${formatDateTime(run.created_at)}
+                </td>
+                <td class="py-2.5 px-3 text-right">
+                    <div class="flex items-center justify-end">
+                        ${actionButton}
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join("");
 
     container.innerHTML = `
-        <div class="space-y-6">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-kpmg-border pb-4">
-                <div>
-                    <h2 class="text-xl font-bold text-kpmg-navy">Audit</h2>
-                    <p class="text-xs text-kpmg-muted mt-0.5">Real-time stage tracking, AI token expenditure, cell lineage provenance, and immutable Ind AS audit trail.</p>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <button onclick="switchSection('RUN')" class="h-8 px-3 rounded bg-white hover:bg-gray-100 border border-kpmg-border text-kpmg-navy text-xs font-semibold transition flex items-center space-x-1 shadow-xs">
-                        <svg class="w-3.5 h-3.5 text-kpmg-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                        <span>Consolidation</span>
-                    </button>
-                    <button onclick="triggerRunPipeline()" class="h-8 px-3.5 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition flex items-center space-x-1 shadow-xs">
-                        <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path></svg>
-                        <span>Run Consolidation</span>
-                    </button>
-                </div>
-            </div>
-
-            ${statusBannerHtml}
-            ${tierBannerHtml}
-            ${telemetryCardsHtml}
-
-            <!-- Cell-Level Lineage Explorer -->
-            <div class="space-y-3 p-4 bg-white border border-kpmg-border rounded-lg shadow-xs">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
-                    <div>
-                        <h4 class="font-bold text-sm text-kpmg-navy">Cell-Level Mathematical Lineage Explorer</h4>
-                        <p class="text-xs text-kpmg-muted">Trace any balance sheet item backward to source entity TB cells through all intermediate transformations.</p>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <select id="lineage-preset-select" onchange="onSelectLineagePreset(this.value)" class="h-8 text-xs px-2.5 rounded border border-kpmg-border bg-slate-50 text-gray-800">
-                            <option value="">Quick Presets...</option>
-                            <option value="Cash and cash equivalents">Cash and cash equivalents</option>
-                            <option value="Trade payables">Trade payables</option>
-                            <option value="Trade receivables">Trade receivables</option>
-                            <option value="Property, plant and equipment">Property, plant and equipment</option>
-                            <option value="Foreign currency translation reserve (FCTR)">FCTR</option>
-                            <option value="Borrowings">Borrowings</option>
-                            <option value="Revenue from operations">Revenue from operations</option>
-                        </select>
-                        <div class="flex items-center">
-                            <input id="lineage-query-input" type="text" placeholder="Account code or line item..." class="h-8 text-xs px-3 rounded-l border border-kpmg-border focus:ring-1 focus:ring-kpmg-blue w-48 font-mono">
-                            <button onclick="executeLineageTrace()" class="h-8 px-3 rounded-r bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-medium transition flex items-center space-x-1">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                                <span>Trace</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div id="lineage-results-container" class="pt-2">
-                    <div class="p-4 text-center text-kpmg-muted text-xs">
-                        Select an account from the preset dropdown or type a query above to view the 5-tier mathematical lineage graph.
-                    </div>
-                </div>
-            </div>
-
-            <!-- Audit Trail Log -->
-            <div class="space-y-3">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                        <h4 class="font-bold text-sm text-kpmg-navy">Audit Trail</h4>
-                        <p class="text-xs text-kpmg-muted">Immutable, timestamped event log recording every validation, mapping, translation, and elimination decision.</p>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <input id="audit-search-input" type="text" value="${auditSearchQuery}" oninput="onAuditSearch(this.value)" placeholder="Search audit trail..." class="h-8 text-xs px-3 rounded border border-kpmg-border focus:ring-1 focus:ring-kpmg-blue w-40 sm:w-56">
-                        <a href="/api/audit-trail/export?format=json" download class="h-8 px-2.5 rounded bg-white hover:bg-gray-100 text-kpmg-navy text-xs font-medium border border-kpmg-border transition flex items-center space-x-1 shadow-xs">
-                            <span>JSON</span>
-                        </a>
-                        <a href="/api/audit-trail/export?format=csv" download class="h-8 px-2.5 rounded bg-white hover:bg-gray-100 text-kpmg-navy text-xs font-medium border border-kpmg-border transition flex items-center space-x-1 shadow-xs">
-                            <span>CSV</span>
-                        </a>
-                    </div>
-                </div>
-                <div class="overflow-x-auto min-h-[380px] max-h-[calc(100vh-320px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
-                    <table class="fin-table">
-                        <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
-                            <tr>
-                                <th class="w-32">Timestamp</th>
-                                <th class="w-24">Stage</th>
-                                <th class="w-36">Agent</th>
-                                <th>Action Taken</th>
-                                <th class="w-24">Status</th>
-                                <th>Details / Provenance</th>
-                            </tr>
-                        </thead>
-                        <tbody>${auditRows || '<tr><td colspan="6" class="p-6 text-center text-kpmg-muted">No matching audit events found.</td></tr>'}</tbody>
-                    </table>
-                </div>
-            </div>
+        <div class="overflow-x-auto rounded-xl border border-slate-200/90 shadow-2xs bg-white">
+            <table class="w-full text-left border-collapse text-xs">
+                <thead class="bg-slate-50/90 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 z-10 select-none">
+                    <tr>
+                        <th class="py-2.5 px-3">Run Name / Code</th>
+                        <th class="py-2.5 px-3">Client Company</th>
+                        <th class="py-2.5 px-3">Run Date (Cutoff)</th>
+                        <th class="py-2.5 px-3">Scope</th>
+                        <th class="py-2.5 px-3">Progress / Status</th>
+                        <th class="py-2.5 px-3">Created</th>
+                        <th class="py-2.5 px-3 text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 bg-white">
+                    ${rowsHtml}
+                </tbody>
+            </table>
         </div>
     `;
+}
 
-    if (!currentLineageTrace) {
-        executeLineageTrace("Cash and cash equivalents");
-    } else {
-        renderLineageGraph(currentLineageTrace);
+function clearAllRunFilters() {
+    auditRunSearchQuery = "";
+    auditFilterCompany = "ALL";
+    auditFilterStatus = "ALL";
+    const searchInput = document.getElementById("audit-runs-search");
+    if (searchInput) searchInput.value = "";
+    const compSelect = document.getElementById("audit-filter-company");
+    if (compSelect) compSelect.value = "ALL";
+    const statusSelect = document.getElementById("audit-filter-status");
+    if (statusSelect) statusSelect.value = "ALL";
+    renderAuditRunsTable();
+}
+
+async function triggerResumeRun(runId) {
+    try {
+        const res = await fetch("/api/runs/resume", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ run_id: runId })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            showToast("Resume Failed", data.detail || "Unable to resume run", "error");
+            return;
+        }
+
+        isLauncherActive = false;
+        activeRunId = data.run_id;
+        activeRunName = data.run_name;
+
+        await fetchStatus();
+        await loadPipelineData();
+
+        isNavigatingDirectly = true;
+        switchNavSection('PIPELINE');
+        isNavigatingDirectly = false;
+
+        const targetStep = Math.max(1, Math.min(6, data.current_step || 1));
+        switchStep(targetStep);
+
+        showToast("Run Resumed", `Resumed ${data.run_name} at Step ${targetStep}`, "success");
+    } catch (err) {
+        showToast("Resume Error", "Network error resuming run: " + err, "error");
     }
+}
+
+async function triggerViewRun(runId) {
+    try {
+        const res = await fetch("/api/runs/resume", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ run_id: runId })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            showToast("View Failed", data.detail || "Unable to view run", "error");
+            return;
+        }
+
+        isLauncherActive = false;
+        activeRunId = data.run_id;
+        activeRunName = data.run_name;
+
+        await fetchStatus();
+        await loadPipelineData();
+
+        isNavigatingDirectly = true;
+        switchNavSection('PIPELINE');
+        isNavigatingDirectly = false;
+
+        switchStep(6);
+        showToast("Viewing Run", `Loaded completed statements for ${data.run_name}`, "info");
+    } catch (err) {
+        showToast("View Error", "Network error opening run: " + err, "error");
+    }
+}
+
+function renderObservabilityConsole() {
+    fetchAndRenderAuditRuns();
 }
 
 // PIPELINE EXECUTION TRIGGER

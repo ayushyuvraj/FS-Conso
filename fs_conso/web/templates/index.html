@@ -47,21 +47,25 @@
 <body class="bg-kpmg-canvas text-kpmg-text font-sans antialiased min-h-screen flex flex-col">
 
     <!-- 1. Luxury High-Finance Navigation Bar (KPMG Clara Executive Frosted Glass) -->
-    <header class="h-16 bg-white border-b border-slate-200/90 shadow-xs px-4 md:px-6 flex items-center justify-between sticky top-0 z-40 relative">
+    <header
+        class="h-16 bg-white border-b border-slate-200/90 shadow-xs px-4 md:px-6 flex items-center justify-between sticky top-0 z-40 relative">
         <!-- Left: Merged KPMG Brand / Sidebar Toggle (Morphs to Hamburger on Hover) & Title -->
         <div class="flex items-center space-x-3">
             <!-- Merged KPMG Logo / Hamburger Toggle Button (Morphs to Hamburger on Hover) -->
-            <button id="btn-toggle-sidebar" onclick="toggleSidebar()" 
-                class="group relative h-10 px-2.5 rounded-lg hover:bg-slate-100 text-kpmg-navy transition-all duration-200 flex items-center justify-center focus:outline-none border border-transparent hover:border-slate-200/80 btn-tactile cursor-pointer" 
+            <button id="btn-toggle-sidebar" onclick="toggleSidebar()"
+                class="group relative h-10 px-2.5 rounded-lg hover:bg-slate-100 text-kpmg-navy transition-all duration-200 flex items-center justify-center focus:outline-none border border-transparent hover:border-slate-200/80 btn-tactile cursor-pointer"
                 title="Toggle Sidebar Navigation (Ctrl+B)">
                 <!-- Default State: KPMG Corporate Logo -->
-                <div class="flex items-center transition-all duration-200 ease-out group-hover:opacity-0 group-hover:scale-90 group-hover:pointer-events-none">
+                <div
+                    class="flex items-center transition-all duration-200 ease-out group-hover:opacity-0 group-hover:scale-90 group-hover:pointer-events-none">
                     <img src="/static/img/kpmg-logo.svg" alt="KPMG" class="h-6 w-auto object-contain" />
                 </div>
                 <!-- Hover State: Hamburger Menu Icon -->
-                <div class="absolute inset-0 flex items-center justify-center opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 ease-out text-kpmg-navy pointer-events-none">
+                <div
+                    class="absolute inset-0 flex items-center justify-center opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 ease-out text-kpmg-navy pointer-events-none">
                     <svg class="w-5 h-5 text-kpmg-navy" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6h16M4 12h16M4 18h16" />
                     </svg>
                 </div>
             </button>
@@ -69,13 +73,17 @@
             <div class="h-5 w-[1px] bg-slate-200 hidden sm:block"></div>
 
             <div class="flex items-center">
-                <span class="font-bold text-sm md:text-base tracking-tight text-kpmg-navy">Enterprise Consolidation</span>
+                <span class="font-bold text-sm md:text-base tracking-tight text-kpmg-navy">Enterprise
+                    Consolidation</span>
             </div>
         </div>
 
         <!-- Center: Company Name (Absolute Center of Screen) -->
-        <div class="hidden sm:flex items-center justify-center absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none max-w-[45vw] text-center">
-            <span id="header-active-company-name" class="font-bold text-sm md:text-base tracking-tight text-kpmg-navy truncate pointer-events-auto">No Active Profile</span>
+        <div
+            class="hidden sm:flex items-center justify-center absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none max-w-[45vw] text-center">
+            <span id="header-active-company-name"
+                class="font-bold text-sm md:text-base tracking-tight text-kpmg-navy truncate pointer-events-auto">No
+                Active Profile</span>
         </div>
 
         <!-- Right Actions: HITL Review, Period, API Key -->
@@ -97,8 +105,7 @@
             <!-- Gemini Status Dot (Top Right) -->
             <div id="key-pill"
                 class="w-7 h-7 rounded-full flex items-center justify-center hover:bg-slate-100 cursor-pointer transition"
-                onclick="toggleSettingsDrawer()"
-                title="Gemini AI: Active">
+                onclick="toggleSettingsDrawer()" title="Gemini AI: Active">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-500" id="key-dot"></span>
                 <span id="key-label" class="hidden"></span>
             </div>
@@ -106,16 +113,18 @@
     </header>
 
     <!-- Collapsible Left Navigation Sidebar (Executive White Theme) -->
-    <aside id="sidebar-nav" class="fixed top-16 left-0 bottom-0 bg-white border-r border-slate-200/90 shadow-xs text-slate-800 flex flex-col z-30 select-none">
+    <aside id="sidebar-nav"
+        class="fixed top-16 left-0 bottom-0 bg-white border-r border-slate-200/90 shadow-xs text-slate-800 flex flex-col z-30 select-none">
         <!-- Primary 3-Option Navigation List -->
         <nav class="flex-1 p-2 space-y-1.5 overflow-y-auto overflow-x-hidden">
             <!-- Option 1: Company Profile -->
-            <button id="nav-item-companies" onclick="switchNavSection('COMPANIES')" 
-                data-tooltip="Company Profile"
+            <button id="nav-item-companies" onclick="switchNavSection('COMPANIES')" data-tooltip="Company Profile"
                 class="sidebar-nav-item w-full h-11 px-3 rounded-lg text-xs font-medium flex items-center text-slate-700 transition">
-                <div class="sidebar-icon-box flex-shrink-0 w-6 h-6 flex items-center justify-center text-slate-400 mr-3">
+                <div
+                    class="sidebar-icon-box flex-shrink-0 w-6 h-6 flex items-center justify-center text-slate-400 mr-3">
                     <svg class="w-5 h-5 nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
                 </div>
                 <div class="sidebar-label flex-1 flex items-center justify-between text-left">
@@ -124,12 +133,13 @@
             </button>
 
             <!-- Option 2: Consolidation -->
-            <button id="nav-item-pipeline" onclick="switchNavSection('PIPELINE')" 
-                data-tooltip="Consolidation"
+            <button id="nav-item-pipeline" onclick="switchNavSection('PIPELINE')" data-tooltip="Consolidation"
                 class="sidebar-nav-item active w-full h-11 px-3 rounded-lg text-xs font-medium flex items-center text-slate-700 transition">
-                <div class="sidebar-icon-box flex-shrink-0 w-6 h-6 flex items-center justify-center text-kpmg-blue mr-3">
+                <div
+                    class="sidebar-icon-box flex-shrink-0 w-6 h-6 flex items-center justify-center text-kpmg-blue mr-3">
                     <svg class="w-5 h-5 nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                 </div>
                 <div class="sidebar-label flex-1 flex items-center justify-between text-left">
@@ -138,12 +148,13 @@
             </button>
 
             <!-- Option 3: Audit -->
-            <button id="nav-item-audit" onclick="switchNavSection('AUDIT')" 
-                data-tooltip="Audit"
+            <button id="nav-item-audit" onclick="switchNavSection('AUDIT')" data-tooltip="Audit"
                 class="sidebar-nav-item w-full h-11 px-3 rounded-lg text-xs font-medium flex items-center text-slate-700 transition">
-                <div class="sidebar-icon-box flex-shrink-0 w-6 h-6 flex items-center justify-center text-slate-400 mr-3">
+                <div
+                    class="sidebar-icon-box flex-shrink-0 w-6 h-6 flex items-center justify-center text-slate-400 mr-3">
                     <svg class="w-5 h-5 nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                 </div>
                 <div class="sidebar-label flex-1 flex items-center justify-between text-left">
@@ -155,15 +166,19 @@
             <div class="sidebar-expanded-only pt-4 px-2 pb-2">
                 <div class="text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-2">Workflow Actions</div>
                 <div class="space-y-1.5">
-                    <button onclick="triggerRunPipeline()" class="w-full h-8 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white font-semibold text-xs transition shadow-xs flex items-center justify-center space-x-1.5 btn-tactile">
+                    <button onclick="triggerRunPipeline()"
+                        class="w-full h-8 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white font-semibold text-xs transition shadow-xs flex items-center justify-center space-x-1.5 btn-tactile">
                         <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                         </svg>
                         <span>Run Consolidation</span>
                     </button>
-                    <button onclick="openBatchUploadModal()" class="w-full h-8 px-3 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-kpmg-navy border border-slate-200 text-xs font-medium transition flex items-center justify-center space-x-1.5 btn-tactile">
+                    <button onclick="openBatchUploadModal()"
+                        class="w-full h-8 px-3 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-kpmg-navy border border-slate-200 text-xs font-medium transition flex items-center justify-center space-x-1.5 btn-tactile">
                         <svg class="w-3.5 h-3.5 text-kpmg-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                         </svg>
                         <span>Batch Ingest Files</span>
                     </button>
@@ -173,15 +188,16 @@
 
         <!-- Settings Section at Bottom of Sidebar -->
         <div class="p-2 border-t border-slate-200/90">
-            <button id="nav-item-settings" onclick="toggleSettingsDrawer()" 
-                data-tooltip="Settings"
+            <button id="nav-item-settings" onclick="toggleSettingsDrawer()" data-tooltip="Settings"
                 class="sidebar-nav-item w-full h-10 px-3 rounded-lg text-xs font-medium flex items-center text-slate-700 hover:text-kpmg-blue hover:bg-slate-100 transition">
-                <div class="sidebar-icon-box flex-shrink-0 w-6 h-6 flex items-center justify-center text-slate-500 mr-3">
+                <div
+                    class="sidebar-icon-box flex-shrink-0 w-6 h-6 flex items-center justify-center text-slate-500 mr-3">
                     <svg class="w-5 h-5 nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
                         </path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                     </svg>
                 </div>
                 <div class="sidebar-label flex-1 flex items-center justify-between text-left">
@@ -194,220 +210,410 @@
     <!-- Main Workspace Layout Container (Offset by Sidebar Width) -->
     <div id="main-layout-container" class="flex-1 flex flex-col min-h-[calc(100vh-4rem)] bg-white">
 
-    <!-- 2. Pipeline Controls & Stepper Bar -->
-    <div id="pipeline-stepper-container">
-        <!-- Gated 6-Step Primary Stepper Bar -->
-        <nav class="bg-white border-b border-kpmg-border px-6 py-3 sticky top-16 z-30 shadow-xs">
-            <div class="w-full px-2 md:px-4 flex items-center justify-between">
-                <div class="flex items-center space-x-2 md:space-x-4 w-full">
-                    <!-- Step 1: Ingestion -->
-                    <div id="step-btn-1" onclick="switchStep(1)"
-                        class="step-tab active flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-pointer">
-                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">1</span>
-                        <span>Ingestion</span>
-                    </div>
-                    <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+        <!-- 2. Pipeline Controls & Stepper Bar -->
+        <div id="pipeline-stepper-container">
+            <!-- Gated 6-Step Primary Stepper Bar -->
+            <nav class="bg-white border-b border-kpmg-border px-6 py-3 sticky top-16 z-30 shadow-xs">
+                <div class="w-full px-2 md:px-4 flex items-center justify-between">
+                    <div class="flex items-center space-x-2 md:space-x-4 w-full">
+                        <!-- Step 1: Ingestion -->
+                        <div id="step-btn-1" onclick="switchStep(1)"
+                            class="step-tab active flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-pointer">
+                            <span
+                                class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">1</span>
+                            <span>Ingestion</span>
+                        </div>
+                        <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
 
-                    <!-- Step 2: Mapping -->
-                    <div id="step-btn-2" onclick="switchStep(2)"
-                        class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">2</span>
-                        <span>Mapping</span>
-                    </div>
-                    <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+                        <!-- Step 2: Mapping -->
+                        <div id="step-btn-2" onclick="switchStep(2)"
+                            class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                            <span
+                                class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">2</span>
+                            <span>Mapping</span>
+                        </div>
+                        <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
 
-                    <!-- Step 3: Translation -->
-                    <div id="step-btn-3" onclick="switchStep(3)"
-                        class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">3</span>
-                        <span>Translation</span>
-                    </div>
-                    <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+                        <!-- Step 3: Translation -->
+                        <div id="step-btn-3" onclick="switchStep(3)"
+                            class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                            <span
+                                class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">3</span>
+                            <span>Translation</span>
+                        </div>
+                        <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
 
-                    <!-- Step 4: Eliminations -->
-                    <div id="step-btn-4" onclick="switchStep(4)"
-                        class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">4</span>
-                        <span>Eliminations</span>
-                    </div>
-                    <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+                        <!-- Step 4: Eliminations -->
+                        <div id="step-btn-4" onclick="switchStep(4)"
+                            class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                            <span
+                                class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">4</span>
+                            <span>Eliminations</span>
+                        </div>
+                        <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
 
-                    <!-- Step 5: Consolidation -->
-                    <div id="step-btn-5" onclick="switchStep(5)"
-                        class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">5</span>
-                        <span>Consolidation</span>
-                    </div>
-                    <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+                        <!-- Step 5: Consolidation -->
+                        <div id="step-btn-5" onclick="switchStep(5)"
+                            class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                            <span
+                                class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">5</span>
+                            <span>Consolidation</span>
+                        </div>
+                        <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
 
-                    <!-- Step 6: Financial Statements -->
-                    <div id="step-btn-6" onclick="switchStep(6)"
-                        class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
-                        <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">6</span>
-                        <span>Statements</span>
+                        <!-- Step 6: Financial Statements -->
+                        <div id="step-btn-6" onclick="switchStep(6)"
+                            class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                            <span
+                                class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">6</span>
+                            <span>Statements</span>
+                        </div>
                     </div>
+
+                    <!-- Right Action: Return to New Run Launcher -->
+                    <button onclick="returnToLauncher()"
+                        class="ml-3 flex-shrink-0 h-7 px-2.5 rounded text-[11px] font-medium text-slate-500 hover:text-kpmg-navy hover:bg-slate-100 border border-slate-200 transition flex items-center space-x-1 btn-tactile cursor-pointer"
+                        title="Start New Consolidation Run">
+                        <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span>New Run</span>
+                    </button>
+                </div>
+            </nav>
+        </div>
+
+        <!-- 4. Execution Progress Modal / Spinner -->
+        <div id="pipeline-progress"
+            class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div
+                class="bg-white rounded-xl shadow-2xl border border-kpmg-border p-6 max-w-md w-full text-center space-y-4">
+                <div class="w-12 h-12 rounded-full border-4 border-kpmg-blue border-t-transparent animate-spin mx-auto">
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm text-kpmg-text" id="progress-step-title">Executing Multi-Agent
+                        Consolidation...</h3>
+                    <p class="text-xs text-kpmg-muted mt-1" id="progress-substep-text">Orchestrating agents with Gemini
+                        Brain</p>
                 </div>
             </div>
-        </nav>
-    </div>
-
-    <!-- 4. Execution Progress Modal / Spinner -->
-    <div id="pipeline-progress"
-        class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl border border-kpmg-border p-6 max-w-md w-full text-center space-y-4">
-            <div class="w-12 h-12 rounded-full border-4 border-kpmg-blue border-t-transparent animate-spin mx-auto"></div>
-            <div>
-                <h3 class="font-bold text-sm text-kpmg-text" id="progress-step-title">Executing Multi-Agent Consolidation...</h3>
-                <p class="text-xs text-kpmg-muted mt-1" id="progress-substep-text">Orchestrating agents with Gemini Brain</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Main Workspace View Container (Full-Bleed Clean White Canvas) -->
-    <main class="flex-1 w-full px-6 md:px-8 pt-3 pb-6 space-y-4 bg-white">
-        <!-- Section A: Primary Consolidation Stepper Views -->
-        <div id="view-pipeline-run" class="space-y-6 w-full">
-            <!-- Dynamic Step Containers (Full-Bleed, Zero Artificial Card Box) -->
-            <div id="step-content" class="w-full space-y-6">
-                <!-- Content loaded dynamically via app.js -->
-                <div class="flex items-center justify-center h-64 text-kpmg-muted text-sm">
-                    Loading consolidation workspace...
-                </div>
-            </div>
         </div>
 
-        <!-- Section B: Audit (Live Telemetry, Full Width) -->
-        <div id="view-observability" class="hidden space-y-6 w-full">
-            <div class="flex items-center justify-center h-64 text-kpmg-muted text-sm">
-                Loading Audit Console...
-            </div>
-        </div>
-
-        <!-- Section C: Company Profile (Full Width, High-Density Ledger Directory) -->
-        <div id="view-companies" class="hidden space-y-3.5 w-full">
-            <div class="space-y-3 w-full">
-                <!-- Page Title Header (Compact, Zero Wasted Space) -->
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/80 pb-2.5 gap-2">
-                    <div>
-                        <h2 class="text-xl font-bold text-kpmg-navy tracking-tight">Company Profile</h2>
-                        <p class="text-xs text-slate-500 mt-0.5" id="company-profile-desc">Manage parent company profiles, subsidiary ownership structures, and base Charts of Accounts.</p>
+        <!-- Main Workspace View Container (Full-Bleed Clean White Canvas) -->
+        <main class="flex-1 w-full px-6 md:px-8 pt-3 pb-6 space-y-4 bg-white">
+            <!-- Section 0: Preliminary Consolidation Run Launcher (Fresh Run Setup) -->
+            <div id="view-conso-launcher" class="hidden w-full max-w-2xl mx-auto py-10 space-y-6">
+                <!-- Luxury Institutional Launcher Card -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl shadow-xs p-8 space-y-6">
+                    <!-- Header -->
+                    <div class="border-b border-slate-100 pb-5">
+                        <div class="flex items-center justify-between">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-kpmg-blue border border-blue-200">
+                                Fresh Consolidation Run
+                            </span>
+                            <span class="text-xs text-slate-400 font-mono">Scope &amp; Cutoff</span>
+                        </div>
+                        <h2 class="text-xl font-bold text-kpmg-navy tracking-tight mt-2">New Consolidation Run</h2>
+                        <p class="text-xs text-slate-500 mt-1">Select an active client company profile and calendar reporting cutoff date to initiate multi-entity financial consolidation.</p>
                     </div>
-                    <div class="flex items-center space-x-2">
-                        <button id="btn-create-profile" onclick="openCreateProfileModal()" 
-                            class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1 shadow-xs btn-tactile cursor-pointer"
-                            title="Create Company Profile">
-                            <svg class="w-3 h-3 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+
+                    <!-- Form Controls -->
+                    <div class="space-y-5">
+                        <!-- 1. Client Company Selection Dropdown -->
+                        <div class="space-y-1.5">
+                            <label for="launcher-company-select" class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                Client Company <span class="text-rose-500">*</span>
+                            </label>
+                            <div class="relative">
+                                <select id="launcher-company-select" onchange="onLauncherCompanyChange(this.value)"
+                                    class="w-full h-10 pl-3 pr-10 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 hover:bg-slate-100/70 focus:bg-white focus:border-kpmg-blue focus:ring-2 focus:ring-kpmg-blue/15 transition cursor-pointer appearance-none">
+                                    <option value="">Select client company from profile...</option>
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. Run Date / Calendar Date Picker -->
+                        <div class="space-y-1.5">
+                            <label for="launcher-run-date" class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                Run Date / Cutoff Date <span class="text-rose-500">*</span>
+                            </label>
+                            <div class="relative">
+                                <input type="date" id="launcher-run-date" onchange="onLauncherDateChange(this.value)"
+                                    class="w-full h-10 px-3 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono font-medium text-slate-800 hover:bg-slate-100/70 focus:bg-white focus:border-kpmg-blue focus:ring-2 focus:ring-kpmg-blue/15 transition cursor-pointer">
+                            </div>
+                            <p class="text-[11px] text-slate-400">Determines reporting period cutoff for trial balance submissions and date-effective FX rates.</p>
+                        </div>
+
+                        <!-- 3. Dynamic Company Snapshot Card (Pointers picked from data source) -->
+                        <div id="launcher-company-snapshot" class="hidden rounded-xl bg-slate-50/80 border border-slate-200/80 p-4 space-y-3 transition-all duration-200">
+                            <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Company Scope &amp; Master Data Pointers</div>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                                <div class="space-y-0.5">
+                                    <span class="text-[11px] text-slate-400 block">Parent Code</span>
+                                    <span id="snapshot-company-code" class="font-mono font-bold text-kpmg-navy">—</span>
+                                </div>
+                                <div class="space-y-0.5">
+                                    <span class="text-[11px] text-slate-400 block">Reporting Currency</span>
+                                    <span id="snapshot-reporting-curr" class="font-mono font-bold text-kpmg-blue">—</span>
+                                </div>
+                                <div class="space-y-0.5">
+                                    <span class="text-[11px] text-slate-400 block">Subsidiary Perimeter</span>
+                                    <span id="snapshot-subs-count" class="font-semibold text-slate-700">—</span>
+                                </div>
+                                <div class="space-y-0.5">
+                                    <span class="text-[11px] text-slate-400 block">Chart of Accounts</span>
+                                    <span id="snapshot-coa-status" class="font-semibold text-emerald-600">—</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer / Submit Action -->
+                    <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <span class="text-[11px] text-slate-400">All previous runs remain accessible in the <strong>Audit</strong> section.</span>
+                        <button id="btn-start-run" onclick="triggerStartFreshRun()" disabled
+                            class="h-10 px-5 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-semibold transition flex items-center space-x-2 shadow-xs btn-tactile cursor-pointer">
+                            <span>Start Consolidation Run</span>
+                            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                             </svg>
-                            <span>Create</span>
                         </button>
                     </div>
                 </div>
+            </div>
 
-                <!-- Clean Borderless Command Strip: Search on Left, Sort & Filter on Right -->
-                <div id="company-directory-toolbar" class="hidden flex-col sm:flex-row sm:items-center justify-between gap-3 w-full py-0.5">
-                    <!-- Left: Subtle, Realistic Search Bar (Google/Anthropic/Microsoft standard) -->
-                    <div class="flex-1 max-w-xs sm:max-w-sm relative">
-                        <div class="flex items-center w-full h-9 rounded bg-slate-100/70 hover:bg-slate-100 focus-within:bg-white focus-within:ring-2 focus-within:ring-kpmg-blue/15 border border-transparent transition shadow-2xs">
-                            <svg class="w-4 h-4 text-slate-400 ml-3 flex-shrink-0 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                            </svg>
-                            <input type="text" id="company-directory-search" placeholder="Search profiles..."
-                                oninput="handleCompanySearch(this.value)"
-                                class="w-full h-full pl-2.5 pr-8 bg-transparent border-0 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0">
-                            <button id="btn-clear-search" onclick="clearCompanySearch()" class="hidden absolute right-2.5 text-slate-400 hover:text-slate-600 text-xs cursor-pointer" title="Clear search">✕</button>
+            <!-- Section A: Primary Consolidation Stepper Views -->
+            <div id="view-pipeline-run" class="hidden space-y-6 w-full">
+                <!-- Dynamic Step Containers (Full-Bleed, Zero Artificial Card Box) -->
+                <div id="step-content" class="w-full space-y-6">
+                    <!-- Content loaded dynamically via app.js -->
+                    <div class="flex items-center justify-center h-64 text-kpmg-muted text-sm">
+                        Loading consolidation workspace...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section B: Audit (Consolidation Run Ledger & Resumption Hub) -->
+            <div id="view-observability" class="hidden space-y-3.5 w-full">
+                <div class="space-y-3 w-full">
+                    <!-- Page Title Header (Identical to Company Profile Header) -->
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/80 pb-2.5 gap-2">
+                        <div>
+                            <h2 class="text-xl font-bold text-kpmg-navy tracking-tight">Consolidation Audit Ledger</h2>
+                            <p class="text-xs text-slate-500 mt-0.5">Historical and active multi-entity consolidation runs. Resume in-progress runs or view completed financial statements.</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="switchNavSection('PIPELINE')"
+                                class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1 shadow-xs btn-tactile cursor-pointer"
+                                title="Start New Consolidation Run">
+                                <svg class="w-3 h-3 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                </svg>
+                                <span>New Run</span>
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Right: Clean Icon-Only Action Buttons: Sort and Filter (Ghost Style, No Box Outline) -->
-                    <div class="flex items-center space-x-1 relative">
-                        <!-- Sort Ghost Icon Button & Popover -->
-                        <div class="relative" id="sort-dropdown-container">
-                            <button id="btn-sort-toggle" onclick="toggleSortDropdown(event)"
-                                class="w-8 h-8 rounded text-slate-500 hover:text-kpmg-navy hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none"
-                                title="Sort Profiles">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                    <!-- Clean Borderless Command Strip: Search on Left, Filter on Right -->
+                    <div id="audit-runs-toolbar" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full py-0.5">
+                        <!-- Left: Search Bar -->
+                        <div class="flex-1 max-w-xs sm:max-w-sm relative">
+                            <div class="flex items-center w-full h-9 rounded bg-slate-100/70 hover:bg-slate-100 focus-within:bg-white focus-within:ring-2 focus-within:ring-kpmg-blue/15 border border-transparent transition shadow-2xs">
+                                <svg class="w-4 h-4 text-slate-400 ml-3 flex-shrink-0 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                 </svg>
-                                <span id="sort-active-indicator" class="hidden absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-kpmg-blue"></span>
-                            </button>
-
-                            <!-- Sort Popover Menu -->
-                            <div id="sort-popover-menu" class="hidden absolute right-0 mt-1.5 w-56 popover-menu-spring py-1.5 z-50 text-xs select-none">
-                                <div class="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sort Profiles By</div>
-                                <div class="space-y-0.5 px-1" id="sort-options-list">
-                                    <!-- Populated via JS -->
-                                </div>
+                                <input type="text" id="audit-runs-search" placeholder="Search runs by client, name, date..."
+                                    oninput="handleRunSearch(this.value)"
+                                    class="w-full h-full pl-2.5 pr-8 bg-transparent border-0 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0">
+                                <button id="btn-clear-run-search" onclick="clearRunSearch()"
+                                    class="hidden absolute right-2.5 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                                    title="Clear search">✕</button>
                             </div>
                         </div>
 
-                        <!-- Filter Ghost Icon Button & Popover -->
-                        <div class="relative" id="filter-dropdown-container">
-                            <button id="btn-filter-toggle" onclick="toggleFilterDropdown(event)"
-                                class="w-8 h-8 rounded text-slate-500 hover:text-kpmg-navy hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none"
-                                title="Filter Profiles">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                                </svg>
-                                <span id="filter-active-badge" class="hidden absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-kpmg-navy text-white text-[9px] font-bold flex items-center justify-center shadow-xs"></span>
-                            </button>
+                        <!-- Right: Status and Company Filter Strip -->
+                        <div class="flex items-center space-x-2">
+                            <!-- Filter by Company -->
+                            <select id="audit-filter-company" onchange="handleRunCompanyFilter(this.value)"
+                                class="h-8 px-2.5 rounded bg-slate-100/80 border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-100 focus:bg-white focus:outline-none cursor-pointer">
+                                <option value="ALL">All Companies</option>
+                            </select>
 
-                            <!-- Filter Popover Menu -->
-                            <div id="filter-popover-menu" class="hidden absolute right-0 mt-1.5 w-64 popover-menu-spring p-3 z-50 text-xs space-y-3 select-none">
-                                <!-- Section 1: Subsidiary Structure -->
-                                <div class="space-y-1.5">
-                                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Subsidiaries</div>
-                                    <div class="space-y-1" id="filter-subsidiaries-options">
+                            <!-- Filter by Status -->
+                            <select id="audit-filter-status" onchange="handleRunStatusFilter(this.value)"
+                                class="h-8 px-2.5 rounded bg-slate-100/80 border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-100 focus:bg-white focus:outline-none cursor-pointer">
+                                <option value="ALL">All Statuses</option>
+                                <option value="IN_PROGRESS">In Progress</option>
+                                <option value="COMPLETED">Completed</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- High-Density Run Ledger Table Container -->
+                    <div id="audit-runs-ledger-content" class="w-full">
+                        <div class="flex items-center justify-center h-48 text-kpmg-muted text-xs">
+                            Loading consolidation audit runs...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section C: Company Profile (Full Width, High-Density Ledger Directory) -->
+            <div id="view-companies" class="hidden space-y-3.5 w-full">
+                <div class="space-y-3 w-full">
+                    <!-- Page Title Header (Compact, Zero Wasted Space) -->
+                    <div
+                        class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/80 pb-2.5 gap-2">
+                        <div>
+                            <h2 class="text-xl font-bold text-kpmg-navy tracking-tight">Company Profile</h2>
+                            <p class="text-xs text-slate-500 mt-0.5" id="company-profile-desc">Manage parent company
+                                profiles, subsidiary ownership structures, and base Charts of Accounts.</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button id="btn-create-profile" onclick="openCreateProfileModal()"
+                                class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1 shadow-xs btn-tactile cursor-pointer"
+                                title="Create Company Profile">
+                                <svg class="w-3 h-3 text-[#ACEAFF]" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 4v16m8-8H4" />
+                                </svg>
+                                <span>Create</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Clean Borderless Command Strip: Search on Left, Sort & Filter on Right -->
+                    <div id="company-directory-toolbar"
+                        class="hidden flex-col sm:flex-row sm:items-center justify-between gap-3 w-full py-0.5">
+                        <!-- Left: Subtle, Realistic Search Bar (Google/Anthropic/Microsoft standard) -->
+                        <div class="flex-1 max-w-xs sm:max-w-sm relative">
+                            <div
+                                class="flex items-center w-full h-9 rounded bg-slate-100/70 hover:bg-slate-100 focus-within:bg-white focus-within:ring-2 focus-within:ring-kpmg-blue/15 border border-transparent transition shadow-2xs">
+                                <svg class="w-4 h-4 text-slate-400 ml-3 flex-shrink-0 pointer-events-none" fill="none"
+                                    stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input type="text" id="company-directory-search" placeholder="Search profiles..."
+                                    oninput="handleCompanySearch(this.value)"
+                                    class="w-full h-full pl-2.5 pr-8 bg-transparent border-0 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0">
+                                <button id="btn-clear-search" onclick="clearCompanySearch()"
+                                    class="hidden absolute right-2.5 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                                    title="Clear search">✕</button>
+                            </div>
+                        </div>
+
+                        <!-- Right: Clean Icon-Only Action Buttons: Sort and Filter (Ghost Style, No Box Outline) -->
+                        <div class="flex items-center space-x-1 relative">
+                            <!-- Sort Ghost Icon Button & Popover -->
+                            <div class="relative" id="sort-dropdown-container">
+                                <button id="btn-sort-toggle" onclick="toggleSortDropdown(event)"
+                                    class="w-8 h-8 rounded text-slate-500 hover:text-kpmg-navy hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none"
+                                    title="Sort Profiles">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                                    </svg>
+                                    <span id="sort-active-indicator"
+                                        class="hidden absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-kpmg-blue"></span>
+                                </button>
+
+                                <!-- Sort Popover Menu -->
+                                <div id="sort-popover-menu"
+                                    class="hidden absolute right-0 mt-1.5 w-56 popover-menu-spring py-1.5 z-50 text-xs select-none">
+                                    <div
+                                        class="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                        Sort Profiles By</div>
+                                    <div class="space-y-0.5 px-1" id="sort-options-list">
                                         <!-- Populated via JS -->
                                     </div>
                                 </div>
+                            </div>
 
-                                <!-- Divider -->
-                                <div class="h-[1px] bg-slate-100"></div>
+                            <!-- Filter Ghost Icon Button & Popover -->
+                            <div class="relative" id="filter-dropdown-container">
+                                <button id="btn-filter-toggle" onclick="toggleFilterDropdown(event)"
+                                    class="w-8 h-8 rounded text-slate-500 hover:text-kpmg-navy hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none"
+                                    title="Filter Profiles">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                    </svg>
+                                    <span id="filter-active-badge"
+                                        class="hidden absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-kpmg-navy text-white text-[9px] font-bold flex items-center justify-center shadow-xs"></span>
+                                </button>
 
-                                <!-- Section 2: Base Reporting Currency -->
-                                <div class="space-y-1.5">
-                                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Base Currency</div>
-                                    <div id="filter-currency-options" class="max-h-36 overflow-y-auto space-y-1 pr-1">
-                                        <!-- Dynamic currency radio options via JS -->
+                                <!-- Filter Popover Menu -->
+                                <div id="filter-popover-menu"
+                                    class="hidden absolute right-0 mt-1.5 w-64 popover-menu-spring p-3 z-50 text-xs space-y-3 select-none">
+                                    <!-- Section 1: Subsidiary Structure -->
+                                    <div class="space-y-1.5">
+                                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                            Subsidiaries</div>
+                                        <div class="space-y-1" id="filter-subsidiaries-options">
+                                            <!-- Populated via JS -->
+                                        </div>
                                     </div>
-                                </div>
 
-                                <!-- Footer: Reset Filters -->
-                                <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                                    <span id="filter-status-summary" class="text-[11px] text-slate-400">Showing all</span>
-                                    <button type="button" onclick="resetAllCompanyFilters()" class="text-kpmg-blue hover:text-kpmg-navy font-semibold text-xs hover:underline cursor-pointer">Reset</button>
+                                    <!-- Divider -->
+                                    <div class="h-[1px] bg-slate-100"></div>
+
+                                    <!-- Section 2: Base Reporting Currency -->
+                                    <div class="space-y-1.5">
+                                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Base
+                                            Currency</div>
+                                        <div id="filter-currency-options"
+                                            class="max-h-36 overflow-y-auto space-y-1 pr-1">
+                                            <!-- Dynamic currency radio options via JS -->
+                                        </div>
+                                    </div>
+
+                                    <!-- Footer: Reset Filters -->
+                                    <div
+                                        class="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                                        <span id="filter-status-summary" class="text-[11px] text-slate-400">Showing
+                                            all</span>
+                                        <button type="button" onclick="resetAllCompanyFilters()"
+                                            class="text-kpmg-blue hover:text-kpmg-navy font-semibold text-xs hover:underline cursor-pointer">Reset</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- High-Density Company Ledger Content -->
-                <div id="company-perimeter-content" class="w-full">
-                    <div class="flex items-center justify-center h-48 text-kpmg-muted text-xs">
-                        Loading company profiles...
+                    <!-- High-Density Company Ledger Content -->
+                    <div id="company-perimeter-content" class="w-full">
+                        <div class="flex items-center justify-center h-48 text-kpmg-muted text-xs">
+                            Loading company profiles...
+                        </div>
                     </div>
                 </div>
-            </div>
-                    <div class="flex items-center justify-center h-48 text-kpmg-muted text-xs">
-                        Loading company profiles...
-                    </div>
+                <div class="flex items-center justify-center h-48 text-kpmg-muted text-xs">
+                    Loading company profiles...
                 </div>
             </div>
-        </div>
+    </div>
+    </div>
     </main>
     </div> <!-- End #main-layout-container -->
 
     <!-- Shared Drawer Backdrop Overlay -->
-    <div id="drawer-backdrop" onclick="closeAllDrawers()" class="hidden fixed inset-0 z-40 drawer-backdrop transition-opacity duration-300"></div>
+    <div id="drawer-backdrop" onclick="closeAllDrawers()"
+        class="hidden fixed inset-0 z-40 drawer-backdrop transition-opacity duration-300"></div>
 
     <!-- 5. Settings Drawer (Configurable AI Threshold, Tolerances, API Key) -->
     <div id="settings-drawer"
         class="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl border-l border-kpmg-border z-50 transform translate-x-full transition-transform duration-300 flex flex-col">
         <div class="h-16 px-6 glass-kpmg-drawer-header text-white flex items-center justify-between">
             <div class="font-bold text-sm text-white">Consolidation Settings</div>
-            <button onclick="toggleSettingsDrawer()" class="text-white/70 hover:text-white text-lg font-bold">&times;</button>
+            <button onclick="toggleSettingsDrawer()"
+                class="text-white/70 hover:text-white text-lg font-bold">&times;</button>
         </div>
 
         <div class="p-6 space-y-6 flex-1 overflow-y-auto text-xs">
@@ -415,11 +621,14 @@
             <div class="space-y-2">
                 <div class="flex items-center justify-between">
                     <label class="font-bold text-kpmg-text block">Google Gemini API Key</label>
-                    <span class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Active / Saved</span>
+                    <span
+                        class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Active
+                        / Saved</span>
                 </div>
                 <input id="input-api-key" type="password" placeholder="AIzaSy... (persisted permanently)"
                     class="w-full h-9 px-3 rounded border border-kpmg-border font-mono text-xs focus:ring-2 focus:ring-kpmg-electric focus:outline-none">
-                <p class="text-[11px] text-emerald-700">✓ Saved permanently to local <code class="font-mono bg-emerald-100/60 px-1 rounded">.env</code> and browser storage.
+                <p class="text-[11px] text-emerald-700">✓ Saved permanently to local <code
+                        class="font-mono bg-emerald-100/60 px-1 rounded">.env</code> and browser storage.
                 </p>
             </div>
 
@@ -432,7 +641,8 @@
                     </div>
                     <input id="slider-threshold" type="range" min="0" max="100" value="85" step="1"
                         oninput="updateThresholdDisplay(this.value)" class="w-full cursor-pointer accent-kpmg-blue">
-                    <p class="text-[11px] text-kpmg-muted mt-1">Unmapped GL accounts or files with confidence below this threshold route to Human-in-the-Loop review.</p>
+                    <p class="text-[11px] text-kpmg-muted mt-1">Unmapped GL accounts or files with confidence below this
+                        threshold route to Human-in-the-Loop review.</p>
                 </div>
 
                 <!-- Intercompany Dual Tolerances -->
@@ -466,7 +676,8 @@
                         <option value="DD MMM YYYY, HH:mm">25 Nov 2026, 18:56 — International Audit</option>
                         <option value="MMM DD, YYYY, hh:mm A">Nov 25, 2026, 06:56 PM — Google Workspace</option>
                     </select>
-                    <p class="text-[11px] text-slate-500 leading-normal">Applied across created and updated timestamps in Company Profiles and Audit Logs.</p>
+                    <p class="text-[11px] text-slate-500 leading-normal">Applied across created and updated timestamps
+                        in Company Profiles and Audit Logs.</p>
                 </div>
             </div>
         </div>
@@ -491,11 +702,14 @@
                 <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
                 <span class="font-bold text-sm text-white">Human-in-the-Loop Workbench</span>
             </div>
-            <button onclick="toggleHITLDrawer()" class="text-white/70 hover:text-white text-lg font-bold">&times;</button>
+            <button onclick="toggleHITLDrawer()"
+                class="text-white/70 hover:text-white text-lg font-bold">&times;</button>
         </div>
 
         <div class="p-4 bg-amber-50 border-b border-amber-200 text-xs text-amber-900">
-            <p>The items below fell below your AI confidence threshold (<span id="hitl-threshold-text">85%</span>). Review Gemini suggestions, approve or override. Confirmed mappings persist into <strong>Learning Memory</strong>.</p>
+            <p>The items below fell below your AI confidence threshold (<span id="hitl-threshold-text">85%</span>).
+                Review Gemini suggestions, approve or override. Confirmed mappings persist into <strong>Learning
+                    Memory</strong>.</p>
         </div>
 
         <div id="hitl-list" class="p-6 space-y-4 flex-1 overflow-y-auto text-xs">
@@ -503,25 +717,30 @@
         </div>
 
         <div class="p-4 border-t border-kpmg-border bg-gray-50 flex justify-end">
-            <button onclick="toggleHITLDrawer()" class="px-4 h-9 rounded bg-white border border-kpmg-border text-kpmg-text text-xs font-medium hover:bg-gray-100 transition">Close</button>
+            <button onclick="toggleHITLDrawer()"
+                class="px-4 h-9 rounded bg-white border border-kpmg-border text-kpmg-text text-xs font-medium hover:bg-gray-100 transition">Close</button>
         </div>
     </div>
 
     <!-- 7. Batch File Upload Modal (Supports 10-15+ Mixed Files) -->
     <div id="modal-batch-upload"
         class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/65 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="modal-dialog-card relative bg-white rounded-xl shadow-2xl border border-kpmg-border max-w-xl w-full overflow-hidden transform transition-all flex flex-col">
+        <div
+            class="modal-dialog-card relative bg-white rounded-xl shadow-2xl border border-kpmg-border max-w-xl w-full overflow-hidden transform transition-all flex flex-col">
             <div class="h-14 px-6 glass-kpmg-drawer-header text-white flex items-center justify-between flex-shrink-0">
                 <div class="flex items-center space-x-2">
                     <svg class="w-4 h-4 text-[#0091DA]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
                     <span class="font-bold text-sm text-white">Batch Document Dispatcher</span>
                 </div>
-                <button type="button" onclick="closeBatchUploadModal()" class="text-white/70 hover:text-white text-lg font-bold leading-none">&times;</button>
+                <button type="button" onclick="closeBatchUploadModal()"
+                    class="text-white/70 hover:text-white text-lg font-bold leading-none">&times;</button>
             </div>
 
-            <form id="form-batch-upload" onsubmit="submitBatchUpload(event)" class="p-6 space-y-4 text-xs flex-1 overflow-y-auto">
+            <form id="form-batch-upload" onsubmit="submitBatchUpload(event)"
+                class="p-6 space-y-4 text-xs flex-1 overflow-y-auto">
                 <div>
                     <label class="font-bold text-kpmg-text block mb-1">Target Reporting Period</label>
                     <input id="batch-upload-period" type="text" value="31-Mar-2024" required
@@ -530,22 +749,31 @@
 
                 <!-- Luxury Multi-File Dropzone -->
                 <div>
-                    <label class="font-bold text-kpmg-text block mb-1">Upload Multiple Files (10–15+ TBs, IC, FX, COA)</label>
-                    <div id="batch-drop-zone" class="luxury-dropzone p-8 text-center cursor-pointer" onclick="document.getElementById('batch-file-input').click()">
-                        <svg class="mx-auto h-10 w-10 text-[#00338D]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <label class="font-bold text-kpmg-text block mb-1">Upload Multiple Files (10–15+ TBs, IC, FX,
+                        COA)</label>
+                    <div id="batch-drop-zone" class="luxury-dropzone p-8 text-center cursor-pointer"
+                        onclick="document.getElementById('batch-file-input').click()">
+                        <svg class="mx-auto h-10 w-10 text-[#00338D]" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        <p class="mt-2 text-xs text-kpmg-text font-semibold" id="batch-file-label">Drop batch files here or click to browse</p>
-                        <p class="text-[11px] text-kpmg-muted mt-0.5">Accepts Excel (.xlsx, .xls) and CSV. Gemini Agentic Brain auto-classifies entity & file type.</p>
-                        <input id="batch-file-input" type="file" multiple accept=".xlsx,.xls,.csv" class="hidden" onclick="event.stopPropagation()" onchange="handleBatchFilesSelected(this)">
+                        <p class="mt-2 text-xs text-kpmg-text font-semibold" id="batch-file-label">Drop batch files here
+                            or click to browse</p>
+                        <p class="text-[11px] text-kpmg-muted mt-0.5">Accepts Excel (.xlsx, .xls) and CSV. Gemini
+                            Agentic Brain auto-classifies entity & file type.</p>
+                        <input id="batch-file-input" type="file" multiple accept=".xlsx,.xls,.csv" class="hidden"
+                            onclick="event.stopPropagation()" onchange="handleBatchFilesSelected(this)">
                     </div>
                 </div>
 
                 <div id="batch-selected-files-list" class="max-h-36 overflow-y-auto space-y-1"></div>
 
                 <div class="pt-2 flex justify-end space-x-3 border-t border-kpmg-border">
-                    <button type="button" onclick="closeBatchUploadModal()" class="px-4 h-9 rounded bg-white border border-kpmg-border text-kpmg-text text-xs font-medium hover:bg-gray-100 transition">Cancel</button>
-                    <button id="btn-submit-batch" type="submit" class="px-5 h-9 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition btn-tactile">
+                    <button type="button" onclick="closeBatchUploadModal()"
+                        class="px-4 h-9 rounded bg-white border border-kpmg-border text-kpmg-text text-xs font-medium hover:bg-gray-100 transition">Cancel</button>
+                    <button id="btn-submit-batch" type="submit"
+                        class="px-5 h-9 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition btn-tactile">
                         <span>Dispatch & Ingest Batch</span>
                     </button>
                 </div>
@@ -556,37 +784,47 @@
     <!-- 8. Create / Edit Company Profile Modal -->
     <div id="modal-company-profile"
         class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/65 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="modal-dialog-card relative bg-white rounded-xl shadow-2xl border border-kpmg-border max-w-5xl w-full max-h-[90vh] overflow-hidden transform transition-all flex flex-col">
+        <div
+            class="modal-dialog-card relative bg-white rounded-xl shadow-2xl border border-kpmg-border max-w-5xl w-full max-h-[90vh] overflow-hidden transform transition-all flex flex-col">
             <div class="h-14 px-6 glass-kpmg-drawer-header text-white flex items-center justify-between flex-shrink-0">
                 <div class="flex items-center space-x-2.5">
                     <svg class="w-4 h-4 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
                     <span id="modal-profile-title" class="font-bold text-sm text-white">Create Company Profile</span>
                 </div>
-                <button type="button" onclick="closeCompanyProfileModal()" class="text-white/70 hover:text-white text-lg font-bold leading-none cursor-pointer">&times;</button>
+                <button type="button" onclick="closeCompanyProfileModal()"
+                    class="text-white/70 hover:text-white text-lg font-bold leading-none cursor-pointer">&times;</button>
             </div>
 
-            <form id="form-company-profile" novalidate onsubmit="submitCompanyProfile(event)" class="flex flex-col flex-1 min-h-0">
+            <form id="form-company-profile" novalidate onsubmit="submitCompanyProfile(event)"
+                class="flex flex-col flex-1 min-h-0">
                 <input id="profile-edit-company-id" type="hidden" value="">
 
                 <div class="p-6 space-y-6 text-xs flex-1 overflow-y-auto">
                     <!-- Section 1: Parent Company Details -->
                     <div class="space-y-3">
                         <div class="flex items-center justify-between border-b border-slate-200 pb-2">
-                            <h3 class="text-xs font-bold uppercase tracking-wider text-kpmg-navy">1. Parent Company Details</h3>
-                            <span class="text-[11px] text-slate-500">All fields in this section are mandatory (<span class="text-rose-600 font-bold">*</span>)</span>
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-kpmg-navy">1. Parent Company
+                                Details</h3>
+                            <span class="text-[11px] text-slate-500">All fields in this section are mandatory (<span
+                                    class="text-rose-600 font-bold">*</span>)</span>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div>
-                                <label for="profile-company-name" class="font-semibold text-slate-700 block mb-1">Company Name <span class="text-rose-600">*</span></label>
+                                <label for="profile-company-name"
+                                    class="font-semibold text-slate-700 block mb-1">Company Name <span
+                                        class="text-rose-600">*</span></label>
                                 <input id="profile-company-name" type="text" placeholder="e.g. Acme Holdings Ltd"
                                     oninput="clearFieldError(this)" onblur="validateFieldOnBlur(this)"
                                     class="w-full h-9 px-3 rounded-lg border border-slate-300 text-xs text-slate-900 focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
                                 <div class="field-error-hint hidden"></div>
                             </div>
                             <div>
-                                <label for="profile-company-code" class="font-semibold text-slate-700 block mb-1">Company Code <span class="text-rose-600">*</span></label>
+                                <label for="profile-company-code"
+                                    class="font-semibold text-slate-700 block mb-1">Company Code <span
+                                        class="text-rose-600">*</span></label>
                                 <input id="profile-company-code" type="text" placeholder="e.g. ACME"
                                     oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''); clearFieldError(this)"
                                     onblur="validateFieldOnBlur(this)"
@@ -594,17 +832,20 @@
                                 <div class="field-error-hint hidden"></div>
                             </div>
                             <div>
-                                <label for="profile-reporting-currency" class="font-semibold text-slate-700 block mb-1">Reporting Currency <span class="text-rose-600">*</span></label>
+                                <label for="profile-reporting-currency"
+                                    class="font-semibold text-slate-700 block mb-1">Reporting Currency <span
+                                        class="text-rose-600">*</span></label>
                                 <select id="profile-reporting-currency" onchange="validateFieldOnBlur(this)"
                                     class="w-full h-9 px-2.5 rounded-lg border border-slate-300 text-xs text-slate-900 bg-white focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
                                 </select>
                                 <div class="field-error-hint hidden"></div>
                             </div>
                             <div>
-                                <label for="profile-subsidiary-count" class="font-semibold text-slate-700 block mb-1">Number of Subsidiaries <span class="text-rose-600">*</span></label>
+                                <label for="profile-subsidiary-count"
+                                    class="font-semibold text-slate-700 block mb-1">Number of Subsidiaries <span
+                                        class="text-rose-600">*</span></label>
                                 <input id="profile-subsidiary-count" type="number" min="0" max="100" step="1" value="0"
-                                    oninput="handleSubsidiaryCountChange(this.value)"
-                                    onblur="validateFieldOnBlur(this)"
+                                    oninput="handleSubsidiaryCountChange(this.value)" onblur="validateFieldOnBlur(this)"
                                     class="w-full h-9 px-3 rounded-lg border border-slate-300 font-mono text-xs text-slate-900 focus:ring-2 focus:ring-kpmg-electric focus:border-kpmg-blue focus:outline-none transition">
                                 <div class="field-error-hint hidden"></div>
                             </div>
@@ -615,10 +856,14 @@
                     <div id="subsidiaries-section" class="hidden space-y-3">
                         <div class="flex items-center justify-between border-b border-slate-200 pb-2">
                             <div class="flex items-center space-x-2">
-                                <h3 class="text-xs font-bold uppercase tracking-wider text-kpmg-navy">2. Subsidiary Details</h3>
-                                <span id="subsidiaries-count-badge" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-kpmg-blue border border-blue-200">0 Entities</span>
+                                <h3 class="text-xs font-bold uppercase tracking-wider text-kpmg-navy">2. Subsidiary
+                                    Details</h3>
+                                <span id="subsidiaries-count-badge"
+                                    class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-kpmg-blue border border-blue-200">0
+                                    Entities</span>
                             </div>
-                            <span class="text-[11px] text-slate-500">Mandatory: Entity Name, Currency, Ownership %, Acquisition Date</span>
+                            <span class="text-[11px] text-slate-500">Mandatory: Entity Name, Currency, Ownership %,
+                                Acquisition Date</span>
                         </div>
                         <div id="subsidiaries-container" class="space-y-3"></div>
                     </div>
@@ -626,35 +871,50 @@
                     <!-- Section 3: Base Chart of Accounts Upload -->
                     <div class="space-y-3">
                         <div class="flex items-center justify-between border-b border-slate-200 pb-2">
-                            <h3 class="text-xs font-bold uppercase tracking-wider text-kpmg-navy">Default Chart of Accounts (Base COA)</h3>
-                            <a href="/api/companies/coa-template" class="text-[11px] font-semibold text-kpmg-blue hover:text-kpmg-navy hover:underline flex items-center space-x-1">
+                            <h3 class="text-xs font-bold uppercase tracking-wider text-kpmg-navy">Default Chart of
+                                Accounts (Base COA)</h3>
+                            <a href="/api/companies/coa-template"
+                                class="text-[11px] font-semibold text-kpmg-blue hover:text-kpmg-navy hover:underline flex items-center space-x-1">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                 </svg>
                                 <span>Download Sample COA Template</span>
                             </a>
                         </div>
-                        <div id="coa-drop-zone" class="luxury-dropzone p-5 text-center cursor-pointer" onclick="document.getElementById('profile-coa-input').click()">
-                            <div class="flex flex-col sm:flex-row items-center justify-center sm:space-x-4 space-y-2 sm:space-y-0">
-                                <svg class="h-8 w-8 text-[#00338D] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        <div id="coa-drop-zone" class="luxury-dropzone p-5 text-center cursor-pointer"
+                            onclick="document.getElementById('profile-coa-input').click()">
+                            <div
+                                class="flex flex-col sm:flex-row items-center justify-center sm:space-x-4 space-y-2 sm:space-y-0">
+                                <svg class="h-8 w-8 text-[#00338D] flex-shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                                        d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
                                 <div class="text-center sm:text-left">
-                                    <p class="text-xs font-semibold text-slate-800" id="coa-file-label">Upload Base Chart of Accounts (.xlsx, .xls, .csv) <span class="text-rose-600">*</span></p>
-                                    <p class="text-[11px] text-slate-500 mt-0.5" id="coa-file-sublabel">This Chart of Accounts acts as the foundational ledger structure for all future consolidation runs of this company.</p>
+                                    <p class="text-xs font-semibold text-slate-800" id="coa-file-label">Upload Base
+                                        Chart of Accounts (.xlsx, .xls, .csv) <span class="text-rose-600">*</span></p>
+                                    <p class="text-[11px] text-slate-500 mt-0.5" id="coa-file-sublabel">This Chart of
+                                        Accounts acts as the foundational ledger structure for all future consolidation
+                                        runs of this company.</p>
                                 </div>
                             </div>
-                            <input id="profile-coa-input" type="file" accept=".xlsx,.xls,.csv" class="hidden" onclick="event.stopPropagation()" onchange="handleCOAFileSelected(this)">
+                            <input id="profile-coa-input" type="file" accept=".xlsx,.xls,.csv" class="hidden"
+                                onclick="event.stopPropagation()" onchange="handleCOAFileSelected(this)">
                         </div>
                         <div id="coa-file-error" class="field-error-hint hidden"></div>
                     </div>
                 </div>
 
-                <div class="px-6 py-4 flex items-center justify-between border-t border-slate-200 bg-slate-50 flex-shrink-0">
+                <div
+                    class="px-6 py-4 flex items-center justify-between border-t border-slate-200 bg-slate-50 flex-shrink-0">
                     <span class="text-[11px] text-slate-500">All fields are validated before saving.</span>
                     <div class="flex items-center space-x-3">
-                        <button type="button" onclick="closeCompanyProfileModal()" class="px-4 h-9 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-medium transition cursor-pointer">Cancel</button>
-                        <button id="btn-save-profile" type="submit" class="px-5 h-9 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white font-semibold text-xs btn-tactile shadow-xs cursor-pointer">Create Profile</button>
+                        <button type="button" onclick="closeCompanyProfileModal()"
+                            class="px-4 h-9 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-medium transition cursor-pointer">Cancel</button>
+                        <button id="btn-save-profile" type="submit"
+                            class="px-5 h-9 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white font-semibold text-xs btn-tactile shadow-xs cursor-pointer">Create
+                            Profile</button>
                     </div>
                 </div>
             </form>
@@ -667,15 +927,21 @@
         <div class="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden">
             <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
                 <h3 class="font-bold text-sm text-kpmg-navy">Delete Company Profile</h3>
-                <button type="button" onclick="closeDeleteProfileModal()" class="text-slate-400 hover:text-slate-700 text-lg font-bold leading-none">&times;</button>
+                <button type="button" onclick="closeDeleteProfileModal()"
+                    class="text-slate-400 hover:text-slate-700 text-lg font-bold leading-none">&times;</button>
             </div>
             <div class="p-6 text-xs text-slate-700 space-y-2">
-                <p>Are you sure you want to delete <strong id="delete-profile-name" class="text-kpmg-navy"></strong> (<code id="delete-profile-code" class="font-mono text-kpmg-blue"></code>)?</p>
-                <p class="text-slate-500">This removes its master profile, subsidiary list, and uploaded Base Chart of Accounts.</p>
+                <p>Are you sure you want to delete <strong id="delete-profile-name" class="text-kpmg-navy"></strong>
+                    (<code id="delete-profile-code" class="font-mono text-kpmg-blue"></code>)?</p>
+                <p class="text-slate-500">This removes its master profile, subsidiary list, and uploaded Base Chart of
+                    Accounts.</p>
             </div>
             <div class="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end space-x-3">
-                <button type="button" onclick="closeDeleteProfileModal()" class="px-4 h-8 rounded-lg bg-white border border-slate-300 text-slate-700 text-xs font-medium hover:bg-slate-100">Cancel</button>
-                <button id="btn-confirm-delete-profile" type="button" onclick="confirmDeleteProfile()" class="px-4 h-8 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition">Delete Profile</button>
+                <button type="button" onclick="closeDeleteProfileModal()"
+                    class="px-4 h-8 rounded-lg bg-white border border-slate-300 text-slate-700 text-xs font-medium hover:bg-slate-100">Cancel</button>
+                <button id="btn-confirm-delete-profile" type="button" onclick="confirmDeleteProfile()"
+                    class="px-4 h-8 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition">Delete
+                    Profile</button>
             </div>
         </div>
     </div>
@@ -683,13 +949,15 @@
     <!-- Floating Formula Inspector Popover (KPMG Clara Frosted Glass) -->
     <div id="formula-popover"
         class="hidden fixed formula-popover-glass text-white p-3.5 rounded-xl shadow-2xl text-xs z-50 pointer-events-none max-w-sm">
-        <div class="text-[10px] text-[#ACEAFF] uppercase tracking-wider font-bold mb-1">Live Cell Formula Provenance</div>
+        <div class="text-[10px] text-[#ACEAFF] uppercase tracking-wider font-bold mb-1">Live Cell Formula Provenance
+        </div>
         <div id="formula-expr" class="font-mono text-[#0091DA] font-bold break-all"></div>
         <div id="formula-origin" class="text-[11px] text-white/80 mt-1"></div>
     </div>
 
     <!-- Toast Notifications Container -->
-    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none max-w-sm"></div>
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none max-w-sm">
+    </div>
 
     <!-- App Scripts -->
     <script src="/static/js/reference_data.js"></script>
