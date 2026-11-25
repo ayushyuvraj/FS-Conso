@@ -126,6 +126,27 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Pytest full suite: 54/54 PASSED.
   - Live server check: HTTP 200 OK.
 
+### [2026-11-25 20:05] Milestone: Standardized Button Sizing, Icon-Only Sort/Filter & Subtle Enterprise Search Bar
+- **Requirements Implemented**:
+  1. **Standardized Create Button**:
+     - Standardized button dimensions to exact `h-7 px-3 rounded` matching the Consolidation page's Batch Upload button.
+     - Changed button label from "Create Profile" to simply "Create".
+     - Removed redundant double plus icon (kept clean single SVG plus icon).
+  2. **Icon-Only Sort and Filter Action Buttons**:
+     - Removed text "Sort" and "Filter" labels from the buttons.
+     - Replaced with sleek `w-7 h-7` icon-only action buttons matching the Edit and Delete icon buttons.
+     - Added clean SVG icons, tooltips ("Sort Profiles", "Filter Profiles"), and dynamic indicator badges.
+  3. **Subtle, Realistic Search Bar (Google/Anthropic/Microsoft Standard)**:
+     - Standardized shape to `h-7 max-w-sm` seamlessly aligning with adjacent `h-7` buttons.
+     - Removed harsh outer boundary (`border border-transparent`) and added soft subtle grey fill (`bg-slate-100/80 hover:bg-slate-100 focus-within:bg-white`).
+     - Subtle focus ring and shadow on interaction.
+- **Verification**:
+  - Node.js syntax check: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Reference data syntax check: `node -c "fs_conso/web/static/js/reference_data.js"`: EXIT 0.
+  - Automated tests: 54/54 PASSED (100% pass rate).
+  - Portal server live status: HTTP 200 OK.
+
+
 
 
 

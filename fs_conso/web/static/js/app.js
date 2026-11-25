@@ -1396,8 +1396,11 @@ function renderCompanyWorkspace() {
                     </p>
                 </div>
                 <div>
-                    <button onclick="openCreateProfileModal()" class="px-4 py-2 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition btn-tactile inline-flex items-center space-x-1.5 shadow-xs cursor-pointer">
-                        <span>+ Create Profile</span>
+                    <button onclick="openCreateProfileModal()" class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1 shadow-xs btn-tactile cursor-pointer" title="Create Company Profile">
+                        <svg class="w-3 h-3 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span>Create</span>
                     </button>
                 </div>
             </div>
