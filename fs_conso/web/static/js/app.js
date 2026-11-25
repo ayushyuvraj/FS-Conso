@@ -1375,7 +1375,6 @@ function renderCompanyTableBody() {
         </div>
     `;
 }
-}
 
 function renderStepperState() {
     const completed = appStatus.completed_steps || [];

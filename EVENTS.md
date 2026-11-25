@@ -60,4 +60,23 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Pytest full suite: 54/54 PASSED.
   - Zero syntax or JavaScript console errors.
 
+### [2026-11-25 19:15] Incident Resolution: JavaScript Syntax Fix & Header Element Separation
+- **Root Cause Analyzed**:
+  - A stray closing brace `}` at line 1378 in `fs_conso/web/static/js/app.js` caused a fatal `SyntaxError: Unexpected token '}'` on script parsing.
+  - Because `app.js` failed to parse in the browser, all top-level global handlers (`toggleSidebar`, `switchNavSection`, etc.) were left undefined, freezing sidebar navigation and preventing tab switching between Company Profile, Consolidation, and Audit.
+  - The previous header implementation combined the hamburger toggle and KPMG logo into a single morphing element that caused UX confusion and click target ambiguity.
+- **Hardening Applied**:
+  - Removed stray brace at line 1378; syntax verification via `node -c "fs_conso/web/static/js/app.js"` confirmed clean zero-error parsing.
+  - Separated the header into two distinct, clear elements:
+    1. Dedicated `<button id="btn-toggle-sidebar" onclick="toggleSidebar()">` with crisp SVG hamburger icon.
+    2. Distinct `<div class="flex items-center"><img src="/static/img/kpmg-logo.svg" ... /></div>` KPMG brand logo.
+  - Verified full functionality of sidebar toggling (expanded <-> collapsed, `Ctrl+B` shortcut) and section switching (`COMPANIES`, `PIPELINE`, `AUDIT`).
+  - Retained strict suppression of company name and period/currency indicators when in the Company Profile view.
+  - Fully retained Option A High-Density Ledger with live search, sorting, category filtering, and nested subsidiary trays.
+- **Verification**:
+  - Node.js syntax check: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Automated tests: 54/54 PASSED (100% pass rate).
+  - Portal server live status: HTTP 200 OK.
+
+
 
