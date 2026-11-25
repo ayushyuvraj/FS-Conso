@@ -78,5 +78,28 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Automated tests: 54/54 PASSED (100% pass rate).
   - Portal server live status: HTTP 200 OK.
 
+### [2026-11-25 19:40] Milestone: Luxury Compact Command Strip, Popover Filters & Whitespace Optimization
+- **Requirements Implemented**:
+  1. **Clean Borderless Command Strip**:
+     - Removed the grey/bordered enclosing card box around the search and filter bar.
+     - Modern borderless flex row with minimal search bar on the left and exactly two buttons on the right: `Sort` and `Filter`.
+  2. **Dedicated Sort & Filter Popovers (Emil Kowalski Physics & Impeccable Craft)**:
+     - Implemented `Sort` popover (`#sort-popover-menu`) with spring easing (`cubic-bezier(0.16, 1, 0.3, 1)` and `scale(0.98)` to `scale(1)`).
+     - Implemented `Filter` popover (`#filter-popover-menu`) supporting:
+       - **Subsidiary Scope**: `All Profiles`, `With Subsidiaries`, `Standalone (0 Subs)`.
+       - **Base Reporting Currency**: dynamically extracted list of all reporting currencies across company profiles.
+       - **Live Active Indicators**: badge count on `Filter` button, active checkmarks on selections, and a `Reset` action.
+     - Document-level outside-click listener and `Escape` key listeners to dismiss popovers gracefully.
+  3. **Company Profile Header & Whitespace Optimization**:
+     - Completely removed the redundant `"1 Company"` count pill.
+     - Reduced excessive top padding and margins across `<main>` and `#view-companies` (`pt-3 pb-6`, `space-y-3.5`).
+     - Removed the obsolete `"Expand All"` button as requested.
+- **Verification**:
+  - Node.js syntax check: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Reference data syntax check: `node -c "fs_conso/web/static/js/reference_data.js"`: EXIT 0.
+  - Full test suite: 54/54 PASSED.
+  - Portal server live status: HTTP 200 OK.
+
+
 
 

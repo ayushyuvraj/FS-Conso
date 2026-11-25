@@ -16,6 +16,7 @@ let collapseEntityColumns = false;
 
 document.addEventListener("DOMContentLoaded", async () => {
     initSidebar();
+    initToolbarDropdowns();
     initDialogAndDrawerResizers();
     initTableColumnResizers();
     initTableObserver();
@@ -146,6 +147,7 @@ let pendingDeleteCompanyId = null;
 let companySearchQuery = "";
 let companySortKey = "name-asc";
 let companyFilterCategory = "ALL"; // 'ALL', 'WITH_SUBS', 'STANDALONE'
+let companyFilterCurrency = "ALL"; // 'ALL' or specific ISO currency e.g. 'INR', 'USD'
 let expandedCompanyIds = new Set();
 
 function buildCurrencyOptionsHtml(selectedCode = "") {
@@ -986,9 +988,28 @@ function switchSection(section) {
 }
 
 // -------------------------------------------------------------
-// High-Density Institutional Ledger Directory (Option A)
-// Real-time Search, Sort, Category Filters & 1-Click Expansion
+// High-Density Institutional Ledger Directory: Clean Toolbar, Sort & Filter
 // -------------------------------------------------------------
+
+function initToolbarDropdowns() {
+    document.addEventListener("click", (e) => {
+        const sortContainer = document.getElementById("sort-dropdown-container");
+        const filterContainer = document.getElementById("filter-dropdown-container");
+        if (sortContainer && !sortContainer.contains(e.target)) {
+            closeSortDropdown();
+        }
+        if (filterContainer && !filterContainer.contains(e.target)) {
+            closeFilterDropdown();
+        }
+    });
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            closeSortDropdown();
+            closeFilterDropdown();
+        }
+    });
+}
 
 function handleCompanySearch(val) {
     companySearchQuery = (val || "").trim().toLowerCase();
@@ -1006,28 +1027,202 @@ function clearCompanySearch() {
     renderCompanyTableBody();
 }
 
-function setCompanyFilter(category) {
-    companyFilterCategory = category;
-    const chips = {
-        'ALL': document.getElementById("filter-chip-all"),
-        'WITH_SUBS': document.getElementById("filter-chip-with-subs"),
-        'STANDALONE': document.getElementById("filter-chip-standalone")
-    };
-    Object.entries(chips).forEach(([cat, el]) => {
-        if (!el) return;
-        if (cat === category) {
-            el.className = "px-2.5 py-1 rounded-md font-semibold transition cursor-pointer bg-kpmg-navy text-white";
-        } else {
-            el.className = "px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900 transition cursor-pointer";
-        }
-    });
+// -------------------------------------------------------------
+// Sort Popover Logic
+// -------------------------------------------------------------
+
+const SORT_OPTIONS = [
+    { key: "name-asc", label: "Company Name (A → Z)" },
+    { key: "name-desc", label: "Company Name (Z → A)" },
+    { key: "code-asc", label: "Company Code (A → Z)" },
+    { key: "subs-desc", label: "Most Subsidiaries" },
+    { key: "subs-asc", label: "Least Subsidiaries" },
+    { key: "coa-desc", label: "Most COA Accounts" },
+    { key: "date-desc", label: "Recently Updated" }
+];
+
+function toggleSortDropdown(e) {
+    if (e) e.stopPropagation();
+    closeFilterDropdown();
+    const menu = document.getElementById("sort-popover-menu");
+    if (!menu) return;
+    const isHidden = menu.classList.contains("hidden");
+    if (isHidden) {
+        renderSortOptionsList();
+        menu.classList.remove("hidden");
+    } else {
+        menu.classList.add("hidden");
+    }
+}
+
+function closeSortDropdown() {
+    const menu = document.getElementById("sort-popover-menu");
+    if (menu) menu.classList.add("hidden");
+}
+
+function renderSortOptionsList() {
+    const container = document.getElementById("sort-options-list");
+    if (!container) return;
+    container.innerHTML = SORT_OPTIONS.map(opt => {
+        const isSelected = (companySortKey === opt.key);
+        return `
+            <button type="button" onclick="selectSortOption('${escapeHtml(opt.key)}')"
+                class="w-full text-left px-3 py-1.5 rounded-lg flex items-center justify-between text-xs transition cursor-pointer select-none ${
+                    isSelected ? 'bg-blue-50 text-kpmg-blue font-bold' : 'text-slate-700 hover:bg-slate-50 font-medium'
+                }">
+                <span>${escapeHtml(opt.label)}</span>
+                ${isSelected ? '<span class="text-kpmg-blue font-bold text-xs">✓</span>' : ''}
+            </button>
+        `;
+    }).join("");
+}
+
+function selectSortOption(key) {
+    companySortKey = key;
+    closeSortDropdown();
+    updateSortButtonIndicator();
     renderCompanyTableBody();
 }
 
-function handleCompanySortChange(val) {
-    companySortKey = val;
+function updateSortButtonIndicator() {
+    const indicator = document.getElementById("sort-active-indicator");
+    if (indicator) {
+        indicator.classList.toggle("hidden", companySortKey === "name-asc");
+    }
+}
+
+// -------------------------------------------------------------
+// Filter Popover Logic (Subsidiary Scope & Base Currency)
+// -------------------------------------------------------------
+
+function toggleFilterDropdown(e) {
+    if (e) e.stopPropagation();
+    closeSortDropdown();
+    const menu = document.getElementById("filter-popover-menu");
+    if (!menu) return;
+    const isHidden = menu.classList.contains("hidden");
+    if (isHidden) {
+        renderFilterOptionsContent();
+        menu.classList.remove("hidden");
+    } else {
+        menu.classList.add("hidden");
+    }
+}
+
+function closeFilterDropdown() {
+    const menu = document.getElementById("filter-popover-menu");
+    if (menu) menu.classList.add("hidden");
+}
+
+function renderFilterOptionsContent() {
+    const subsContainer = document.getElementById("filter-subsidiaries-options");
+    const currContainer = document.getElementById("filter-currency-options");
+    const summaryEl = document.getElementById("filter-status-summary");
+    if (!subsContainer || !currContainer) return;
+
+    const allCount = (availableCompanies || []).length;
+    const withSubsCount = (availableCompanies || []).filter(c => c.subsidiaries && c.subsidiaries.length > 0).length;
+    const standaloneCount = (availableCompanies || []).filter(c => !c.subsidiaries || c.subsidiaries.length === 0).length;
+
+    // Render subsidiary structure options
+    subsContainer.innerHTML = `
+        <label class="flex items-center space-x-2.5 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer transition select-none ${companyFilterCategory === 'ALL' ? 'bg-blue-50/60 font-semibold text-kpmg-navy' : 'text-slate-700'}">
+            <input type="radio" name="popover-subs-filter" value="ALL" ${companyFilterCategory === 'ALL' ? 'checked' : ''} onchange="handleFilterCategoryChange('ALL')" class="text-kpmg-blue focus:ring-kpmg-blue h-3.5 w-3.5 cursor-pointer">
+            <span class="text-xs flex-1">All Profiles</span>
+            <span class="text-[10px] font-mono text-slate-400">${allCount}</span>
+        </label>
+        <label class="flex items-center space-x-2.5 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer transition select-none ${companyFilterCategory === 'WITH_SUBS' ? 'bg-blue-50/60 font-semibold text-kpmg-navy' : 'text-slate-700'}">
+            <input type="radio" name="popover-subs-filter" value="WITH_SUBS" ${companyFilterCategory === 'WITH_SUBS' ? 'checked' : ''} onchange="handleFilterCategoryChange('WITH_SUBS')" class="text-kpmg-blue focus:ring-kpmg-blue h-3.5 w-3.5 cursor-pointer">
+            <span class="text-xs flex-1">With Subsidiaries</span>
+            <span class="text-[10px] font-mono text-slate-400">${withSubsCount}</span>
+        </label>
+        <label class="flex items-center space-x-2.5 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer transition select-none ${companyFilterCategory === 'STANDALONE' ? 'bg-blue-50/60 font-semibold text-kpmg-navy' : 'text-slate-700'}">
+            <input type="radio" name="popover-subs-filter" value="STANDALONE" ${companyFilterCategory === 'STANDALONE' ? 'checked' : ''} onchange="handleFilterCategoryChange('STANDALONE')" class="text-kpmg-blue focus:ring-kpmg-blue h-3.5 w-3.5 cursor-pointer">
+            <span class="text-xs flex-1">Standalone (0 Subs)</span>
+            <span class="text-[10px] font-mono text-slate-400">${standaloneCount}</span>
+        </label>
+    `;
+
+    // Extract dynamic reporting currencies from available companies
+    const currenciesMap = {};
+    (availableCompanies || []).forEach(c => {
+        const curr = (c.reporting_currency || "").toUpperCase().trim();
+        if (curr) {
+            currenciesMap[curr] = (currenciesMap[curr] || 0) + 1;
+        }
+    });
+    const currencyKeys = Object.keys(currenciesMap).sort();
+
+    let currHtml = `
+        <label class="flex items-center space-x-2.5 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer transition select-none ${companyFilterCurrency === 'ALL' ? 'bg-blue-50/60 font-semibold text-kpmg-navy' : 'text-slate-700'}">
+            <input type="radio" name="popover-currency-filter" value="ALL" ${companyFilterCurrency === 'ALL' ? 'checked' : ''} onchange="handleFilterCurrencyChange('ALL')" class="text-kpmg-blue focus:ring-kpmg-blue h-3.5 w-3.5 cursor-pointer">
+            <span class="text-xs flex-1">All Currencies</span>
+            <span class="text-[10px] font-mono text-slate-400">${allCount}</span>
+        </label>
+    `;
+
+    currencyKeys.forEach(curr => {
+        const isChecked = (companyFilterCurrency === curr);
+        currHtml += `
+            <label class="flex items-center space-x-2.5 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer transition select-none ${isChecked ? 'bg-blue-50/60 font-semibold text-kpmg-navy' : 'text-slate-700'}">
+                <input type="radio" name="popover-currency-filter" value="${escapeHtml(curr)}" ${isChecked ? 'checked' : ''} onchange="handleFilterCurrencyChange('${escapeHtml(curr)}')" class="text-kpmg-blue focus:ring-kpmg-blue h-3.5 w-3.5 cursor-pointer">
+                <span class="text-xs flex-1 font-mono font-medium">${escapeHtml(curr)}</span>
+                <span class="text-[10px] font-mono text-slate-400">${currenciesMap[curr]}</span>
+            </label>
+        `;
+    });
+
+    currContainer.innerHTML = currHtml;
+
+    if (summaryEl) {
+        const activeCount = (companyFilterCategory !== 'ALL' ? 1 : 0) + (companyFilterCurrency !== 'ALL' ? 1 : 0);
+        summaryEl.textContent = activeCount > 0 ? `${activeCount} filter${activeCount > 1 ? 's' : ''} active` : 'Showing all profiles';
+    }
+}
+
+function handleFilterCategoryChange(cat) {
+    companyFilterCategory = cat;
+    updateFilterBadge();
+    renderFilterOptionsContent();
     renderCompanyTableBody();
 }
+
+function handleFilterCurrencyChange(curr) {
+    companyFilterCurrency = curr;
+    updateFilterBadge();
+    renderFilterOptionsContent();
+    renderCompanyTableBody();
+}
+
+function resetAllCompanyFilters() {
+    companyFilterCategory = 'ALL';
+    companyFilterCurrency = 'ALL';
+    updateFilterBadge();
+    renderFilterOptionsContent();
+    renderCompanyTableBody();
+}
+
+function clearAllFiltersAndSearch() {
+    clearCompanySearch();
+    resetAllCompanyFilters();
+}
+
+function updateFilterBadge() {
+    const badge = document.getElementById("filter-active-badge");
+    const activeCount = (companyFilterCategory !== 'ALL' ? 1 : 0) + (companyFilterCurrency !== 'ALL' ? 1 : 0);
+    if (badge) {
+        if (activeCount > 0) {
+            badge.textContent = String(activeCount);
+            badge.classList.remove("hidden");
+        } else {
+            badge.classList.add("hidden");
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// Expansion & Sorter Filter Logic
+// -------------------------------------------------------------
 
 function toggleCompanyExpansion(companyId) {
     if (!companyId) return;
@@ -1044,50 +1239,24 @@ function toggleCompanyExpansion(companyId) {
     if (tray) tray.classList.toggle("hidden", !isNowExpanded);
     if (chevron) chevron.classList.toggle("expanded", isNowExpanded);
     if (row) row.classList.toggle("is-expanded", isNowExpanded);
-
-    updateExpandAllButtonState();
-}
-
-function toggleExpandAllCompanies() {
-    const visibleCompanies = filterAndSortCompanies();
-    if (visibleCompanies.length === 0) return;
-
-    const allExpanded = visibleCompanies.every(c => expandedCompanyIds.has(c.company_id));
-    if (allExpanded) {
-        visibleCompanies.forEach(c => expandedCompanyIds.delete(c.company_id));
-    } else {
-        visibleCompanies.forEach(c => expandedCompanyIds.add(c.company_id));
-    }
-    renderCompanyTableBody();
-}
-
-function updateExpandAllButtonState() {
-    const visibleCompanies = filterAndSortCompanies();
-    const btn = document.getElementById("btn-toggle-expand-all");
-    const label = document.getElementById("expand-all-label");
-    const icon = document.getElementById("expand-all-icon");
-    if (!btn || !label || !icon) return;
-
-    if (visibleCompanies.length > 0 && visibleCompanies.every(c => expandedCompanyIds.has(c.company_id))) {
-        label.textContent = "Collapse All";
-        icon.textContent = "⤡";
-    } else {
-        label.textContent = "Expand All";
-        icon.textContent = "⤢";
-    }
 }
 
 function filterAndSortCompanies() {
     let list = (availableCompanies || []).slice();
 
-    // 1. Category Filter
+    // 1. Category Filter (Subsidiary Structure)
     if (companyFilterCategory === 'WITH_SUBS') {
         list = list.filter(c => (c.subsidiaries && c.subsidiaries.length > 0));
     } else if (companyFilterCategory === 'STANDALONE') {
         list = list.filter(c => (!c.subsidiaries || c.subsidiaries.length === 0));
     }
 
-    // 2. Search Query Filter
+    // 2. Base Reporting Currency Filter
+    if (companyFilterCurrency && companyFilterCurrency !== 'ALL') {
+        list = list.filter(c => (c.reporting_currency || "").toUpperCase() === companyFilterCurrency.toUpperCase());
+    }
+
+    // 3. Search Query Filter
     if (companySearchQuery) {
         const q = companySearchQuery;
         list = list.filter(c => {
@@ -1105,7 +1274,7 @@ function filterAndSortCompanies() {
         });
     }
 
-    // 3. Multi-Attribute Sorter
+    // 4. Multi-Attribute Sorter
     list.sort((a, b) => {
         switch (companySortKey) {
             case 'name-asc':
@@ -1132,14 +1301,10 @@ function filterAndSortCompanies() {
 
 function renderCompanyWorkspace() {
     const container = document.getElementById("company-perimeter-content");
-    const countPill = document.getElementById("company-count-pill");
     const toolbar = document.getElementById("company-directory-toolbar");
     if (!container) return;
 
     const totalCompanies = availableCompanies || [];
-    if (countPill) {
-        countPill.textContent = `${totalCompanies.length} ${totalCompanies.length === 1 ? 'Company' : 'Companies'}`;
-    }
 
     if (totalCompanies.length === 0) {
         if (toolbar) toolbar.classList.add("hidden");
@@ -1166,18 +1331,13 @@ function renderCompanyWorkspace() {
         return;
     }
 
-    // Show toolbar and update category badge counts
     if (toolbar) {
         toolbar.classList.remove("hidden");
         toolbar.classList.add("flex");
     }
-    const countAllEl = document.getElementById("count-filter-all");
-    const countSubsEl = document.getElementById("count-filter-subs");
-    const countStandaloneEl = document.getElementById("count-filter-standalone");
-    if (countAllEl) countAllEl.textContent = String(totalCompanies.length);
-    if (countSubsEl) countSubsEl.textContent = String(totalCompanies.filter(c => c.subsidiaries && c.subsidiaries.length > 0).length);
-    if (countStandaloneEl) countStandaloneEl.textContent = String(totalCompanies.filter(c => !c.subsidiaries || c.subsidiaries.length === 0).length);
 
+    updateFilterBadge();
+    updateSortButtonIndicator();
     renderCompanyTableBody();
 }
 
@@ -1186,13 +1346,13 @@ function renderCompanyTableBody() {
     if (!container) return;
 
     const filtered = filterAndSortCompanies();
-    updateExpandAllButtonState();
 
     if (filtered.length === 0) {
+        const hasFilters = companyFilterCategory !== 'ALL' || companyFilterCurrency !== 'ALL' || !!companySearchQuery;
         container.innerHTML = `
             <div class="border border-slate-200 rounded-xl bg-slate-50/50 p-8 text-center space-y-2">
-                <p class="text-xs text-slate-600 font-medium">No company profiles match <strong class="text-kpmg-navy">"${escapeHtml(companySearchQuery)}"</strong></p>
-                <button onclick="clearCompanySearch()" class="text-xs text-kpmg-blue font-semibold hover:underline cursor-pointer">Clear search query</button>
+                <p class="text-xs text-slate-600 font-medium">No company profiles match ${companySearchQuery ? `search query <strong class="text-kpmg-navy">"${escapeHtml(companySearchQuery)}"</strong>` : 'current filter criteria'}.</p>
+                ${hasFilters ? `<button onclick="clearAllFiltersAndSearch()" class="text-xs text-kpmg-blue font-semibold hover:underline cursor-pointer">Reset search and filters</button>` : ''}
             </div>
         `;
         return;
