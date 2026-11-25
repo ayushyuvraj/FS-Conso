@@ -257,6 +257,16 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Test Suite: 8/8 PASSED in `tests/test_ingestion_gate.py` and `tests/test_run_manager.py`.
   - Live server verification: Uvicorn serving on `http://127.0.0.1:8000` with HTTP 200 OK.
 
+### [2026-11-25 22:36] Milestone: Upload Modal UI Copy Simplification
+- **Requirements Implemented**:
+  1. Simplified upload dialog title: Renamed `"Batch Document Dispatcher"` to `"Upload Documents"`.
+  2. Simplified action button: Renamed `"Dispatch & Ingest Batch"` to `"Upload"`.
+  3. Synchronized JavaScript submit lifecycle so the button returns to `"Upload"` post-dispatch.
+- **Verification**:
+  - Automated tests: 8/8 PASSED.
+  - Live server: Verified on `http://127.0.0.1:8000`.
+
+
 
 
 

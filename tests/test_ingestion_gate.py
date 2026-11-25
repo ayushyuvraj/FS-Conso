@@ -45,6 +45,11 @@ def test_template_batch_upload_modal_structure():
         "'Locked for active run' label must be displayed"
     )
 
+    # 6. Modal title must be "Upload Documents" and button must be "Upload"
+    assert "Upload Documents" in html_content, "Modal title must be 'Upload Documents'"
+    assert "Batch Document Dispatcher" not in html_content, "Legacy title 'Batch Document Dispatcher' must be replaced"
+    assert "<span>Upload</span>" in html_content, "Submit button label must be 'Upload'"
+
 
 def test_javascript_gate_check_and_date_formatting():
     """Verify that app.js implements the gate check and multi-format date functions."""

@@ -2396,7 +2396,7 @@ async function submitBatchUpload(e) {
         showToast("Network Error", "Batch upload failed: " + err, "error");
     } finally {
         btn.disabled = false;
-        btn.innerHTML = `<span>Dispatch & Ingest Batch</span>`;
+        btn.innerHTML = `<span>Upload</span>`;
     }
 }
 
