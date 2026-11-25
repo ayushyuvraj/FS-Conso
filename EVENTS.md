@@ -146,8 +146,28 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Automated tests: 54/54 PASSED (100% pass rate).
   - Portal server live status: HTTP 200 OK.
 
-
-
-
+### [2026-11-25 20:15] Milestone: Ghost Icon Buttons, Uniform Quiet Typography & Standardized Input Sizing
+- **Requirements Implemented**:
+  1. **Ghost Icon Buttons (No Outer Box/Border)**:
+     - Converted `Edit`, `Delete`, `Sort`, and `Filter` buttons to true ghost icon buttons without permanent borders or box backgrounds.
+     - Backgrounds and hover states (`hover:bg-slate-100`, `hover:bg-rose-50`) appear exclusively on hover.
+  2. **Uniform Quiet Data Cells (No Colored Boxes, Pills, or Bolding)**:
+     - Code cell: rendered as quiet mono text (`font-mono text-xs text-slate-700`) without blue pill background or bolding.
+     - Company Name cell: rendered as quiet plain text (`text-xs text-slate-700`) without bolding.
+     - Currency cell: rendered as quiet mono text (`font-mono text-xs text-slate-700`) without blue border or pill background.
+     - Base Chart of Accounts cell: rendered as quiet mono text (`font-mono text-xs text-slate-700`, e.g. `239 GL Accounts`) without green status dot or green text coloring.
+  3. **Subsidiaries & Subsidiary Currencies Columns**:
+     - Subsidiaries column: displays solely the integer count (e.g. `2`, `3`, `0`), completely removing the word "subs" and bracketed notes like `(2 wholly owned)`.
+     - Renamed column header from `Perimeter FX` to `Subsidiary Currencies`.
+     - Subsidiary Currencies column: displays clean comma-separated list of subsidiary input currencies (or `—` when 0 subsidiaries exist).
+  4. **Standardized Input Box Sizing (Google Gemini API Key Benchmark)**:
+     - Standardized the Settings drawer's `Display Date & Time Format` select to `w-full h-9 px-3 rounded border border-kpmg-border font-mono text-xs text-kpmg-text bg-white focus:ring-2 focus:ring-kpmg-electric focus:outline-none`, matching the Google Gemini API key box.
+     - Standardized the tolerance number inputs to `h-9 px-3 rounded border border-kpmg-border`.
+     - Standardized Search Bar height to `h-9` with subtle borderless background matching corporate design guidelines.
+- **Verification**:
+  - Node.js syntax check: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Automated tests: 54/54 PASSED in 31.40s (100% pass rate).
+  - Portal server live status: HTTP 200 OK (`active_company_id: c1`, `is_ready: True`).
+  - Git checkpoint and remote push: tagged `checkpoint-profile-v2-ghost-buttons-and-plain-cells`.
 
 

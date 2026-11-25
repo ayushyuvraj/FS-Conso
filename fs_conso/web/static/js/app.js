@@ -1440,10 +1440,7 @@ function renderCompanyTableBody() {
         const isExpanded = expandedCompanyIds.has(comp.company_id);
         const whollyOwnedCount = subs.filter(s => Number(s.ownership_pct) >= 100).length;
         const nciCount = subs.length - whollyOwnedCount;
-        const uniqueCurrencies = Array.from(new Set([
-            comp.reporting_currency,
-            ...subs.map(s => s.input_currency).filter(Boolean)
-        ]));
+        const subCurrencies = Array.from(new Set(subs.map(s => s.input_currency).filter(Boolean)));
         const coaAccounts = comp.coa_account_count || 0;
         const coaFile = comp.coa_filename || "Chart of Accounts";
 
@@ -1467,7 +1464,7 @@ function renderCompanyTableBody() {
                         ${subs.map((s, idx) => `
                             <tr class="hover:bg-slate-50/80 transition">
                                 <td class="px-3 py-2 font-mono text-[11px] text-slate-400 text-center">${idx + 1}</td>
-                                <td class="px-3 py-2 font-semibold text-kpmg-navy">
+                                <td class="px-3 py-2 text-slate-700">
                                     <div class="flex items-center space-x-1.5">
                                         <span class="w-1.5 h-1.5 rounded-full bg-kpmg-electric flex-shrink-0"></span>
                                         <span>${escapeHtml(s.entity_name)}</span>
@@ -1476,11 +1473,11 @@ function renderCompanyTableBody() {
                                 <td class="px-3 py-2 font-mono text-[11px] text-slate-600">${s.company_reg_number ? escapeHtml(s.company_reg_number) : '<span class="text-slate-400">—</span>'}</td>
                                 <td class="px-3 py-2 text-slate-700">${s.country_of_inc ? escapeHtml(s.country_of_inc) : '<span class="text-slate-400">—</span>'}</td>
                                 <td class="px-3 py-2 font-mono text-[11px] text-slate-600">${s.date_of_inc ? escapeHtml(s.date_of_inc) : '<span class="text-slate-400">—</span>'}</td>
-                                <td class="px-3 py-2 text-center">
-                                    <span class="px-2 py-0.5 rounded bg-blue-50 text-kpmg-blue border border-blue-200/70 font-mono text-[10px] font-bold">${escapeHtml(s.input_currency)}</span>
+                                <td class="px-3 py-2 text-center font-mono text-xs text-slate-700">
+                                    ${escapeHtml(s.input_currency)}
                                 </td>
-                                <td class="px-3 py-2 text-right font-mono font-bold text-kpmg-navy">${Number(s.ownership_pct).toFixed(2)}%</td>
-                                <td class="px-3 py-2 text-right font-mono text-slate-500">${Number(s.nci_pct).toFixed(2)}%</td>
+                                <td class="px-3 py-2 text-right font-mono text-xs text-slate-700">${Number(s.ownership_pct).toFixed(2)}%</td>
+                                <td class="px-3 py-2 text-right font-mono text-xs text-slate-500">${Number(s.nci_pct).toFixed(2)}%</td>
                                 <td class="px-3 py-2 text-center font-mono text-[11px] text-slate-700">${s.acquisition_date ? escapeHtml(s.acquisition_date) : '<span class="text-slate-400">—</span>'}</td>
                             </tr>
                         `).join("")}
@@ -1507,38 +1504,32 @@ function renderCompanyTableBody() {
 
                 <!-- Company Code -->
                 <td class="px-3 py-2 whitespace-nowrap">
-                    <span class="px-2.5 py-1 rounded bg-kpmg-navy text-white font-mono text-xs font-bold tracking-wide shadow-2xs">${escapeHtml(comp.company_code || comp.company_id)}</span>
+                    <span class="font-mono text-xs text-slate-700">${escapeHtml(comp.company_code || comp.company_id)}</span>
                 </td>
 
                 <!-- Company Name -->
                 <td class="px-3 py-2">
-                    <span class="font-bold text-kpmg-navy text-xs group-hover:text-kpmg-blue transition">${escapeHtml(comp.company_name)}</span>
+                    <span class="text-xs text-slate-700 group-hover:text-kpmg-navy transition">${escapeHtml(comp.company_name)}</span>
                 </td>
 
                 <!-- Reporting Currency -->
                 <td class="px-3 py-2 text-center whitespace-nowrap">
-                    <span class="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-blue-50 text-kpmg-blue border border-blue-200/80">${escapeHtml(comp.reporting_currency)}</span>
+                    <span class="font-mono text-xs text-slate-700">${escapeHtml(comp.reporting_currency)}</span>
                 </td>
 
-                <!-- Subsidiaries Count & Scope -->
+                <!-- Subsidiaries Count -->
                 <td class="px-3 py-2 whitespace-nowrap">
-                    ${subs.length > 0
-                        ? `<span class="font-semibold text-kpmg-navy text-xs">${subs.length} ${subs.length === 1 ? 'Sub' : 'Subs'}</span> <span class="text-[11px] text-slate-500">(${whollyOwnedCount} wholly owned${nciCount > 0 ? `, ${nciCount} NCI` : ''})</span>`
-                        : `<span class="text-slate-400 text-xs">Standalone (0 subs)</span>`
-                    }
+                    <span class="font-mono text-xs text-slate-700">${subs.length}</span>
                 </td>
 
-                <!-- Perimeter FX Footprint -->
+                <!-- Subsidiary Currencies -->
                 <td class="px-3 py-2 whitespace-nowrap">
-                    <span class="font-mono text-xs font-medium text-slate-700">${escapeHtml(uniqueCurrencies.join(", "))}</span>
+                    <span class="font-mono text-xs text-slate-700">${escapeHtml(subCurrencies.length > 0 ? subCurrencies.join(", ") : "—")}</span>
                 </td>
 
                 <!-- Base Chart of Accounts -->
                 <td class="px-3 py-2 whitespace-nowrap" title="${escapeHtml(coaFile)}">
-                    <div class="flex items-center space-x-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full ${coaAccounts > 0 ? 'bg-emerald-500' : 'bg-amber-500'}"></span>
-                        <span class="font-semibold text-xs ${coaAccounts > 0 ? 'text-emerald-700' : 'text-amber-700'}">${coaAccounts} GL Accounts</span>
-                    </div>
+                    <span class="font-mono text-xs text-slate-700">${coaAccounts} GL Accounts</span>
                 </td>
 
                 <!-- Created Timestamp -->
@@ -1551,18 +1542,18 @@ function renderCompanyTableBody() {
                     ${formatDateTime(comp.updated_at || comp.created_at)}
                 </td>
 
-                <!-- 1-Click Icon Actions (Pencil & Trash Icons) -->
+                <!-- 1-Click Icon Actions (Pencil & Trash Icons - Ghost Style) -->
                 <td class="px-3 py-2 text-right whitespace-nowrap" onclick="event.stopPropagation()">
                     <div class="inline-flex items-center space-x-1">
                         <button onclick="openEditProfileModal('${escapeHtml(comp.company_id)}')"
-                            class="w-7 h-7 rounded-md hover:bg-blue-50 text-slate-500 hover:text-kpmg-blue border border-transparent hover:border-blue-200 transition flex items-center justify-center cursor-pointer btn-tactile shadow-2xs"
+                            class="w-7 h-7 rounded text-slate-400 hover:text-kpmg-blue hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile"
                             title="Edit Profile & Base COA">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                             </svg>
                         </button>
                         <button onclick="openDeleteProfileModal('${escapeHtml(comp.company_id)}')"
-                            class="w-7 h-7 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-transparent hover:border-rose-200 transition flex items-center justify-center cursor-pointer btn-tactile shadow-2xs"
+                            class="w-7 h-7 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition flex items-center justify-center cursor-pointer btn-tactile"
                             title="Delete Profile">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1611,7 +1602,7 @@ function renderCompanyTableBody() {
                             <th class="px-3 py-2.5">Company Name</th>
                             <th class="px-3 py-2.5 text-center">Currency</th>
                             <th class="px-3 py-2.5">Subsidiaries</th>
-                            <th class="px-3 py-2.5">Perimeter FX</th>
+                            <th class="px-3 py-2.5">Subsidiary Currencies</th>
                             <th class="px-3 py-2.5">Base COA</th>
                             <th class="px-3 py-2.5">Created</th>
                             <th class="px-3 py-2.5">Last Updated</th>
