@@ -100,6 +100,33 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Full test suite: 54/54 PASSED.
   - Portal server live status: HTTP 200 OK.
 
+### [2026-11-25 19:55] Milestone: Navigation Persistence, Button Harmony, Icon Actions & Enterprise Date Formatting
+- **Core Requirements Implemented**:
+  1. **Zero-Reset Navigation Persistence**:
+     - Stored `activeNavSection` in `localStorage` (`fs_conso_active_nav_section`).
+     - On page refresh, user remains on the active section (Company Profile stays on Company Profile, Consolidation stays on Consolidation) instead of defaulting back to Consolidation.
+  2. **Button Styling Unification & Prominence**:
+     - Upgraded `+ Create Profile` button to match the primary luxury action button format (`h-9 px-5 rounded-lg bg-gradient-to-r from-kpmg-blue to-kpmg-navy text-white font-semibold text-xs shadow-md btn-tactile`).
+  3. **Clean Row Actions (Pencil & Trash Icons)**:
+     - Replaced text buttons with two minimal, elegant icon action buttons:
+       - Pencil SVG icon button for Edit / Update COA.
+       - Trash SVG icon button for Delete Profile.
+  4. **Created & Last Updated Columns with Enterprise Date Formatting**:
+     - Inserted `Created` column before `Last Updated` in the company perimeter table.
+     - Added global enterprise date format preference dropdown in Settings drawer (`#setting-date-format`) with 5 standard options (ISO 8601, UK/Europe/India, US Corporate, International Audit, Google Workspace).
+     - Persisted format selection in `localStorage` and dynamically formatted all timestamps via `formatDateTime()`.
+  5. **Header & Title Restorations**:
+     - Restored the merged KPMG logo / hamburger toggle button with hover morphing state (`group-hover:opacity-100 group-hover:scale-100`).
+     - Restored Company Profile title font size to `text-xl font-bold text-kpmg-navy`.
+  6. **Codified Immutable Preservation Rule (Rule 7)**:
+     - Recorded Rule 7 in `AGENTS.md` and user rule definitions to prevent unauthorized mutations of verified features.
+- **Verification**:
+  - Node.js syntax check: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Reference data syntax check: `node -c "fs_conso/web/static/js/reference_data.js"`: EXIT 0.
+  - Pytest full suite: 54/54 PASSED.
+  - Live server check: HTTP 200 OK.
+
+
 
 
 

@@ -8,7 +8,7 @@ let appStatus = {};
 let pipelineData = {};
 let activeStep = 1;
 let activeSection = 'RUN'; // 'RUN' or 'AUDIT'
-let activeNavSection = 'PIPELINE'; // 'COMPANIES', 'PIPELINE', or 'AUDIT'
+let activeNavSection = localStorage.getItem("fs_conso_active_nav_section") || 'COMPANIES';
 let sidebarCollapsed = false;
 let availableCompanies = [];
 let pendingHITLItems = [];
@@ -17,6 +17,7 @@ let collapseEntityColumns = false;
 document.addEventListener("DOMContentLoaded", async () => {
     initSidebar();
     initToolbarDropdowns();
+    initDateFormatSetting();
     initDialogAndDrawerResizers();
     initTableColumnResizers();
     initTableObserver();
@@ -24,9 +25,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     await fetchCompanies();
     await fetchStatus();
     await syncCachedApiKeyIfAvailable();
-    if (!appStatus.active_company_id || availableCompanies.length === 0) {
-        switchNavSection('COMPANIES');
-    }
+    const savedNav = localStorage.getItem("fs_conso_active_nav_section") || 'COMPANIES';
+    switchNavSection(savedNav);
     loadPipelineData();
     initDropZone();
     initBatchDropZone();
@@ -149,6 +149,77 @@ let companySortKey = "name-asc";
 let companyFilterCategory = "ALL"; // 'ALL', 'WITH_SUBS', 'STANDALONE'
 let companyFilterCurrency = "ALL"; // 'ALL' or specific ISO currency e.g. 'INR', 'USD'
 let expandedCompanyIds = new Set();
+
+// -------------------------------------------------------------
+// Enterprise Date Formatting System (Google / Microsoft Standards)
+// -------------------------------------------------------------
+
+let currentDateFormat = "YYYY-MM-DD HH:mm";
+
+function initDateFormatSetting() {
+    try {
+        const saved = localStorage.getItem("fs_conso_date_format");
+        if (saved) {
+            currentDateFormat = saved;
+        }
+        const selectEl = document.getElementById("setting-date-format");
+        if (selectEl) {
+            selectEl.value = currentDateFormat;
+        }
+    } catch (_) {}
+}
+
+function handleDateFormatChange(val) {
+    currentDateFormat = val || "YYYY-MM-DD HH:mm";
+    try {
+        localStorage.setItem("fs_conso_date_format", currentDateFormat);
+    } catch (_) {}
+    renderCompanyTableBody();
+    showToast("Date Format Updated", `Timestamps formatted as ${currentDateFormat}`, "info");
+}
+
+function formatDateTime(dateVal) {
+    if (!dateVal) return "—";
+    let d;
+    if (typeof dateVal === "string") {
+        const clean = dateVal.trim();
+        if (!clean) return "—";
+        d = new Date(clean.replace(" ", "T"));
+        if (isNaN(d.getTime())) {
+            d = new Date(clean);
+        }
+    } else {
+        d = new Date(dateVal);
+    }
+    if (isNaN(d.getTime())) {
+        return String(dateVal);
+    }
+
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const hours24 = d.getHours();
+    const hours = String(hours24).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    const hours12 = String(hours24 % 12 || 12).padStart(2, "0");
+    const ampm = hours24 >= 12 ? "PM" : "AM";
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthStr = monthNames[d.getMonth()];
+
+    switch (currentDateFormat) {
+        case "DD-MM-YYYY HH:mm":
+            return `${day}-${month}-${year} ${hours}:${minutes}`;
+        case "MM/DD/YYYY hh:mm A":
+            return `${month}/${day}/${year} ${hours12}:${minutes} ${ampm}`;
+        case "DD MMM YYYY, HH:mm":
+            return `${day} ${monthStr} ${year}, ${hours}:${minutes}`;
+        case "MMM DD, YYYY, hh:mm A":
+            return `${monthStr} ${day}, ${year}, ${hours12}:${minutes} ${ampm}`;
+        case "YYYY-MM-DD HH:mm":
+        default:
+            return `${year}-${month}-${day} ${hours}:${minutes}`;
+    }
+}
 
 function buildCurrencyOptionsHtml(selectedCode = "") {
     const placeholder = `<option value="" ${!selectedCode ? 'selected' : ''}>Select currency...</option>`;
@@ -914,6 +985,9 @@ function renderHITLBadge() {
 function switchNavSection(section) {
     activeNavSection = section;
     activeSection = (section === 'AUDIT') ? 'AUDIT' : 'RUN';
+    try {
+        localStorage.setItem("fs_conso_active_nav_section", section);
+    } catch (_) {}
 
     const itemCompanies = document.getElementById("nav-item-companies");
     const itemPipeline = document.getElementById("nav-item-pipeline");
@@ -1464,21 +1538,32 @@ function renderCompanyTableBody() {
                     </div>
                 </td>
 
-                <!-- Last Updated -->
+                <!-- Created Timestamp -->
                 <td class="px-3 py-2 whitespace-nowrap font-mono text-[11px] text-slate-500">
-                    ${escapeHtml((comp.updated_at || comp.created_at || '—').slice(0, 16))}
+                    ${formatDateTime(comp.created_at)}
                 </td>
 
-                <!-- 1-Click Actions (Exact 2 Actions: Edit & Delete) -->
+                <!-- Last Updated Timestamp -->
+                <td class="px-3 py-2 whitespace-nowrap font-mono text-[11px] text-slate-500">
+                    ${formatDateTime(comp.updated_at || comp.created_at)}
+                </td>
+
+                <!-- 1-Click Icon Actions (Pencil & Trash Icons) -->
                 <td class="px-3 py-2 text-right whitespace-nowrap" onclick="event.stopPropagation()">
-                    <div class="inline-flex items-center space-x-1.5">
+                    <div class="inline-flex items-center space-x-1">
                         <button onclick="openEditProfileModal('${escapeHtml(comp.company_id)}')"
-                            class="px-2.5 py-1 rounded-md bg-white hover:bg-slate-100 text-kpmg-navy border border-slate-300 text-xs font-semibold transition cursor-pointer shadow-2xs">
-                            Edit / Update COA
+                            class="w-7 h-7 rounded-md hover:bg-blue-50 text-slate-500 hover:text-kpmg-blue border border-transparent hover:border-blue-200 transition flex items-center justify-center cursor-pointer btn-tactile shadow-2xs"
+                            title="Edit Profile & Base COA">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
                         </button>
                         <button onclick="openDeleteProfileModal('${escapeHtml(comp.company_id)}')"
-                            class="px-2.5 py-1 rounded-md bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 hover:border-rose-200 text-xs font-medium transition cursor-pointer shadow-2xs">
-                            Delete
+                            class="w-7 h-7 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-transparent hover:border-rose-200 transition flex items-center justify-center cursor-pointer btn-tactile shadow-2xs"
+                            title="Delete Profile">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
                         </button>
                     </div>
                 </td>
@@ -1486,7 +1571,7 @@ function renderCompanyTableBody() {
 
             <!-- Expandable Nested Tray for Subsidiaries & Master Details -->
             <tr id="tray-${escapeHtml(comp.company_id)}" class="company-detail-tray ${isExpanded ? '' : 'hidden'} bg-slate-50/70 border-b border-slate-200">
-                <td colspan="9" class="p-4 pl-10 pr-6">
+                <td colspan="10" class="p-4 pl-10 pr-6">
                     <div class="space-y-3">
                         <!-- Summary Ribbon inside Tray -->
                         <div class="flex flex-wrap items-center justify-between text-xs text-slate-600 gap-2 border-b border-slate-200 pb-2.5">
@@ -1497,8 +1582,10 @@ function renderCompanyTableBody() {
                                 <span class="text-slate-300">•</span>
                                 <span>COA File: <strong class="font-mono text-slate-700">${escapeHtml(coaFile)}</strong> (${coaAccounts} accounts${comp.coa_uploaded_at ? ` • ${escapeHtml(comp.coa_uploaded_at)}` : ''})</span>
                             </div>
-                            <div class="text-[11px] text-slate-400 font-mono">
-                                Created: ${escapeHtml(comp.created_at || '—')}
+                            <div class="text-[11px] text-slate-500 font-mono flex items-center space-x-3">
+                                <span>Created: <strong class="text-slate-700">${formatDateTime(comp.created_at)}</strong></span>
+                                <span class="text-slate-300">•</span>
+                                <span>Updated: <strong class="text-slate-700">${formatDateTime(comp.updated_at || comp.created_at)}</strong></span>
                             </div>
                         </div>
 
@@ -1523,6 +1610,7 @@ function renderCompanyTableBody() {
                             <th class="px-3 py-2.5">Subsidiaries</th>
                             <th class="px-3 py-2.5">Perimeter FX</th>
                             <th class="px-3 py-2.5">Base COA</th>
+                            <th class="px-3 py-2.5">Created</th>
                             <th class="px-3 py-2.5">Last Updated</th>
                             <th class="px-3 py-2.5 text-right">Actions</th>
                         </tr>

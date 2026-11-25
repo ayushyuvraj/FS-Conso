@@ -54,3 +54,13 @@ In every implementation task, the agent MUST autonomously execute exhaustive end
    - Create clean, atomic commits for every milestone.
    - Push verified changes directly to the remote repository (`git push origin <branch>`).
 
+---
+
+## 7. Immutable Preservation Rule (MANDATORY)
+
+Once a UX interaction, styling choice, button layout, or component behavior is established and verified, the agent MUST NEVER touch, rewrite, alter, or remove it in subsequent tasks unless the user explicitly requests that specific change.
+1. **Zero Unsolicited Mutations**: Only change what is strictly required to fulfill the user's immediate request. Working, existing code and UI patterns are frozen.
+2. **Design Continuity & Unification**: Always match established button sizes, typography scales, paddings, and interaction physics (e.g., standard action buttons, morphing brand toggles, navigation persistence).
+3. **Strict Scope Discipline**: Never make unauthorized aesthetic or functional assumptions. If in doubt, ask before modifying working features.
+
+

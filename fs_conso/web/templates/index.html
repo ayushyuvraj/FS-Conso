@@ -48,21 +48,23 @@
 
     <!-- 1. Luxury High-Finance Navigation Bar (KPMG Clara Executive Frosted Glass) -->
     <header class="h-16 bg-white border-b border-slate-200/90 shadow-xs px-4 md:px-6 flex items-center justify-between sticky top-0 z-40 relative">
-        <!-- Left: Dedicated Hamburger Sidebar Toggle & KPMG Brand Title -->
+        <!-- Left: Merged KPMG Brand / Sidebar Toggle (Morphs to Hamburger on Hover) & Title -->
         <div class="flex items-center space-x-3">
-            <!-- Dedicated Hamburger Toggle Button -->
+            <!-- Merged KPMG Logo / Hamburger Toggle Button (Morphs to Hamburger on Hover) -->
             <button id="btn-toggle-sidebar" onclick="toggleSidebar()" 
-                class="w-9 h-9 rounded-lg hover:bg-slate-100 text-kpmg-navy transition flex items-center justify-center focus:outline-none border border-transparent hover:border-slate-200 btn-tactile cursor-pointer" 
+                class="group relative h-10 px-2.5 rounded-lg hover:bg-slate-100 text-kpmg-navy transition-all duration-200 flex items-center justify-center focus:outline-none border border-transparent hover:border-slate-200/80 btn-tactile cursor-pointer" 
                 title="Toggle Sidebar Navigation (Ctrl+B)">
-                <svg class="w-5 h-5 text-kpmg-navy" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
+                <!-- Default State: KPMG Corporate Logo -->
+                <div class="flex items-center transition-all duration-200 ease-out group-hover:opacity-0 group-hover:scale-90 group-hover:pointer-events-none">
+                    <img src="/static/img/kpmg-logo.svg" alt="KPMG" class="h-6 w-auto object-contain" />
+                </div>
+                <!-- Hover State: Hamburger Menu Icon -->
+                <div class="absolute inset-0 flex items-center justify-center opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 ease-out text-kpmg-navy pointer-events-none">
+                    <svg class="w-5 h-5 text-kpmg-navy" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </div>
             </button>
-
-            <!-- Distinct KPMG Corporate Logo -->
-            <div class="flex items-center">
-                <img src="/static/img/kpmg-logo.svg" alt="KPMG" class="h-6 w-auto object-contain" />
-            </div>
 
             <div class="h-5 w-[1px] bg-slate-200 hidden sm:block"></div>
 
@@ -299,15 +301,16 @@
                 <!-- Page Title Header (Compact, Zero Wasted Space) -->
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200/80 pb-2.5 gap-2">
                     <div>
-                        <h2 class="text-lg font-bold text-kpmg-navy tracking-tight">Company Profile</h2>
+                        <h2 class="text-xl font-bold text-kpmg-navy tracking-tight">Company Profile</h2>
                         <p class="text-xs text-slate-500 mt-0.5" id="company-profile-desc">Manage parent company profiles, subsidiary ownership structures, and base Charts of Accounts.</p>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <button id="btn-create-profile" onclick="openCreateProfileModal()" class="h-8.5 px-3.5 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition btn-tactile inline-flex items-center space-x-1.5 shadow-xs cursor-pointer">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <button id="btn-create-profile" onclick="openCreateProfileModal()" 
+                            class="h-9 px-5 rounded-lg bg-gradient-to-r from-kpmg-blue to-kpmg-navy hover:from-[#1E49E2] hover:to-kpmg-blue text-white font-semibold text-xs shadow-md btn-tactile flex items-center space-x-2 border border-white/10 cursor-pointer">
+                            <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                             </svg>
-                            <span>Create Profile</span>
+                            <span>+ Create Profile</span>
                         </button>
                     </div>
                 </div>
@@ -456,6 +459,23 @@
                                 class="w-full h-8 px-2 rounded border border-kpmg-border font-mono text-xs">
                         </div>
                     </div>
+                </div>
+
+                <!-- Enterprise Date & Timestamp Format Setting -->
+                <div class="space-y-2 pt-2 border-t border-slate-200">
+                    <div class="flex items-center justify-between">
+                        <label class="font-bold text-kpmg-navy block">Display Date & Time Format</label>
+                        <span class="text-[10px] text-slate-500 font-mono">Global Preference</span>
+                    </div>
+                    <select id="setting-date-format" onchange="handleDateFormatChange(this.value)"
+                        class="w-full h-8.5 px-2.5 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:ring-2 focus:ring-kpmg-blue/20 focus:border-kpmg-blue focus:outline-none transition">
+                        <option value="YYYY-MM-DD HH:mm">2026-11-25 18:56 — ISO 8601 (Default)</option>
+                        <option value="DD-MM-YYYY HH:mm">25-11-2026 18:56 — UK / Europe / India</option>
+                        <option value="MM/DD/YYYY hh:mm A">11/25/2026 06:56 PM — US Corporate</option>
+                        <option value="DD MMM YYYY, HH:mm">25 Nov 2026, 18:56 — International Audit</option>
+                        <option value="MMM DD, YYYY, hh:mm A">Nov 25, 2026, 06:56 PM — Google Workspace</option>
+                    </select>
+                    <p class="text-[11px] text-slate-500 leading-normal">Applied across created and updated timestamps in Company Profiles and Audit Logs.</p>
                 </div>
             </div>
         </div>
