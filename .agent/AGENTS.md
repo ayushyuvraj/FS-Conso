@@ -29,3 +29,28 @@ This repository incorporates five core design and interaction skills installed i
 - **Subject-Matter Grounding**: Interface design tailored specifically to multi-entity consolidation accounting, legal perimeter governance, and multi-agent observability.
 - **Design Token Discipline**: Centralized CSS variables in `style.css` rather than scattered arbitrary inline styles.
 - **Resilient Component Architecture**: Clear state management, robust DOM handling, zero console errors, and graceful degradations.
+
+---
+
+## 6. Autonomous Verification, Production Hardening & Git Checkpoint Rule (MANDATORY)
+
+In every implementation task, the agent MUST autonomously execute exhaustive end-to-end verifications before completing the turn:
+1. **Security**: Validate against formula injection (`=`, `@`, `+`, `-`), path traversal (`..`), XSS (`escapeHtml`), and sensitive credential/API key leakage.
+2. **Robustness & Defensiveness**:
+   - Case-insensitive lookups and slug tolerance for all identifiers, codes, and company names.
+   - Comprehensive error handling: never return raw 500s or unhandled exceptions to the user.
+   - Resilient date and number parsing supporting international formats, blank placeholders, and regional variations.
+3. **Exhaustive Edge Cases**:
+   - Zero, single, and high-volume subsidiaries (0, 1, 3, 50+ entities).
+   - In-place renaming, casing alterations (e.g. `CLient_one` vs `client_one`), and code updates.
+   - Preserving master structures (Base COA, FX tables, entity hierarchies) across partial edits.
+4. **Deployment & Runtime Hardening**:
+   - Detect and prevent stale server processes or locked ports (8000).
+   - Ensure server auto-reloading (`reload=True` with WatchFiles) is active and running cleanly.
+   - Verify all static assets and JavaScript functions parse and execute without console errors.
+5. **Continuous Verification Ledger (`EVENTS.md`)**:
+   - Record all production audits, edge case verifications, and architectural changes in `EVENTS.md`.
+6. **Git Checkpoint & Push**:
+   - Create clean, atomic commits for every milestone.
+   - Push verified changes directly to the remote repository (`git push origin <branch>`).
+

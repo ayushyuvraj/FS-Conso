@@ -212,10 +212,13 @@ function validateFieldOnBlur(el) {
     }
     if (id === "profile-company-code") {
         if (!val) { triggerFieldShake(el, "Company code is required."); return false; }
-        const editId = document.getElementById("profile-edit-company-id")?.value.trim();
-        const duplicate = availableCompanies.find(c =>
-            c.company_id !== editId && (c.company_code || "").toUpperCase() === val.toUpperCase()
-        );
+        const editId = (document.getElementById("profile-edit-company-id")?.value || "").trim().toLowerCase();
+        const duplicate = availableCompanies.find(c => {
+            const cId = (c.company_id || "").toLowerCase();
+            const cCode = (c.company_code || "").toUpperCase();
+            const isSelf = cId === editId || cCode === editId.toUpperCase();
+            return !isSelf && cCode === val.toUpperCase();
+        });
         if (duplicate) { triggerFieldShake(el, `Code '${val.toUpperCase()}' is already in use.`); return false; }
         clearFieldError(el); return true;
     }
@@ -541,7 +544,11 @@ function openCreateProfileModal() {
 }
 
 function openEditProfileModal(companyId) {
-    const comp = availableCompanies.find(c => c.company_id === companyId);
+    const targetClean = String(companyId || "").trim();
+    const comp = availableCompanies.find(c =>
+        (c.company_id && c.company_id.toLowerCase() === targetClean.toLowerCase()) ||
+        (c.company_code && c.company_code.toUpperCase() === targetClean.toUpperCase())
+    );
     if (!comp) return;
     const modal = document.getElementById("modal-company-profile");
     if (!modal) return;
@@ -710,7 +717,11 @@ async function submitCompanyProfile(e) {
 }
 
 function openDeleteProfileModal(companyId) {
-    const comp = availableCompanies.find(c => c.company_id === companyId);
+    const targetClean = String(companyId || "").trim();
+    const comp = availableCompanies.find(c =>
+        (c.company_id && c.company_id.toLowerCase() === targetClean.toLowerCase()) ||
+        (c.company_code && c.company_code.toUpperCase() === targetClean.toUpperCase())
+    );
     if (!comp) return;
     pendingDeleteCompanyId = companyId;
     document.getElementById("delete-profile-name").textContent = comp.company_name || companyId;

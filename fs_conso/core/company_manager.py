@@ -70,7 +70,7 @@ class CompanyManager:
             cdata = json.loads((cdir / "coa.json").read_text(encoding="utf-8"))
             coa_count = len(cdata.get("items", {}))
 
-        comp_id = pdata.get("company_id", cdir.name)
+        comp_id = str(pdata.get("company_id", cdir.name)).strip().lower()
         return {
             "company_id": comp_id,
             "company_code": pdata.get("company_code") or str(comp_id).upper(),
@@ -87,6 +87,48 @@ class CompanyManager:
             "updated_at": pdata.get("updated_at"),
         }
 
+    def _load_profile_from_dir(self, cdir: Path) -> Optional[CompanyProfile]:
+        """Safely loads a CompanyProfile and its master data from a workspace directory."""
+        pfile = cdir / "profile.json"
+        if not pfile.exists():
+            return None
+        try:
+            pdata = json.loads(pfile.read_text(encoding="utf-8"))
+            profile = CompanyProfile(**pdata)
+
+            # Load Group COA
+            coa_file = cdir / "coa.json"
+            if coa_file.exists():
+                try:
+                    coa_data = json.loads(coa_file.read_text(encoding="utf-8"))
+                    profile.group_coa = ChartOfAccounts(**coa_data)
+                except Exception:
+                    pass
+
+            # Load Entity Hierarchy
+            ent_file = cdir / "entities.json"
+            if ent_file.exists():
+                try:
+                    ent_data = json.loads(ent_file.read_text(encoding="utf-8"))
+                    profile.entity_hierarchy = EntityHierarchy(**ent_data)
+                except Exception:
+                    pass
+
+            # Load FX Tables
+            fx_file = cdir / "fx_rates.json"
+            if fx_file.exists():
+                try:
+                    fx_data = json.loads(fx_file.read_text(encoding="utf-8"))
+                    profile.fx_tables_by_date = {
+                        period: FXRateTable(**tbl) for period, tbl in fx_data.items()
+                    }
+                except Exception:
+                    pass
+
+            return profile
+        except Exception:
+            return None
+
     def list_companies(self) -> List[Dict[str, Any]]:
         """Lists all stored company profiles with high-level summaries and subsidiary snapshots."""
         companies = []
@@ -102,45 +144,83 @@ class CompanyManager:
         return sorted(companies, key=lambda x: (x.get("company_name") or "").lower())
 
     def get_company(self, company_id: str) -> Optional[CompanyProfile]:
-        """Loads complete CompanyProfile from its isolated workspace directory."""
-        cdir = self._company_dir(company_id)
-        pfile = cdir / "profile.json"
-        if not pfile.exists():
+        """Loads complete CompanyProfile from its isolated workspace directory.
+        Performs multi-layered resolution:
+        1. Direct directory slug match
+        2. Case-insensitive directory name match
+        3. Match by stored company_id, company_code, or company_name across all workspace profiles.
+        """
+        if not company_id:
+            return None
+        clean_id = str(company_id).strip()
+        if not clean_id:
             return None
 
-        pdata = json.loads(pfile.read_text(encoding="utf-8"))
-        profile = CompanyProfile(**pdata)
+        # 1. Direct directory slug match
+        try:
+            cdir = self._company_dir(clean_id)
+            if cdir.exists():
+                prof = self._load_profile_from_dir(cdir)
+                if prof:
+                    return prof
+        except Exception:
+            pass
 
-        # Load Group COA
-        coa_file = cdir / "coa.json"
-        if coa_file.exists():
+        # 2 & 3. Scan workspaces for case-insensitive match by ID, code, directory slug, or name
+        if not self.workspaces_dir.exists():
+            return None
+
+        clean_lower = clean_id.lower()
+        clean_upper = clean_id.upper()
+        try:
+            slug_candidate = self.slugify_code(clean_id)
+        except Exception:
+            slug_candidate = clean_lower
+
+        # First pass: match by stored company_code or company_id or dir name
+        for cdir in self.workspaces_dir.iterdir():
+            if not cdir.is_dir():
+                continue
+            pfile = cdir / "profile.json"
+            if not pfile.exists():
+                continue
             try:
-                coa_data = json.loads(coa_file.read_text(encoding="utf-8"))
-                profile.group_coa = ChartOfAccounts(**coa_data)
-            except Exception:
-                pass
+                pdata = json.loads(pfile.read_text(encoding="utf-8"))
+                stored_id = str(pdata.get("company_id") or cdir.name).strip().lower()
+                stored_code = str(pdata.get("company_code") or "").strip().upper()
+                dir_slug = cdir.name.lower()
 
-        # Load Entity Hierarchy
-        ent_file = cdir / "entities.json"
-        if ent_file.exists():
+                if (
+                    stored_id == clean_lower
+                    or stored_code == clean_upper
+                    or dir_slug == clean_lower
+                    or dir_slug == slug_candidate
+                    or (stored_code and self.slugify_code(stored_code) == slug_candidate)
+                ):
+                    prof = self._load_profile_from_dir(cdir)
+                    if prof:
+                        return prof
+            except Exception:
+                continue
+
+        # Second pass: match by company_name (case-insensitive)
+        for cdir in self.workspaces_dir.iterdir():
+            if not cdir.is_dir():
+                continue
+            pfile = cdir / "profile.json"
+            if not pfile.exists():
+                continue
             try:
-                ent_data = json.loads(ent_file.read_text(encoding="utf-8"))
-                profile.entity_hierarchy = EntityHierarchy(**ent_data)
+                pdata = json.loads(pfile.read_text(encoding="utf-8"))
+                stored_name = str(pdata.get("company_name") or "").strip().lower()
+                if stored_name and stored_name == clean_lower:
+                    prof = self._load_profile_from_dir(cdir)
+                    if prof:
+                        return prof
             except Exception:
-                pass
+                continue
 
-        # Load FX Tables
-        fx_file = cdir / "fx_rates.json"
-        if fx_file.exists():
-            try:
-                fx_data = json.loads(fx_file.read_text(encoding="utf-8"))
-                profile.fx_tables_by_date = {
-                    period: FXRateTable(**tbl) for period, tbl in fx_data.items()
-                }
-            except Exception:
-                pass
-
-        return profile
+        return None
 
     def save_company(self, profile: CompanyProfile) -> None:
         """Saves company profile and master data structures."""
@@ -262,16 +342,32 @@ class CompanyManager:
         if not clean_curr:
             raise ValueError("Reporting currency is required.")
 
-        target_id = existing_company_id or self.slugify_code(clean_code)
-        existing = self.get_company(target_id)
-        if existing_company_id is None and existing is not None:
-            raise ValueError(f"A company profile with code '{clean_code}' already exists.")
-        if existing_company_id is not None and existing is None:
-            raise ValueError(f"Company profile '{existing_company_id}' not found.")
+        existing: Optional[CompanyProfile] = None
+        if existing_company_id:
+            # Multi-tier resolution for existing profile (ID, code, name, or slug)
+            existing = self.get_company(existing_company_id)
+            if existing is None:
+                existing = self.get_company(clean_code) or self.get_company(clean_name)
 
-        # Check duplicate company_code against other profiles
+        if existing is not None:
+            # Updating an existing profile
+            target_id = existing.company_id
+        else:
+            if existing_company_id is not None and coa is None:
+                raise ValueError(
+                    f"Company profile '{existing_company_id}' not found. Please attach a Base Chart of Accounts to create a new profile."
+                )
+            # Check if clean_code is already in use by another profile
+            existing_by_code = self.get_company(clean_code)
+            if existing_by_code is not None:
+                raise ValueError(f"A company profile with code '{clean_code}' already exists.")
+            target_id = self.slugify_code(clean_code)
+
+        # Check duplicate company_code against other profiles (case-insensitive ID check)
+        target_lower = str(target_id).strip().lower()
         for other in self.list_companies():
-            if other["company_id"] != target_id and (other.get("company_code") or "").upper() == clean_code:
+            other_id = str(other.get("company_id") or "").strip().lower()
+            if other_id != target_lower and (other.get("company_code") or "").strip().upper() == clean_code:
                 raise ValueError(f"Company code '{clean_code}' is already used by '{other.get('company_name')}'.")
 
         hierarchy = EntityHierarchy(parent_code=clean_code, reporting_currency=clean_curr)
@@ -385,11 +481,22 @@ class CompanyManager:
         return self._build_company_summary(cdir, pdata)
 
     def delete_company(self, company_id: str) -> bool:
-        """Deletes a company workspace directory cleanly."""
-        cdir = self._company_dir(company_id)
-        if not cdir.exists():
+        """Deletes a company workspace directory cleanly with case-insensitive and code-aware lookup."""
+        prof = self.get_company(company_id)
+        target_dir = None
+        if prof is not None:
+            target_dir = self._company_dir(prof.company_id)
+        else:
+            try:
+                cand = self._company_dir(company_id)
+                if cand.exists():
+                    target_dir = cand
+            except Exception:
+                pass
+
+        if target_dir is None or not target_dir.exists():
             return False
-        shutil.rmtree(cdir)
+        shutil.rmtree(target_dir, ignore_errors=True)
         return True
 
     def import_master_workbook(

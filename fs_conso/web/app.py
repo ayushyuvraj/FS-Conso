@@ -414,10 +414,11 @@ async def download_coa_template():
 @app.post("/api/companies/switch")
 async def switch_company(req: CompanySwitchRequest):
     """Switches active company workspace."""
-    if not company_manager.get_company(req.company_id):
+    prof = company_manager.get_company(req.company_id)
+    if not prof:
         raise HTTPException(status_code=404, detail=f"Company profile '{req.company_id}' not found.")
     async with pipeline_lock:
-        session.initialize_company(req.company_id, load_samples=False)
+        session.initialize_company(prof.company_id, load_samples=False)
     return {"success": True, "active_company_id": session.active_company_id}
 
 def _read_and_parse_coa_upload(file_bytes: bytes, raw_filename: str):
@@ -508,9 +509,9 @@ async def update_company(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    if session.active_company_id == company_id:
+    if session.active_company_id and session.active_company_id.lower() in (company_id.lower(), summary["company_id"].lower()):
         async with pipeline_lock:
-            session.initialize_company(company_id, load_samples=False)
+            session.initialize_company(summary["company_id"], load_samples=False)
     return {"success": True, "company": summary}
 
 @app.delete("/api/companies/{company_id}")
@@ -521,7 +522,7 @@ async def delete_company(company_id: str):
         raise HTTPException(status_code=404, detail=f"Company profile '{company_id}' not found.")
 
     async with pipeline_lock:
-        if session.active_company_id == company_id:
+        if session.active_company_id and session.active_company_id.lower() == company_id.lower():
             remaining = company_manager.list_companies()
             next_id = remaining[0]["company_id"] if remaining else None
             session.initialize_company(next_id, load_samples=False)
