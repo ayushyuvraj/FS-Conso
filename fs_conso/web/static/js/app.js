@@ -351,6 +351,7 @@ async function fetchCompanies() {
             const data = await res.json();
             availableCompanies = data.companies || [];
             populateCompanySelector(data.active_company_id);
+            populateLauncherCompanies();
         }
     } catch (err) {
         console.error("Failed to load companies:", err);
@@ -2517,17 +2518,23 @@ function onAuditStatusFilter(val) {
 // Preliminary Consolidation Run Launcher (Fresh Run Setup)
 // -------------------------------------------------------------
 
-function populateLauncherCompanies() {
+async function populateLauncherCompanies() {
     const select = document.getElementById("launcher-company-select");
     if (!select) return;
 
+    if (!availableCompanies || availableCompanies.length === 0) {
+        await fetchCompanies();
+    }
+
     const curVal = select.value;
-    select.innerHTML = '<option value="">Select client company from profile...</option>' +
-        companiesList.map(c => `
-            <option value="${escapeHtml(c.company_id)}" ${c.company_id === curVal ? 'selected' : ''}>
-                ${escapeHtml(c.company_name || c.company_id)} (${escapeHtml(c.company_code || c.company_id.toUpperCase())}) &bull; ${escapeHtml(c.reporting_currency || 'INR')}
-            </option>
-        `).join("");
+    const comps = availableCompanies || [];
+    select.innerHTML = '<option value="">Select client...</option>' +
+        comps.map(c => {
+            const clientName = c.company_name || c.company_id;
+            return `<option value="${escapeHtml(c.company_id)}" ${c.company_id === curVal ? 'selected' : ''}>
+                ${escapeHtml(clientName)}
+            </option>`;
+        }).join("");
 
     // Initialize date picker to today if empty
     const dateInput = document.getElementById("launcher-run-date");
@@ -2555,24 +2562,24 @@ function updateLauncherState() {
     const compId = compSelect ? compSelect.value : "";
     const runDate = dateInput ? dateInput.value : "";
 
-    const selectedComp = companiesList.find(c => c.company_id.toLowerCase() === compId.toLowerCase());
+    const comps = availableCompanies || [];
+    const selectedComp = comps.find(c => (c.company_id || "").toLowerCase() === compId.toLowerCase());
 
     if (selectedComp && snapshotEl) {
-        document.getElementById("snapshot-company-code").textContent = selectedComp.company_code || selectedComp.company_id.toUpperCase();
-        document.getElementById("snapshot-reporting-curr").textContent = selectedComp.reporting_currency || "INR";
+        const codeEl = document.getElementById("snapshot-company-code");
+        const currEl = document.getElementById("snapshot-reporting-curr");
+        const subsEl = document.getElementById("snapshot-subs-count");
+        const coaEl = document.getElementById("snapshot-coa-status");
+
+        if (codeEl) codeEl.textContent = selectedComp.company_code || selectedComp.company_id.toUpperCase();
+        if (currEl) currEl.textContent = selectedComp.reporting_currency || "INR";
         const subCount = selectedComp.subsidiaries ? selectedComp.subsidiaries.length : (selectedComp.number_of_subsidiaries || 0);
-        document.getElementById("snapshot-subs-count").textContent = `${subCount} Subsidiaries in scope`;
+        if (subsEl) subsEl.textContent = `${subCount} ${subCount === 1 ? 'Subsidiary' : 'Subsidiaries'}`;
 
         const coaCount = selectedComp.coa_account_count || 0;
-        const coaStatusEl = document.getElementById("snapshot-coa-status");
-        if (coaStatusEl) {
-            if (coaCount > 0) {
-                coaStatusEl.textContent = `✓ ${coaCount} Accounts`;
-                coaStatusEl.className = "font-semibold text-emerald-600";
-            } else {
-                coaStatusEl.textContent = "Base COA Pending";
-                coaStatusEl.className = "font-semibold text-amber-600";
-            }
+        if (coaEl) {
+            coaEl.textContent = coaCount > 0 ? `${coaCount} GL Accounts` : "No COA";
+            coaEl.className = coaCount > 0 ? "text-[11px] font-mono text-slate-500" : "text-[11px] font-mono text-amber-600";
         }
         snapshotEl.classList.remove("hidden");
     } else if (snapshotEl) {
@@ -2603,7 +2610,7 @@ async function triggerStartFreshRun() {
 
     if (startBtn) {
         startBtn.disabled = true;
-        startBtn.innerHTML = `<span>Initializing Run...</span>`;
+        startBtn.innerHTML = `<span>Starting...</span>`;
     }
 
     try {
@@ -2617,7 +2624,7 @@ async function triggerStartFreshRun() {
             showToast("Run Creation Error", data.detail || "Failed to create fresh consolidation run.", "error");
             if (startBtn) {
                 startBtn.disabled = false;
-                startBtn.innerHTML = `<span>Start Consolidation Run</span><svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>`;
+                startBtn.innerHTML = `<span>Start Consolidation</span><svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>`;
             }
             return;
         }
@@ -2640,7 +2647,7 @@ async function triggerStartFreshRun() {
     } finally {
         if (startBtn) {
             startBtn.disabled = false;
-            startBtn.innerHTML = `<span>Start Consolidation Run</span><svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>`;
+            startBtn.innerHTML = `<span>Start Consolidation</span><svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>`;
         }
     }
 }
