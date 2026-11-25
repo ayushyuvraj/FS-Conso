@@ -23,6 +23,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     await fetchCompanies();
     await fetchStatus();
     await syncCachedApiKeyIfAvailable();
+    if (!appStatus.active_company_id || availableCompanies.length === 0) {
+        switchNavSection('COMPANIES');
+    }
     loadPipelineData();
     initDropZone();
     initBatchDropZone();
@@ -793,6 +796,17 @@ function renderHeaderStatus() {
     const badgeObs = document.getElementById("badge-nav-observability");
     const dispPeriod = document.getElementById("disp-period");
     const dispCurr = document.getElementById("disp-curr");
+    const wrapPeriodCurr = document.getElementById("header-period-curr-wrap");
+
+    if (wrapPeriodCurr) {
+        if (activeNavSection === 'COMPANIES' || !appStatus.active_company_id) {
+            wrapPeriodCurr.classList.add("hidden");
+            wrapPeriodCurr.classList.remove("md:flex", "flex");
+        } else {
+            wrapPeriodCurr.classList.remove("hidden");
+            wrapPeriodCurr.classList.add("md:flex");
+        }
+    }
 
     if (dispPeriod) {
         dispPeriod.textContent = appStatus.active_company_id ? (appStatus.current_period || "Pending Run") : "—";
@@ -806,8 +820,13 @@ function renderHeaderStatus() {
     const sidebarEntityBadge = document.getElementById("sidebar-entity-badge");
     const miniCompanyCode = document.getElementById("sidebar-mini-company-code");
 
-    const compName = appStatus.active_company_name || "No Active Profile";
-    if (headerCompany) headerCompany.textContent = compName;
+    if (headerCompany) {
+        if (activeNavSection === 'COMPANIES') {
+            headerCompany.textContent = appStatus.active_company_name || "";
+        } else {
+            headerCompany.textContent = appStatus.active_company_name || "No Active Profile";
+        }
+    }
     if (miniCompanyCode) {
         if (appStatus.active_company_code) {
             miniCompanyCode.textContent = appStatus.active_company_code.slice(0, 3);
@@ -900,6 +919,26 @@ function switchNavSection(section) {
         itemPipeline?.classList.add("active");
     } else if (section === 'AUDIT') {
         itemAudit?.classList.add("active");
+    }
+
+    const wrapPeriodCurr = document.getElementById("header-period-curr-wrap");
+    if (wrapPeriodCurr) {
+        if (section === 'COMPANIES' || !appStatus.active_company_id) {
+            wrapPeriodCurr.classList.add("hidden");
+            wrapPeriodCurr.classList.remove("md:flex", "flex");
+        } else {
+            wrapPeriodCurr.classList.remove("hidden");
+            wrapPeriodCurr.classList.add("md:flex");
+        }
+    }
+
+    const headerCompany = document.getElementById("header-active-company-name");
+    if (headerCompany) {
+        if (section === 'COMPANIES') {
+            headerCompany.textContent = appStatus.active_company_name || "";
+        } else {
+            headerCompany.textContent = appStatus.active_company_name || "No Active Profile";
+        }
     }
 
     const viewCompanies = document.getElementById("view-companies");
