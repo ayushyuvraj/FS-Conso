@@ -6,6 +6,23 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-26 18:20] Milestone: Action Button Streamlining & Global Header Cleanup
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Removed Global `+ New Run` from Stepper Header**:
+     - Removed the redundant `+ New Run` button in `fs_conso/web/templates/index.html` adjacent to Step 6 Statements that was persistently visible on every consolidation step.
+  2. **Streamlined Ingestion Action Toolbar**:
+     - Removed obsolete `Refresh` button.
+     - Transformed `Review Mappings` from a bulky button to the exact same ghost icon button style as Upload and Delete (`w-8 h-8 rounded text-slate-500 hover:text-kpmg-blue hover:bg-slate-100`).
+     - Standardized toolbar sequence strictly as:
+       `[Upload (Ghost)]` → `[Review Mappings (Ghost)]` → `[Reset/Delete (Ghost)]` → `[Run Consolidation (Primary)]`.
+  3. **Verification & Hardening**:
+     - Test Suite: **80/80 PASSED (100%)** in 19.11s.
+     - JavaScript syntax: `node -c "fs_conso/web/static/js/app.js"` exited with 0 errors.
+     - Git: Staged and pushed to remote branch `feature/profile-v2`.
+
+
+
 ### [2026-11-26 18:05] Milestone: Ingestion Review V3 (3-View Architecture, Adaptive 50-Row Sampling & Viewport-Anchored Tooltips)
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:

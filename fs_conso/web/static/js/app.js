@@ -2225,16 +2225,6 @@ function renderStep1(el) {
                     <p class="text-xs text-kpmg-muted">Deterministic & Gemini Agentic Brain pipeline with dynamic currency parsing and perimeter verification.</p>
                 </div>
                 <div class="flex items-center space-x-1.5">
-                    <!-- Review Ingestion Mappings & Summary Action Button -->
-                    <button id="btn-review-mappings" onclick="openIngestionSummaryModal()"
-                        class="h-7 px-2.5 rounded bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-kpmg-blue hover:border-kpmg-blue text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-2xs btn-tactile cursor-pointer"
-                        title="Review Ingestion Mappings & Summary">
-                        <svg class="w-3.5 h-3.5 text-kpmg-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                        </svg>
-                        <span>Review Mappings</span>
-                    </button>
-
                     <!-- 1. Ghost Upload Icon Button -->
                     <button onclick="openBatchUploadModal()"
                         class="w-8 h-8 rounded text-slate-500 hover:text-kpmg-blue hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none"
@@ -2244,19 +2234,19 @@ function renderStep1(el) {
                         </svg>
                     </button>
 
-                    <!-- 2. Ghost Refresh Icon Button -->
-                    <button onclick="refreshCurrentStep()"
+                    <!-- 2. Ghost Review Mappings Icon Button -->
+                    <button id="btn-review-mappings" onclick="openIngestionSummaryModal()"
                         class="w-8 h-8 rounded text-slate-500 hover:text-kpmg-blue hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none"
-                        title="Refresh Data">
+                        title="Review Ingestion Mappings & Perimeter Configuration">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                         </svg>
                     </button>
 
-                    <!-- 3. Ghost Reset Icon Button -->
+                    <!-- 3. Ghost Reset / Delete Icon Button -->
                     <button onclick="triggerResetBaseline()"
                         class="w-8 h-8 rounded text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none"
-                        title="Reset Workspace">
+                        title="Reset Baseline / Clear Ingestion">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
