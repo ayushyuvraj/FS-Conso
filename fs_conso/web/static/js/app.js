@@ -18,6 +18,8 @@ let auditRunsList = [];
 let auditRunSearchQuery = "";
 let auditFilterCompany = "ALL";
 let auditFilterStatus = "ALL";
+let auditCurrentPage = 1;
+let auditPageSize = 10;
 let sidebarCollapsed = false;
 let availableCompanies = [];
 let pendingHITLItems = [];
@@ -158,6 +160,8 @@ let companySortKey = "name-asc";
 let companyFilterCategory = "ALL"; // 'ALL', 'WITH_SUBS', 'STANDALONE'
 let companyFilterCurrency = "ALL"; // 'ALL' or specific ISO currency e.g. 'INR', 'USD'
 let expandedCompanyIds = new Set();
+let companyCurrentPage = 1;
+let companyPageSize = 10;
 
 // -------------------------------------------------------------
 // Enterprise Date Formatting System (Google / Microsoft Standards)
@@ -1173,6 +1177,7 @@ function initToolbarDropdowns() {
 
 function handleCompanySearch(val) {
     companySearchQuery = (val || "").trim().toLowerCase();
+    companyCurrentPage = 1;
     const clearBtn = document.getElementById("btn-clear-search");
     if (clearBtn) clearBtn.classList.toggle("hidden", !companySearchQuery);
     renderCompanyTableBody();
@@ -1182,6 +1187,7 @@ function clearCompanySearch() {
     const input = document.getElementById("company-directory-search");
     if (input) input.value = "";
     companySearchQuery = "";
+    companyCurrentPage = 1;
     const clearBtn = document.getElementById("btn-clear-search");
     if (clearBtn) clearBtn.classList.add("hidden");
     renderCompanyTableBody();
@@ -1341,6 +1347,7 @@ function renderFilterOptionsContent() {
 
 function handleFilterCategoryChange(cat) {
     companyFilterCategory = cat;
+    companyCurrentPage = 1;
     updateFilterBadge();
     renderFilterOptionsContent();
     renderCompanyTableBody();
@@ -1348,6 +1355,7 @@ function handleFilterCategoryChange(cat) {
 
 function handleFilterCurrencyChange(curr) {
     companyFilterCurrency = curr;
+    companyCurrentPage = 1;
     updateFilterBadge();
     renderFilterOptionsContent();
     renderCompanyTableBody();
@@ -1356,6 +1364,7 @@ function handleFilterCurrencyChange(curr) {
 function resetAllCompanyFilters() {
     companyFilterCategory = 'ALL';
     companyFilterCurrency = 'ALL';
+    companyCurrentPage = 1;
     updateFilterBadge();
     renderFilterOptionsContent();
     renderCompanyTableBody();
@@ -1458,6 +1467,127 @@ function filterAndSortCompanies() {
     return list;
 }
 
+// -------------------------------------------------------------
+// Enterprise Data Pagination Controls
+// -------------------------------------------------------------
+
+function renderPaginationControls({
+    idPrefix = "page",
+    currentPage = 1,
+    totalItems = 0,
+    pageSize = 10,
+    pageSizeOptions = [10, 25, 50, 100],
+    itemLabelSingular = "item",
+    itemLabelPlural = "items",
+    onPageChangeFnName = "goToPage",
+    onPageSizeChangeFnName = "changePageSize"
+}) {
+    if (totalItems <= 0) return "";
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+    const startItem = (validCurrentPage - 1) * pageSize + 1;
+    const endItem = Math.min(validCurrentPage * pageSize, totalItems);
+    const label = totalItems === 1 ? itemLabelSingular : itemLabelPlural;
+
+    // Smart windowing for page buttons
+    const pages = [];
+    if (totalPages <= 7) {
+        for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+        if (validCurrentPage <= 4) {
+            pages.push(1, 2, 3, 4, 5, "...", totalPages);
+        } else if (validCurrentPage >= totalPages - 3) {
+            pages.push(1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+        } else {
+            pages.push(1, "...", validCurrentPage - 1, validCurrentPage, validCurrentPage + 1, "...", totalPages);
+        }
+    }
+
+    const prevDisabled = validCurrentPage <= 1;
+    const nextDisabled = validCurrentPage >= totalPages;
+
+    const pageButtonsHtml = pages.map((p) => {
+        if (p === "...") {
+            return `<span class="px-1.5 py-1 text-xs text-slate-400 select-none">…</span>`;
+        }
+        const isActive = p === validCurrentPage;
+        return `
+            <button type="button"
+                onclick="${onPageChangeFnName}(${p})"
+                class="min-w-[28px] h-7 px-2 rounded text-xs font-mono font-medium transition flex items-center justify-center btn-tactile ${
+                    isActive
+                        ? 'bg-kpmg-blue text-white shadow-xs font-bold pointer-events-none'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 cursor-pointer'
+                }"
+                aria-label="Page ${p}" ${isActive ? 'aria-current="page"' : ''}>
+                ${p}
+            </button>
+        `;
+    }).join("");
+
+    const pageSizeSelectHtml = `
+        <div class="flex items-center space-x-1.5 text-xs text-slate-500">
+            <span class="whitespace-nowrap">Rows per page:</span>
+            <select onchange="${onPageSizeChangeFnName}(Number(this.value))"
+                class="h-7 px-2 py-0.5 rounded border border-slate-200 bg-white text-xs font-mono text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-kpmg-blue cursor-pointer shadow-2xs">
+                ${pageSizeOptions.map(opt => `<option value="${opt}" ${opt === pageSize ? 'selected' : ''}>${opt}</option>`).join("")}
+            </select>
+        </div>
+    `;
+
+    return `
+        <div class="fin-pagination-bar border-t border-slate-200 bg-slate-50/70 px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600 select-none">
+            <!-- Left: Showing summary -->
+            <div class="flex items-center space-x-1 text-xs text-slate-500">
+                <span>Showing</span>
+                <span class="font-mono font-semibold text-slate-800">${startItem}</span>
+                <span>–</span>
+                <span class="font-mono font-semibold text-slate-800">${endItem}</span>
+                <span>of</span>
+                <span class="font-mono font-semibold text-slate-800">${totalItems}</span>
+                <span>${escapeHtml(label)}</span>
+            </div>
+
+            <!-- Right: Controls -->
+            <div class="flex flex-wrap items-center gap-3">
+                ${pageSizeSelectHtml}
+
+                <div class="inline-flex items-center space-x-1">
+                    <!-- Prev Page -->
+                    <button type="button"
+                        onclick="${onPageChangeFnName}(${validCurrentPage - 1})"
+                        ${prevDisabled ? 'disabled' : ''}
+                        class="h-7 px-2 rounded border border-slate-200 bg-white text-slate-700 text-xs font-medium transition flex items-center justify-center btn-tactile ${
+                            prevDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : 'hover:bg-slate-100 cursor-pointer'
+                        }"
+                        title="Previous page">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                    </button>
+
+                    <!-- Page Numbers -->
+                    ${pageButtonsHtml}
+
+                    <!-- Next Page -->
+                    <button type="button"
+                        onclick="${onPageChangeFnName}(${validCurrentPage + 1})"
+                        ${nextDisabled ? 'disabled' : ''}
+                        class="h-7 px-2 rounded border border-slate-200 bg-white text-slate-700 text-xs font-medium transition flex items-center justify-center btn-tactile ${
+                            nextDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : 'hover:bg-slate-100 cursor-pointer'
+                        }"
+                        title="Next page">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 function renderCompanyWorkspace() {
     const container = document.getElementById("company-perimeter-content");
     const toolbar = document.getElementById("company-directory-toolbar");
@@ -1520,7 +1650,19 @@ function renderCompanyTableBody() {
         return;
     }
 
-    const rowsHtml = filtered.map(comp => {
+    const totalPages = Math.max(1, Math.ceil(filtered.length / companyPageSize));
+    if (companyCurrentPage > totalPages) {
+        companyCurrentPage = totalPages;
+    }
+    if (companyCurrentPage < 1) {
+        companyCurrentPage = 1;
+    }
+
+    const startIndex = (companyCurrentPage - 1) * companyPageSize;
+    const endIndex = Math.min(startIndex + companyPageSize, filtered.length);
+    const pagedCompanies = filtered.slice(startIndex, endIndex);
+
+    const rowsHtml = pagedCompanies.map(comp => {
         const subs = comp.subsidiaries || [];
         const isExpanded = expandedCompanyIds.has(comp.company_id);
         const whollyOwnedCount = subs.filter(s => Number(s.ownership_pct) >= 100).length;
@@ -1676,6 +1818,18 @@ function renderCompanyTableBody() {
         `;
     }).join("");
 
+    const paginationHtml = renderPaginationControls({
+        idPrefix: "company-page",
+        currentPage: companyCurrentPage,
+        totalItems: filtered.length,
+        pageSize: companyPageSize,
+        pageSizeOptions: [10, 25, 50, 100],
+        itemLabelSingular: "profile",
+        itemLabelPlural: "profiles",
+        onPageChangeFnName: "goToCompanyPage",
+        onPageSizeChangeFnName: "changeCompanyPageSize"
+    });
+
     container.innerHTML = `
         <div class="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
             <div class="overflow-x-auto">
@@ -1699,8 +1853,22 @@ function renderCompanyTableBody() {
                     </tbody>
                 </table>
             </div>
+            ${paginationHtml}
         </div>
     `;
+}
+
+function goToCompanyPage(page) {
+    companyCurrentPage = Math.max(1, page);
+    renderCompanyTableBody();
+}
+
+function changeCompanyPageSize(newSize) {
+    if (!newSize || newSize <= 0) return;
+    const oldStartIndex = (companyCurrentPage - 1) * companyPageSize;
+    companyPageSize = newSize;
+    companyCurrentPage = Math.floor(oldStartIndex / newSize) + 1;
+    renderCompanyTableBody();
 }
 
 function renderStepperState() {
@@ -3098,6 +3266,7 @@ function populateAuditCompanyFilter() {
 
 function handleRunSearch(val) {
     auditRunSearchQuery = (val || "").trim().toLowerCase();
+    auditCurrentPage = 1;
     const clearBtn = document.getElementById("btn-clear-run-search");
     if (clearBtn) {
         if (auditRunSearchQuery) clearBtn.classList.remove("hidden");
@@ -3109,16 +3278,19 @@ function handleRunSearch(val) {
 function clearRunSearch() {
     const input = document.getElementById("audit-runs-search");
     if (input) input.value = "";
+    auditCurrentPage = 1;
     handleRunSearch("");
 }
 
 function handleRunCompanyFilter(val) {
     auditFilterCompany = val || "ALL";
+    auditCurrentPage = 1;
     renderAuditRunsTable();
 }
 
 function handleRunStatusFilter(val) {
     auditFilterStatus = val || "ALL";
+    auditCurrentPage = 1;
     renderAuditRunsTable();
 }
 
@@ -3155,7 +3327,19 @@ function renderAuditRunsTable() {
         return;
     }
 
-    const rowsHtml = filtered.map(run => {
+    const totalPages = Math.max(1, Math.ceil(filtered.length / auditPageSize));
+    if (auditCurrentPage > totalPages) {
+        auditCurrentPage = totalPages;
+    }
+    if (auditCurrentPage < 1) {
+        auditCurrentPage = 1;
+    }
+
+    const startIndex = (auditCurrentPage - 1) * auditPageSize;
+    const endIndex = Math.min(startIndex + auditPageSize, filtered.length);
+    const pagedRuns = filtered.slice(startIndex, endIndex);
+
+    const rowsHtml = pagedRuns.map(run => {
         const isDone = run.is_completed || run.current_step === 6;
         const stepNum = run.current_step || 1;
         const stepTitle = getStepTitle(stepNum);
@@ -3227,32 +3411,61 @@ function renderAuditRunsTable() {
         `;
     }).join("");
 
+    const paginationHtml = renderPaginationControls({
+        idPrefix: "audit-page",
+        currentPage: auditCurrentPage,
+        totalItems: filtered.length,
+        pageSize: auditPageSize,
+        pageSizeOptions: [10, 25, 50, 100],
+        itemLabelSingular: "consolidation run",
+        itemLabelPlural: "consolidation runs",
+        onPageChangeFnName: "goToAuditPage",
+        onPageSizeChangeFnName: "changeAuditPageSize"
+    });
+
     container.innerHTML = `
-        <div class="overflow-x-auto rounded-xl border border-slate-200/90 shadow-2xs bg-white">
-            <table class="w-full text-left border-collapse text-xs">
-                <thead class="bg-slate-50/90 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 z-10 select-none">
-                    <tr>
-                        <th class="py-2.5 px-3">Run Name / Code</th>
-                        <th class="py-2.5 px-3">Client Company</th>
-                        <th class="py-2.5 px-3">Run Date (Cutoff)</th>
-                        <th class="py-2.5 px-3">Scope</th>
-                        <th class="py-2.5 px-3">Progress / Status</th>
-                        <th class="py-2.5 px-3">Created</th>
-                        <th class="py-2.5 px-3 text-right">Action</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 bg-white">
-                    ${rowsHtml}
-                </tbody>
-            </table>
+        <div class="rounded-xl border border-slate-200/90 shadow-2xs bg-white overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead class="bg-slate-50/90 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 z-10 select-none">
+                        <tr>
+                            <th class="py-2.5 px-3">Run Name / Code</th>
+                            <th class="py-2.5 px-3">Client Company</th>
+                            <th class="py-2.5 px-3">Run Date (Cutoff)</th>
+                            <th class="py-2.5 px-3">Scope</th>
+                            <th class="py-2.5 px-3">Progress / Status</th>
+                            <th class="py-2.5 px-3">Created</th>
+                            <th class="py-2.5 px-3 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 bg-white">
+                        ${rowsHtml}
+                    </tbody>
+                </table>
+            </div>
+            ${paginationHtml}
         </div>
     `;
+}
+
+function goToAuditPage(page) {
+    auditCurrentPage = Math.max(1, page);
+    renderAuditRunsTable();
+}
+
+function changeAuditPageSize(newSize) {
+    if (!newSize || newSize <= 0) return;
+    const oldStartIndex = (auditCurrentPage - 1) * auditPageSize;
+    auditPageSize = newSize;
+    auditCurrentPage = Math.floor(oldStartIndex / newSize) + 1;
+    renderAuditRunsTable();
 }
 
 function clearAllRunFilters() {
     auditRunSearchQuery = "";
     auditFilterCompany = "ALL";
     auditFilterStatus = "ALL";
+    auditCurrentPage = 1;
     const searchInput = document.getElementById("audit-runs-search");
     if (searchInput) searchInput.value = "";
     const compSelect = document.getElementById("audit-filter-company");

@@ -286,6 +286,39 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
   - Live portal HTTP 200 OK on `http://127.0.0.1:8000`.
 
+### [2026-11-26 13:15] Milestone: Ghost Loader Elimination & Enterprise High-Density Pagination
+- **Branch**: `feature/profile-v2`
+- **Root Cause & Resolution for Ghost Loader**:
+  - Investigated issue where "Loading company profiles..." remained visible beneath the company table despite profiles being fully loaded.
+  - Root cause: An accidental duplicate `<div class="flex items-center justify-center h-48 text-kpmg-muted text-xs">Loading company profiles...</div>` was positioned outside `#company-perimeter-content` in `fs_conso/web/templates/index.html` (lines 574–576).
+  - Fix: Removed the orphan duplicate block; verified exactly 1 dynamic loading placeholder exists inside `#company-perimeter-content`, which is cleanly replaced upon data fetch.
+- **Enterprise High-Density Pagination Architecture**:
+  - Implemented centralized, zero-latency client-side pagination in `fs_conso/web/static/js/app.js`:
+    - `renderPaginationControls()`: Generates responsive pagination footer with summary counter ("Showing X–Y of Z items"), rows-per-page selector, and tactile navigation buttons.
+    - Page size options: **10, 25, 50, and 100** rows per page (defaulting to 10 for clean density).
+    - Smart page windowing: Renders direct page numbers with ellipsis windowing (e.g. `1 2 3 ... 10`) for clean horizontal footprint.
+    - Full synchronization: Resetting page to 1 automatically when typing in search bars or switching category/currency/company/status filters.
+    - Resilient page-size switching: Re-indexes `currentPage` so top visible records stay in view.
+  - **Company Profile View**:
+    - Integrated with `renderCompanyTableBody()`: slices `filtered` company profiles and docks pagination bar at table card bottom.
+    - Preserves inline expandable subsidiary trays (`toggleCompanyExpansion`) and COA metadata across page switches.
+  - **Consolidation Audit Ledger View**:
+    - Integrated with `renderAuditRunsTable()`: slices `filtered` consolidation runs and docks pagination bar at table card bottom.
+    - Retains horizontal table scrollability on smaller screens while keeping pagination bar docked 100% width.
+  - **Styling & Interaction Physics**:
+    - Styled with `.fin-pagination-bar` using `--kpmg-border`, `#F8FAFC`, and tabular figures (`font-variant-numeric: tabular-nums`).
+    - Emil Kowalski spring micro-interactions: `.btn-tactile` with `active: scale(0.97)` and `cubic-bezier(0.16, 1, 0.3, 1)`.
+- **Verification**:
+  - Created automated test suite `tests/test_ui_pagination_and_templates.py`:
+    - `test_index_template_ghost_loader_eliminated`: PASSED.
+    - `test_app_js_pagination_architecture`: PASSED.
+    - `test_pagination_math_edge_cases`: PASSED (0, 2, 75, 120 items, clamping, boundaries).
+    - `test_api_companies_and_runs_endpoints`: PASSED (HTTP 200 OK).
+  - Full regression test suite: 71/71 PASSED (100% pass rate).
+  - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Live server verification on `http://127.0.0.1:8000`: HTTP 200 OK for `/api/companies` and `/api/runs`.
+
+
 
 
 

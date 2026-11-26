@@ -569,6 +569,13 @@ body.modal-resizing * {
     }
 }
 
+/* Financial Ledger Pagination Bar */
+.fin-pagination-bar {
+    border-top: 1px solid var(--kpmg-border);
+    background-color: #F8FAFC;
+    font-variant-numeric: tabular-nums;
+}
+
 
 
 
