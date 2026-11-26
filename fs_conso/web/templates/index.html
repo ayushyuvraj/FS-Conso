@@ -212,13 +212,13 @@
 
         <!-- 2. Pipeline Controls & Stepper Bar -->
         <div id="pipeline-stepper-container">
-            <!-- Gated 6-Step Primary Stepper Bar -->
+            <!-- Gated 7-Step Primary Stepper Bar -->
             <nav class="bg-white border-b border-kpmg-border px-6 py-3 sticky top-16 z-30 shadow-xs">
                 <div class="w-full px-2 md:px-4 flex items-center justify-between">
-                    <div class="flex items-center space-x-2 md:space-x-4 w-full">
+                    <div class="flex items-center space-x-2 md:space-x-3 w-full">
                         <!-- Step 1: Ingestion -->
                         <div id="step-btn-1" onclick="switchStep(1)"
-                            class="step-tab active flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-pointer">
+                            class="step-tab active flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold cursor-pointer">
                             <span
                                 class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">1</span>
                             <span>Ingestion</span>
@@ -227,7 +227,7 @@
 
                         <!-- Step 2: Mapping -->
                         <div id="step-btn-2" onclick="switchStep(2)"
-                            class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                            class="step-tab locked flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
                             <span
                                 class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">2</span>
                             <span>Mapping</span>
@@ -236,7 +236,7 @@
 
                         <!-- Step 3: Translation -->
                         <div id="step-btn-3" onclick="switchStep(3)"
-                            class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                            class="step-tab locked flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
                             <span
                                 class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">3</span>
                             <span>Translation</span>
@@ -245,27 +245,36 @@
 
                         <!-- Step 4: Eliminations -->
                         <div id="step-btn-4" onclick="switchStep(4)"
-                            class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                            class="step-tab locked flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
                             <span
                                 class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">4</span>
                             <span>Eliminations</span>
                         </div>
                         <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
 
-                        <!-- Step 5: Consolidation -->
+                        <!-- Step 5: Goodwill -->
                         <div id="step-btn-5" onclick="switchStep(5)"
-                            class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                            class="step-tab locked flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
                             <span
                                 class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">5</span>
+                            <span>Goodwill</span>
+                        </div>
+                        <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
+
+                        <!-- Step 6: Consolidation -->
+                        <div id="step-btn-6" onclick="switchStep(6)"
+                            class="step-tab locked flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                            <span
+                                class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">6</span>
                             <span>Consolidation</span>
                         </div>
                         <div class="step-divider flex-1 h-[1px] bg-kpmg-border"></div>
 
-                        <!-- Step 6: Financial Statements -->
-                        <div id="step-btn-6" onclick="switchStep(6)"
-                            class="step-tab locked flex items-center space-x-2 px-3 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
+                        <!-- Step 7: Financial Statements -->
+                        <div id="step-btn-7" onclick="switchStep(7)"
+                            class="step-tab locked flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs font-semibold cursor-not-allowed">
                             <span
-                                class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">6</span>
+                                class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px]">7</span>
                             <span>Statements</span>
                         </div>
                     </div>

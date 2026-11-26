@@ -1688,6 +1688,7 @@ async def get_pipeline_data():
             for tb in st.translated_tbs
         ],
         "eliminations": st.elimination_result.dict() if st.elimination_result else None,
+        "goodwill_schedule": st.goodwill_schedule.model_dump() if (getattr(st, "goodwill_schedule", None) and hasattr(st.goodwill_schedule, "model_dump")) else (st.goodwill_schedule.dict() if getattr(st, "goodwill_schedule", None) else None),
         "consolidated_tb": {
             "period": st.consolidated_tb.period,
             "currency": st.consolidated_tb.currency,
@@ -1702,6 +1703,253 @@ async def get_pipeline_data():
         "teacher_evaluation": st.teacher_evaluation,
         "agent_traces": [t.dict() for t in st.agent_traces]
     }
+
+
+# ============================================================================
+# Step 5: Goodwill on Consolidation (Ind AS 103 / IFRS 3) Endpoints
+# ============================================================================
+
+class GoodwillUpdatePayload(BaseModel):
+    share_capital_l0_codes: Dict[str, str] = Field(default_factory=dict)
+    retained_earnings: Dict[str, float] = Field(default_factory=dict)
+    retained_earnings_remarks: Dict[str, str] = Field(default_factory=dict)
+    investments: Dict[str, float] = Field(default_factory=dict)
+    investment_accounts: Dict[str, str] = Field(default_factory=dict)
+    investment_remarks: Dict[str, str] = Field(default_factory=dict)
+    adjustments: List[Dict[str, Any]] = Field(default_factory=list)
+
+class GoodwillAddAdjustmentPayload(BaseModel):
+    name: Optional[str] = "Fair Value Adjustment"
+    remarks: Optional[str] = ""
+
+class GoodwillDeleteAdjustmentPayload(BaseModel):
+    id: str
+
+@app.get("/api/pipeline/goodwill")
+async def get_goodwill_schedule():
+    """Returns the GoodwillSchedule, entity details, Level 0 options, and parent TB investment accounts."""
+    if not session.state:
+        raise HTTPException(status_code=400, detail="No active consolidation session.")
+
+    prof = company_manager.get_company(session.active_company_id) if session.active_company_id else None
+    from fs_conso.core.goodwill_engine import GoodwillEngine
+
+    async with pipeline_lock:
+        if session.state.goodwill_schedule is None:
+            session.state.goodwill_schedule = GoodwillEngine.initialize_schedule(
+                company_id=session.active_company_id or "company-p",
+                period=session.state.period or (prof.current_period if prof else "31-Mar-2024"),
+                state=session.state,
+                company_profile=prof
+            )
+            if session.active_company_id and session.active_run_id:
+                run_manager.save_run_state(session.active_company_id, session.active_run_id, session.state)
+        else:
+            session.state.goodwill_schedule = GoodwillEngine.recalculate_schedule(session.state.goodwill_schedule)
+
+    sched = session.state.goodwill_schedule
+    parent_code = sched.parent_entity_code
+
+    # Extract parent TB accounts for manual selection / HITL
+    parent_tb_accounts = []
+    if session.state.translated_tbs:
+        for tb in session.state.translated_tbs:
+            if tb.entity_code.upper() == parent_code.upper():
+                for r in tb.rows:
+                    parent_tb_accounts.append({
+                        "code": r.account_code,
+                        "description": r.account_description,
+                        "amount": abs(r.translated_amount),
+                        "category": r.category
+                    })
+                break
+    if not parent_tb_accounts and session.state.raw_tbs:
+        for tb in session.state.raw_tbs:
+            if tb.entity_code.upper() == parent_code.upper():
+                for r in tb.rows:
+                    parent_tb_accounts.append({
+                        "code": r.account_code,
+                        "description": getattr(r, "account_name", r.account_code),
+                        "amount": abs(getattr(r, "amount", 0.0)),
+                        "category": "Asset"
+                    })
+                break
+
+    return {
+        "success": True,
+        "schedule": sched.model_dump() if hasattr(sched, "model_dump") else sched.dict(),
+        "parent_tb_accounts": parent_tb_accounts,
+        "is_completed": sched.is_completed,
+        "completed_steps": session.state.completed_steps
+    }
+
+@app.post("/api/pipeline/goodwill/update")
+async def update_goodwill_schedule(payload: GoodwillUpdatePayload):
+    """Updates manual inputs, adjustments, selected Level 0 codes, and recalculates Goodwill."""
+    if not session.state:
+        raise HTTPException(status_code=400, detail="No active consolidation session.")
+
+    from fs_conso.core.goodwill_engine import GoodwillEngine
+    from fs_conso.models.goodwill import GoodwillAdjustmentItem
+
+    async with pipeline_lock:
+        sched = session.state.goodwill_schedule
+        if not sched:
+            prof = company_manager.get_company(session.active_company_id) if session.active_company_id else None
+            sched = GoodwillEngine.initialize_schedule(
+                company_id=session.active_company_id or "company-p",
+                period=session.state.period or "31-Mar-2024",
+                state=session.state,
+                company_profile=prof
+            )
+
+        # 1. Update Share Capital for entities with newly selected L0 code
+        for ent_code, l0_code in payload.share_capital_l0_codes.items():
+            if ent_code in sched.data_by_entity:
+                d = sched.data_by_entity[ent_code]
+                d.share_capital_l0_code = l0_code
+                amt, name = GoodwillEngine.calculate_share_capital_from_l0(
+                    ent_code, l0_code, session.state, sched.reporting_currency
+                )
+                d.share_capital_amount = amt
+                d.share_capital_l0_name = name
+
+        # 2. Update Retained Earnings
+        for ent_code, amt in payload.retained_earnings.items():
+            if ent_code in sched.data_by_entity:
+                sched.data_by_entity[ent_code].retained_earnings_amount = float(amt or 0.0)
+        for ent_code, rem in payload.retained_earnings_remarks.items():
+            if ent_code in sched.data_by_entity:
+                sched.data_by_entity[ent_code].retained_earnings_remarks = rem or ""
+
+        # 3. Update Investments
+        for ent_code, amt in payload.investments.items():
+            if ent_code in sched.data_by_entity:
+                sched.data_by_entity[ent_code].investment_amount = float(amt or 0.0)
+        for ent_code, acc in payload.investment_accounts.items():
+            if ent_code in sched.data_by_entity:
+                sched.data_by_entity[ent_code].investment_account_code = acc or ""
+        for ent_code, rem in payload.investment_remarks.items():
+            if ent_code in sched.data_by_entity:
+                sched.data_by_entity[ent_code].investment_remarks = rem or ""
+
+        # 4. Update Adjustments
+        if payload.adjustments:
+            new_adjs = []
+            for a in payload.adjustments:
+                new_adjs.append(GoodwillAdjustmentItem(
+                    id=str(a.get("id", f"adj-{len(new_adjs)+1}")),
+                    name=str(a.get("name", "Adjustment")),
+                    amounts_by_entity={k: float(v or 0.0) for k, v in a.get("amounts_by_entity", {}).items()},
+                    remarks=str(a.get("remarks", ""))
+                ))
+            sched.adjustments = new_adjs
+
+        # 5. Recalculate
+        sched = GoodwillEngine.recalculate_schedule(sched)
+        session.state.goodwill_schedule = sched
+
+        if session.active_company_id and session.active_run_id:
+            run_manager.save_run_state(session.active_company_id, session.active_run_id, session.state)
+
+    return {
+        "success": True,
+        "schedule": sched.model_dump() if hasattr(sched, "model_dump") else sched.dict()
+    }
+
+@app.post("/api/pipeline/goodwill/add-adjustment")
+async def add_goodwill_adjustment(payload: GoodwillAddAdjustmentPayload):
+    """Adds a new dynamic adjustment row (capped at 100 rows)."""
+    if not session.state or not session.state.goodwill_schedule:
+        raise HTTPException(status_code=400, detail="Goodwill schedule not initialized.")
+
+    sched = session.state.goodwill_schedule
+    if len(sched.adjustments) >= 100:
+        raise HTTPException(status_code=400, detail="Maximum 100 adjustment rows reached.")
+
+    from fs_conso.models.goodwill import GoodwillAdjustmentItem
+    from fs_conso.core.goodwill_engine import GoodwillEngine
+
+    new_id = f"adj-{len(sched.adjustments) + 1}-{int(datetime.now().timestamp())}"
+    sched.adjustments.append(GoodwillAdjustmentItem(
+        id=new_id,
+        name=payload.name or f"Adjustment {len(sched.adjustments) + 1}",
+        amounts_by_entity={e: 0.0 for e in sched.entities},
+        remarks=payload.remarks or ""
+    ))
+    sched = GoodwillEngine.recalculate_schedule(sched)
+    session.state.goodwill_schedule = sched
+
+    if session.active_company_id and session.active_run_id:
+        run_manager.save_run_state(session.active_company_id, session.active_run_id, session.state)
+
+    return {"success": True, "schedule": sched.model_dump() if hasattr(sched, "model_dump") else sched.dict()}
+
+@app.post("/api/pipeline/goodwill/delete-adjustment")
+async def delete_goodwill_adjustment(payload: GoodwillDeleteAdjustmentPayload):
+    """Removes a dynamic adjustment row by ID."""
+    if not session.state or not session.state.goodwill_schedule:
+        raise HTTPException(status_code=400, detail="Goodwill schedule not initialized.")
+
+    from fs_conso.core.goodwill_engine import GoodwillEngine
+
+    sched = session.state.goodwill_schedule
+    sched.adjustments = [a for a in sched.adjustments if a.id != payload.id]
+    sched = GoodwillEngine.recalculate_schedule(sched)
+    session.state.goodwill_schedule = sched
+
+    if session.active_company_id and session.active_run_id:
+        run_manager.save_run_state(session.active_company_id, session.active_run_id, session.state)
+
+    return {"success": True, "schedule": sched.model_dump() if hasattr(sched, "model_dump") else sched.dict()}
+
+@app.post("/api/pipeline/goodwill/confirm")
+async def confirm_goodwill_schedule():
+    """Confirms Step 5 Goodwill calculations, advances to Step 6, and feeds into Consolidated TB."""
+    if not session.state:
+        raise HTTPException(status_code=400, detail="No active consolidation session.")
+
+    from fs_conso.core.goodwill_engine import GoodwillEngine
+    from fs_conso.agent.nodes import aggregator_node
+
+    async with pipeline_lock:
+        if not session.state.goodwill_schedule:
+            prof = company_manager.get_company(session.active_company_id) if session.active_company_id else None
+            session.state.goodwill_schedule = GoodwillEngine.initialize_schedule(
+                company_id=session.active_company_id or "company-p",
+                period=session.state.period or "31-Mar-2024",
+                state=session.state,
+                company_profile=prof
+            )
+
+        sched = session.state.goodwill_schedule
+        sched = GoodwillEngine.recalculate_schedule(sched)
+        sched.is_completed = True
+        session.state.goodwill_schedule = sched
+
+        if 5 not in session.state.completed_steps:
+            session.state.completed_steps.append(5)
+        session.state.current_step = max(session.state.current_step, 6)
+
+        # Trigger aggregator_node only if prerequisite Step 4 Eliminations are already complete
+        if 4 in session.state.completed_steps and session.state.elimination_result:
+            try:
+                session.state = aggregator_node(session.state)
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning(f"Auto-aggregation after Goodwill confirm failed: {exc}")
+
+        if session.active_company_id and session.active_run_id:
+            run_manager.save_run_state(session.active_company_id, session.active_run_id, session.state)
+
+    return {
+        "success": True,
+        "completed_steps": session.state.completed_steps,
+        "current_step": session.state.current_step,
+        "total_goodwill": sched.total_goodwill,
+        "total_capital_reserve": sched.total_capital_reserve
+    }
+
 
 @app.get("/api/agent-traces")
 async def get_agent_traces():

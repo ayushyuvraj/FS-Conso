@@ -223,5 +223,6 @@ def test_observability_section_and_telemetry():
     assert 'id="view-pipeline-run"' in html
     assert 'id="view-observability"' in html
     assert 'id="step-btn-6"' in html
-    assert 'id="step-btn-7"' not in html
+    assert 'id="step-btn-7"' in html
+    assert 'id="step-btn-8"' not in html
 

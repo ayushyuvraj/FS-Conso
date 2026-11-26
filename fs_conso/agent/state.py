@@ -8,6 +8,7 @@ from fs_conso.core.elimination_engine import EliminationResult
 from fs_conso.core.mapper import MappingDecision
 from fs_conso.core.translator import TranslatedTrialBalance
 from fs_conso.core.validator import ValidationResult
+from fs_conso.models.goodwill import GoodwillSchedule
 from fs_conso.models.trial_balance import RawTrialBalance, StandardizedTrialBalance
 
 
@@ -44,12 +45,13 @@ class ConsolidationState(BaseModel):
     mapping_decisions: List[MappingDecision] = Field(default_factory=list)
     translated_tbs: List[TranslatedTrialBalance] = Field(default_factory=list)
     elimination_result: Optional[EliminationResult] = None
+    goodwill_schedule: Optional[GoodwillSchedule] = None
     consolidated_tb: Optional[ConsolidatedTrialBalance] = None
     financial_statements: Dict[str, Any] = Field(default_factory=dict)
     output_excel_path: Optional[str] = None
 
     # Stepper and gating state
-    current_step: int = 1  # 1: Ingestion, 2: Mapping, 3: Translation, 4: Eliminations, 5: Consolidation, 6: Statements
+    current_step: int = 1  # 1: Ingestion, 2: Mapping, 3: Translation, 4: Eliminations, 5: Goodwill, 6: Consolidation, 7: Statements
     completed_steps: List[int] = Field(default_factory=list)
     is_blocked: bool = False
     error_message: Optional[str] = None

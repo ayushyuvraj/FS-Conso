@@ -761,6 +761,61 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
   - Live API verification on `http://127.0.0.1:8000/api/status`: HTTP 200 OK.
 
+---
+
+### [2026-11-27] Step 5: Goodwill on Consolidation (Ind AS 103 / IFRS 3) Implementation
+
+- **Architectural & Stepper Progression**:
+  - Introduced dedicated **Step 5: Goodwill** between Step 4 (Eliminations) and Step 6 (Consolidation), expanding primary pipeline stepper to 7 distinct steps:
+    - Step 1: Ingestion
+    - Step 2: Mapping
+    - Step 3: Translation
+    - Step 4: Eliminations
+    - Step 5: **Goodwill** (NEW)
+    - Step 6: Consolidation (previously Step 5)
+    - Step 7: Financial Statements (previously Step 6)
+  - Updated `switchStep` gating in `app.js` to enforce prerequisites across all 7 steps.
+
+- **Goodwill Calculation Engine & Models**:
+  - `fs_conso/models/goodwill.py`: Created `GoodwillSchedule`, `GoodwillEntityData`, `GoodwillAdjustmentItem`.
+  - `fs_conso/core/goodwill_engine.py`:
+    - `calculate_share_capital_from_l0`: Sums mapped trial balance line items for any selected Level 0 code for that entity, translated to reporting currency using Ind AS 21 historical rules.
+    - `search_investment_account`: Deterministic keyword search + Gemini LLM fallback + interactive HITL routing.
+    - `recalculate_schedule`: Real-time reactive calculation:
+      - $\text{Net Assets} = \text{Share Capital} + \sum\text{Adjustments} + \text{Retained Earnings}$
+      - $\text{Diff} = \text{Investment} - \text{Net Assets}$
+      - $\text{Goodwill} = \max(0, \text{Diff})$
+      - $\text{Capital Reserve} = \max(0, -\text{Diff})$
+    - Applied identical formula across Parent and all subsidiary columns.
+
+- **Backend API Endpoints (`fs_conso/web/app.py`)**:
+  - `GET /api/pipeline/goodwill`: Returns schedule, entity data, parent TB investment candidates, and Level 0 options.
+  - `POST /api/pipeline/goodwill/update`: Updates selected Level 0 codes, manual adjustments, retained earnings, investments, and remarks.
+  - `POST /api/pipeline/goodwill/add-adjustment`: Adds dynamic adjustment rows (capped at 100 rows).
+  - `POST /api/pipeline/goodwill/delete-adjustment`: Removes dynamic adjustment rows.
+  - `POST /api/pipeline/goodwill/confirm`: Confirms Step 5, triggers Consolidated TB aggregation with Goodwill/Reserves integrated, and advances to Step 6.
+
+- **Consolidated Trial Balance Integration (`fs_conso/core/aggregator.py`)**:
+  - Posts aggregate Goodwill to Asset `A110301` ("Goodwill on Consolidation").
+  - Posts aggregate Capital Reserve to Equity `E210103` ("Capital Reserve on Consolidation").
+  - Records entity acquisition accounting details in `AcquisitionAccountingResult`.
+
+- **Frontend Luxury Matrix UI (`fs_conso/web/static/js/app.js` & `index.html`)**:
+  - Header: `Particulars` | `[Parent Company]` | `[Sub 1]` | `[Sub 2]` ... | `Remarks`.
+  - Floating Level 0 popover with instant search to select Share Capital mapping.
+  - Tactile `+` button to add up to 100 dynamic adjustment rows with delete buttons and remarks.
+  - Retained earnings input per entity with remarks writing capability.
+  - Investment by company with auto-matched accounts, inline dropdown selector, and editable amount input.
+  - Monospace tabular figures with instant client-side calculation and formula tooltips.
+  - Responsive KPI badges for Total Goodwill and Total Capital Reserve.
+
+- **Verification & Testing**:
+  - `tests/test_goodwill_engine.py`: 6/6 tests PASSED (Share Capital from L0, positive Goodwill, bargain purchase Capital Reserve, deterministic investment matching, Consolidated TB posting, API lifecycle).
+  - Full project test suite: 106 passed, 1 skipped, 0 failed (100% pass rate).
+  - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Live server verification on `http://127.0.0.1:8000`: HTTP 200 OK.
+
+
 
 
 

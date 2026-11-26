@@ -1880,7 +1880,7 @@ function renderStepperState() {
     const mappings = (pipelineData && pipelineData.mapping_decisions) ? pipelineData.mapping_decisions : [];
     const hasPendingStep2Reviews = mappings.some(m => m.needs_review);
 
-    for (let s = 1; s <= 6; s++) {
+    for (let s = 1; s <= 7; s++) {
         const btn = document.getElementById(`step-btn-${s}`);
         if (!btn) continue;
 
@@ -1956,9 +1956,9 @@ function switchStep(step) {
     }
 
     if (step >= 6) {
-        // Step 5 prerequisite: Consolidation Aggregation complete
-        if (!completed.includes(5) || !pipelineData.consolidated_tb) {
-            showToast("Step Locked", "Cannot proceed to Step 6: Step 5 Consolidation Aggregation is not complete.", "warning");
+        // Step 5 prerequisite: Goodwill Calculation Schedule complete
+        if (!completed.includes(5)) {
+            showToast("Step Locked", "Cannot proceed to Step 6: Step 5 Goodwill schedule must be reviewed and confirmed first.", "warning");
             activeStep = 5;
             renderStepperState();
             renderActiveStepContent();
@@ -1966,7 +1966,18 @@ function switchStep(step) {
         }
     }
 
-    activeStep = Math.min(6, Math.max(1, step));
+    if (step >= 7) {
+        // Step 6 prerequisite: Consolidation Aggregation complete
+        if (!completed.includes(6) || !pipelineData.consolidated_tb) {
+            showToast("Step Locked", "Cannot proceed to Step 7: Step 6 Consolidation Aggregation is not complete.", "warning");
+            activeStep = 6;
+            renderStepperState();
+            renderActiveStepContent();
+            return;
+        }
+    }
+
+    activeStep = Math.min(7, Math.max(1, step));
     renderStepperState();
     renderActiveStepContent();
 }
@@ -1981,6 +1992,7 @@ function renderActiveStepContent() {
     else if (activeStep === 4) renderStep4(container);
     else if (activeStep === 5) renderStep5(container);
     else if (activeStep === 6) renderStep6(container);
+    else if (activeStep === 7) renderStep7(container);
 }
 
 // ============================================================================
@@ -2016,6 +2028,7 @@ async function refreshCurrentStep() {
         else if (activeStep === 4) renderStep4(container);
         else if (activeStep === 5) renderStep5(container);
         else if (activeStep === 6) renderStep6(container);
+        else if (activeStep === 7) renderStep7(container);
     }
 }
 
@@ -5072,14 +5085,14 @@ function renderStep4(el) {
                     <span class="px-2 py-1 rounded bg-emerald-50 text-emerald-700 font-mono font-bold">Matched: ${elim.matched_count}</span>
                     <span class="px-2 py-1 rounded bg-amber-50 text-amber-700 font-mono font-bold">Warnings: ${elim.tolerance_warning_count}</span>
                     <span class="px-2 py-1 rounded bg-red-50 text-red-700 font-mono font-bold">Exceptions: ${elim.exception_count}</span>
-                    <button onclick="triggerRunPipeline()"
+                    <button onclick="switchStep(5)"
                         class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
-                        title="Consolidate">
+                        title="Proceed to Goodwill">
                         <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span>Consolidate</span>
+                        <span>Proceed to Goodwill</span>
                     </button>
                 </div>
             </div>
@@ -5103,8 +5116,743 @@ function renderStep4(el) {
     `;
 }
 
-// STEP 5: CONSOLIDATION
-function renderStep5(el) {
+// ============================================================================
+// STEP 5: GOODWILL ON CONSOLIDATION (IND AS 103 / IFRS 3)
+// ============================================================================
+
+let goodwillScheduleData = null;
+let currentGoodwillL0Target = null;
+let goodwillDebounceTimer = null;
+
+async function fetchGoodwillScheduleData() {
+    try {
+        const res = await fetch("/api/pipeline/goodwill");
+        const data = await res.json();
+        if (data.success && data.schedule) {
+            goodwillScheduleData = data;
+            return data;
+        }
+    } catch (e) {
+        console.error("Failed to fetch goodwill schedule:", e);
+    }
+    return null;
+}
+
+async function renderStep5(el) {
+    if (!goodwillScheduleData) {
+        el.innerHTML = `
+            <div class="p-12 text-center bg-white rounded border border-kpmg-border shadow-xs">
+                <svg class="w-8 h-8 text-kpmg-blue animate-spin mx-auto mb-3" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                <div class="text-xs font-semibold text-kpmg-navy">Loading Goodwill & Acquisition Schedule...</div>
+            </div>
+        `;
+        await fetchGoodwillScheduleData();
+    }
+
+    if (!goodwillScheduleData || !goodwillScheduleData.schedule) {
+        el.innerHTML = `
+            <div class="p-12 text-center bg-white rounded border border-kpmg-border">
+                <h4 class="font-bold text-sm text-kpmg-navy mb-1">Goodwill Schedule Unavailable</h4>
+                <p class="text-xs text-kpmg-muted max-w-md mx-auto mb-4">Please ensure Steps 1 to 4 are completed first.</p>
+                <button onclick="switchStep(4)" class="h-8 px-4 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition cursor-pointer">
+                    Back to Step 4 Eliminations
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    const sched = goodwillScheduleData.schedule;
+    const parentTbAccounts = goodwillScheduleData.parent_tb_accounts || [];
+    const entities = sched.entities || [];
+    const adjs = sched.adjustments || [];
+    const dataByEnt = sched.data_by_entity || {};
+
+    // Build header columns: Particulars | Parent Company | Sub 1 | Sub 2 ... | Remarks
+    let entHeaders = entities.map(ent => {
+        const d = dataByEnt[ent] || {};
+        const isParent = d.is_parent || (ent === sched.parent_entity_code);
+        const displayName = d.entity_name || ent;
+        return `
+            <th class="num-cell min-w-[150px] text-left px-3 py-2.5">
+                <div class="font-bold text-xs text-kpmg-navy">${escapeHtml(displayName)}</div>
+                <div class="text-[10px] font-mono text-slate-500 font-normal">
+                    ${isParent ? '<span class="px-1.5 py-0.5 rounded bg-blue-100 text-kpmg-blue font-bold text-[9px]">PARENT</span>' : '<span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-bold text-[9px]">SUBSIDIARY</span>'}
+                    ${escapeHtml(d.currency || sched.reporting_currency || 'INR')}
+                </div>
+            </th>
+        `;
+    }).join("");
+
+    // ROW 1: Share Capital
+    let shareCapCells = entities.map(ent => {
+        const d = dataByEnt[ent] || {};
+        const l0Code = d.share_capital_l0_code || '';
+        const l0Name = d.share_capital_l0_name || '';
+        const displayLabel = l0Code ? `${l0Code} - ${l0Name || 'Equity'}` : 'Select Level 0...';
+
+        return `
+            <td class="py-2.5 px-3 text-xs align-top border-r border-slate-100">
+                <div class="num-cell font-mono font-bold text-xs text-slate-900 pb-1" id="goodwill-sc-val-${escapeHtml(ent)}">
+                    ${formatNum(d.share_capital_amount)}
+                </div>
+                <button type="button"
+                    onclick="openGoodwillL0Dropdown(event, '${escapeHtml(ent)}')"
+                    class="w-full h-6 px-1.5 py-0.5 text-left text-[10px] font-mono rounded border ${l0Code ? 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700' : 'border-amber-300 bg-amber-50 text-amber-900 font-semibold'} flex items-center justify-between transition cursor-pointer shadow-2xs"
+                    title="Select Group Level 0 COA to map Share Capital">
+                    <span class="truncate">${escapeHtml(displayLabel)}</span>
+                    <svg class="w-3 h-3 text-slate-400 shrink-0 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                </button>
+            </td>
+        `;
+    }).join("");
+
+    // ROW 2: Adjustments (dynamic up to 100 rows)
+    let adjRowsHtml = adjs.map((adj, idx) => {
+        let adjCells = entities.map(ent => {
+            const val = (adj.amounts_by_entity && adj.amounts_by_entity[ent] != null) ? adj.amounts_by_entity[ent] : 0.0;
+            return `
+                <td class="py-1.5 px-2 text-xs align-middle border-r border-slate-100">
+                    <input type="number" step="any"
+                        value="${val}"
+                        oninput="onGoodwillAdjustmentAmountInput('${escapeHtml(adj.id)}', '${escapeHtml(ent)}', this.value)"
+                        class="num-cell h-7 px-2 text-xs font-mono font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-kpmg-blue w-full text-right" />
+                </td>
+            `;
+        }).join("");
+
+        return `
+            <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
+                <td class="py-2 px-3 text-xs align-middle">
+                    <div class="flex items-center space-x-2">
+                        ${idx === 0 ? `
+                            <button type="button" onclick="addGoodwillAdjustmentRow()"
+                                class="w-5 h-5 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-bold inline-flex items-center justify-center transition shadow-2xs btn-tactile cursor-pointer"
+                                title="Click to add another adjustment row (up to 100 rows)">
+                                +
+                            </button>
+                        ` : `
+                            <button type="button" onclick="deleteGoodwillAdjustmentRow('${escapeHtml(adj.id)}')"
+                                class="w-5 h-5 rounded bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold inline-flex items-center justify-center transition shadow-2xs cursor-pointer"
+                                title="Remove this adjustment row">
+                                ×
+                            </button>
+                        `}
+                        <input type="text"
+                            value="${escapeHtml(adj.name || '')}"
+                            onchange="onGoodwillAdjustmentNameChange('${escapeHtml(adj.id)}', this.value)"
+                            placeholder="Adjustment particulars..."
+                            class="h-7 px-2 text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-kpmg-blue w-full max-w-[220px]" />
+                    </div>
+                </td>
+                ${adjCells}
+                <td class="py-1.5 px-3 text-xs align-middle">
+                    <input type="text"
+                        value="${escapeHtml(adj.remarks || '')}"
+                        onchange="onGoodwillAdjustmentRemarksChange('${escapeHtml(adj.id)}', this.value)"
+                        placeholder="Remarks for recordkeeping..."
+                        class="h-7 px-2 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-kpmg-blue w-full" />
+                </td>
+            </tr>
+        `;
+    }).join("");
+
+    // ROW 3: Retained earnings and addition
+    let reCells = entities.map(ent => {
+        const d = dataByEnt[ent] || {};
+        const val = d.retained_earnings_amount != null ? d.retained_earnings_amount : 0.0;
+        return `
+            <td class="py-1.5 px-2 text-xs align-middle border-r border-slate-100">
+                <input type="number" step="any"
+                    value="${val}"
+                    oninput="onGoodwillRetainedEarningsInput('${escapeHtml(ent)}', this.value)"
+                    class="num-cell h-7 px-2 text-xs font-mono font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-kpmg-blue w-full text-right" />
+            </td>
+        `;
+    }).join("");
+
+    // ROW 4: Net asset acquisition (Row 1 + Row 2 + Row 3)
+    let netAssetCells = entities.map(ent => {
+        const d = dataByEnt[ent] || {};
+        return `
+            <td class="py-2 px-3 text-xs align-middle border-r border-slate-100 bg-slate-50/50">
+                <div class="num-cell font-mono font-bold text-xs text-kpmg-navy formula-interactive py-1"
+                    id="goodwill-net-assets-${escapeHtml(ent)}"
+                    onmouseenter="showFormula(event, '=${formatNum(d.share_capital_amount)} + Adjustments + ${formatNum(d.retained_earnings_amount)}', 'Net Assets at Acquisition Date')"
+                    onmouseleave="hideFormula()">
+                    ${formatNum(d.net_assets_at_acquisition)}
+                </div>
+            </td>
+        `;
+    }).join("");
+
+    // ROW 5: Investment by company
+    let investCells = entities.map(ent => {
+        const d = dataByEnt[ent] || {};
+        const isParent = d.is_parent || (ent === sched.parent_entity_code);
+        const invAmt = d.investment_amount != null ? d.investment_amount : 0.0;
+        const hitlActive = !isParent && d.needs_hitl;
+
+        return `
+            <td class="py-2 px-2 text-xs align-top border-r border-slate-100 ${hitlActive ? 'bg-amber-50/40' : ''}">
+                <div class="space-y-1">
+                    <input type="number" step="any"
+                        value="${invAmt}"
+                        oninput="onGoodwillInvestmentInput('${escapeHtml(ent)}', this.value)"
+                        class="num-cell h-7 px-2 text-xs font-mono font-semibold text-slate-800 bg-slate-50 border ${hitlActive ? 'border-amber-400 bg-amber-50/90 text-amber-950 focus:ring-amber-400' : 'border-slate-200 focus:ring-kpmg-blue'} rounded focus:bg-white focus:outline-none focus:ring-1 w-full text-right"
+                        title="${hitlActive ? 'Low confidence / unmapped: please verify or adjust amount' : 'Investment by Parent'}" />
+
+                    ${!isParent ? `
+                        <select onchange="onGoodwillInvestmentAccountSelect('${escapeHtml(ent)}', this.value)"
+                            class="w-full h-6 px-1 text-[10px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:outline-none truncate">
+                            <option value="">${d.investment_account_code ? `${escapeHtml(d.investment_account_code)} - ${escapeHtml(d.investment_account_name || '')}` : 'Select Parent TB Account...'}</option>
+                            ${parentTbAccounts.map(acc => `
+                                <option value="${escapeHtml(acc.code)}" ${acc.code === d.investment_account_code ? 'selected' : ''}>
+                                    ${escapeHtml(acc.code)} - ${escapeHtml(acc.description)} (${formatNum(acc.amount)})
+                                </option>
+                            `).join("")}
+                        </select>
+                    ` : `
+                        <div class="text-[10px] text-slate-400 font-mono italic text-right px-1">Parent Entity</div>
+                    `}
+                </div>
+            </td>
+        `;
+    }).join("");
+
+    // ROW 6: Goodwill
+    let goodwillCells = entities.map(ent => {
+        const d = dataByEnt[ent] || {};
+        const isGoodwill = (d.goodwill_amount || 0) > 0.001;
+        return `
+            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100 ${isGoodwill ? 'bg-emerald-50/60' : ''}">
+                <div class="num-cell font-mono font-bold text-xs ${isGoodwill ? 'text-emerald-700' : 'text-slate-400'} formula-interactive"
+                    id="goodwill-gw-val-${escapeHtml(ent)}"
+                    onmouseenter="showFormula(event, '=MAX(0, ${formatNum(d.investment_amount)} - ${formatNum(d.net_assets_at_acquisition)})', 'Goodwill on Acquisition')"
+                    onmouseleave="hideFormula()">
+                    ${formatNum(d.goodwill_amount || 0.0)}
+                </div>
+            </td>
+        `;
+    }).join("");
+
+    // ROW 7: Reserves (Capital Reserve)
+    let reserveCells = entities.map(ent => {
+        const d = dataByEnt[ent] || {};
+        const isReserve = (d.capital_reserve_amount || 0) > 0.001;
+        return `
+            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100 ${isReserve ? 'bg-amber-50/60' : ''}">
+                <div class="num-cell font-mono font-bold text-xs ${isReserve ? 'text-amber-800' : 'text-slate-400'} formula-interactive"
+                    id="goodwill-cr-val-${escapeHtml(ent)}"
+                    onmouseenter="showFormula(event, '=MAX(0, ${formatNum(d.net_assets_at_acquisition)} - ${formatNum(d.investment_amount)})', 'Capital Reserve (Bargain Purchase Gain)')"
+                    onmouseleave="hideFormula()">
+                    ${formatNum(d.capital_reserve_amount || 0.0)}
+                </div>
+            </td>
+        `;
+    }).join("");
+
+    el.innerHTML = `
+        <div class="space-y-4">
+            <!-- 1. Header Section -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-kpmg-border pb-3">
+                <div>
+                    <h3 class="font-bold text-base text-kpmg-navy">Goodwill & Acquisition Accounting Matrix</h3>
+                    <p class="text-xs text-kpmg-muted">Ind AS 103 / IFRS 3: Computes Goodwill and Capital Reserve by comparing Purchase Consideration (Investment) against Net Assets at Acquisition.</p>
+                </div>
+                <div class="flex items-center space-x-2.5 text-xs">
+                    <div class="flex items-center space-x-2 px-3 py-1 rounded-md bg-emerald-50 border border-emerald-200">
+                        <span class="text-[11px] font-semibold text-emerald-800">Total Goodwill:</span>
+                        <span class="font-mono font-bold text-xs text-emerald-900" id="goodwill-total-gw-badge">${formatNum(sched.total_goodwill)}</span>
+                    </div>
+                    <div class="flex items-center space-x-2 px-3 py-1 rounded-md bg-amber-50 border border-amber-200">
+                        <span class="text-[11px] font-semibold text-amber-800">Total Reserves:</span>
+                        <span class="font-mono font-bold text-xs text-amber-900" id="goodwill-total-cr-badge">${formatNum(sched.total_capital_reserve)}</span>
+                    </div>
+                    <button onclick="confirmGoodwillSchedule()"
+                        class="h-7 px-3.5 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
+                        title="Confirm Goodwill schedule and advance to Step 6 Consolidation">
+                        <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>Proceed to Consolidation</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. Master Goodwill Financial Schedule Table -->
+            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-270px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
+                <table class="fin-table">
+                    <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
+                        <tr>
+                            <th class="w-[280px] text-left px-3 py-2.5">Particulars</th>
+                            ${entHeaders}
+                            <th class="min-w-[200px] text-left px-3 py-2.5">Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <!-- ROW 1: Share capital -->
+                        <tr class="hover:bg-slate-50/70 transition">
+                            <td class="py-2.5 px-3 text-xs align-top border-r border-slate-100">
+                                <div class="font-bold text-slate-900">1. Share capital</div>
+                                <div class="text-[10px] text-slate-500">From Group COA Level 0 (Translated)</div>
+                            </td>
+                            ${shareCapCells}
+                            <td class="py-2.5 px-3 text-xs align-top text-slate-500 font-mono italic">
+                                Sum of all accounts mapped to selected Level 0 in presentation currency.
+                            </td>
+                        </tr>
+
+                        <!-- ROW 2: Adjustments Section (Header & Dynamic Rows) -->
+                        <tr class="bg-slate-50/60 font-semibold border-t border-b border-slate-200">
+                            <td colspan="${entities.length + 2}" class="py-1 px-3 text-[11px] text-kpmg-navy uppercase tracking-wider flex items-center justify-between">
+                                <span>2. Adjustments (Manual data points entered by user)</span>
+                                <button type="button" onclick="addGoodwillAdjustmentRow()" class="text-[10px] font-bold text-kpmg-blue hover:underline cursor-pointer flex items-center space-x-1">
+                                    <span>+ Add Adjustment Row (${adjs.length}/100)</span>
+                                </button>
+                            </td>
+                        </tr>
+                        ${adjRowsHtml}
+
+                        <!-- ROW 3: Retained earnings and addition -->
+                        <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
+                            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100">
+                                <div class="font-bold text-slate-900">3. Retained earnings and addition</div>
+                                <div class="text-[10px] text-slate-500">At Acquisition Date</div>
+                            </td>
+                            ${reCells}
+                            <td class="py-2 px-3 text-xs align-middle">
+                                <input type="text"
+                                    value="${escapeHtml((dataByEnt[sched.parent_entity_code] || {}).retained_earnings_remarks || '')}"
+                                    onchange="onGoodwillRetainedEarningsRemarksChange('${escapeHtml(sched.parent_entity_code)}', this.value)"
+                                    placeholder="Retained earnings remarks..."
+                                    class="h-7 px-2 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-kpmg-blue w-full" />
+                            </td>
+                        </tr>
+
+                        <!-- ROW 4: Net asset acquisition -->
+                        <tr class="bg-blue-50/30 border-b-2 border-kpmg-border font-bold">
+                            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100">
+                                <div class="font-bold text-kpmg-navy">4. Net asset acquisition</div>
+                                <div class="text-[10px] text-slate-500 font-normal">Sum of rows 1 + 2 + 3</div>
+                            </td>
+                            ${netAssetCells}
+                            <td class="py-2.5 px-3 text-xs align-middle text-kpmg-navy font-mono text-[11px]">
+                                = Share Capital + Adjustments + Retained Earnings
+                            </td>
+                        </tr>
+
+                        <!-- ROW 5: Investment by company -->
+                        <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
+                            <td class="py-2.5 px-3 text-xs align-top border-r border-slate-100">
+                                <div class="font-bold text-slate-900">5. Investment by company</div>
+                                <div class="text-[10px] text-slate-500">Purchase Consideration (Deterministic / LLM / HITL)</div>
+                            </td>
+                            ${investCells}
+                            <td class="py-2 px-3 text-xs align-top">
+                                <input type="text"
+                                    value="${escapeHtml((dataByEnt[sched.parent_entity_code] || {}).investment_remarks || '')}"
+                                    onchange="onGoodwillInvestmentRemarksChange('${escapeHtml(sched.parent_entity_code)}', this.value)"
+                                    placeholder="Investment remarks..."
+                                    class="h-7 px-2 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-kpmg-blue w-full" />
+                            </td>
+                        </tr>
+
+                        <!-- ROW 6: Goodwill -->
+                        <tr class="hover:bg-emerald-50/30 border-b border-emerald-100 font-bold transition">
+                            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100">
+                                <div class="font-bold text-emerald-800">6. Goodwill</div>
+                                <div class="text-[10px] text-emerald-600 font-normal">Difference when Investment > Net Assets</div>
+                            </td>
+                            ${goodwillCells}
+                            <td class="py-2.5 px-3 text-xs align-middle text-emerald-700 font-mono text-[11px]">
+                                Populated when (Investment - Net Assets) &gt; 0
+                            </td>
+                        </tr>
+
+                        <!-- ROW 7: Reserves (Capital Reserve) -->
+                        <tr class="hover:bg-amber-50/30 border-b border-amber-100 font-bold transition">
+                            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100">
+                                <div class="font-bold text-amber-900">7. Reserves (Capital Reserve)</div>
+                                <div class="text-[10px] text-amber-700 font-normal">Difference when Net Assets &ge; Investment</div>
+                            </td>
+                            ${reserveCells}
+                            <td class="py-2.5 px-3 text-xs align-middle text-amber-800 font-mono text-[11px]">
+                                Populated when (Net Assets - Investment) &ge; 0
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+// Global Level 0 Floating Dropdown Popover for Step 5 Goodwill
+function openGoodwillL0Dropdown(event, entityCode) {
+    event.stopPropagation();
+    const btn = event.currentTarget;
+    const rect = btn.getBoundingClientRect();
+
+    let popover = document.getElementById("step5-goodwill-l0-popover");
+    if (!popover) {
+        popover = document.createElement("div");
+        popover.id = "step5-goodwill-l0-popover";
+        popover.className = "fixed z-50 bg-white border border-slate-200 rounded-lg shadow-xl w-80 max-w-[90vw] overflow-hidden text-xs transition-all";
+        document.body.appendChild(popover);
+
+        document.addEventListener("click", (e) => {
+            const p = document.getElementById("step5-goodwill-l0-popover");
+            if (p && !p.classList.contains("hidden") && !p.contains(e.target)) {
+                p.classList.add("hidden");
+                currentGoodwillL0Target = null;
+            }
+        });
+    }
+
+    currentGoodwillL0Target = { entityCode };
+    const top = rect.bottom + 4;
+    const left = Math.min(rect.left, window.innerWidth - 330);
+    popover.style.top = `${top}px`;
+    popover.style.left = `${Math.max(10, left)}px`;
+
+    renderGoodwillL0PopoverContent('', entityCode);
+    popover.classList.remove("hidden");
+
+    setTimeout(() => {
+        const inp = document.getElementById("goodwill-l0-popover-search-input");
+        if (inp) inp.focus();
+    }, 50);
+}
+
+function renderGoodwillL0PopoverContent(query, entityCode) {
+    const popover = document.getElementById("step5-goodwill-l0-popover");
+    if (!popover) return;
+
+    let choices = (pipelineData && pipelineData.level_0_choices) ? pipelineData.level_0_choices : [];
+    if (!choices || choices.length === 0) {
+        const mapSet = new Map();
+        (pipelineData && pipelineData.mapping_decisions || []).forEach(m => {
+            if (m.group_code && m.group_code !== '999999') {
+                mapSet.set(m.group_code, {
+                    account_code: m.group_code,
+                    account_name: m.group_description || m.group_code,
+                    level_0_account: m.level_0_name || m.group_description || m.group_code
+                });
+            }
+        });
+        choices = Array.from(mapSet.values());
+    }
+
+    const q = (query || '').trim().toLowerCase();
+    const filtered = q
+        ? choices.filter(c =>
+            (c.account_code && c.account_code.toLowerCase().includes(q)) ||
+            (c.account_name && c.account_name.toLowerCase().includes(q)) ||
+            (c.level_0_account && c.level_0_account.toLowerCase().includes(q))
+        )
+        : choices;
+
+    popover.innerHTML = `
+        <div class="p-2 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+            <span class="font-bold text-xs text-kpmg-navy">Select Level 0 Account</span>
+            <span class="text-[10px] font-mono text-slate-500">${filtered.length} available</span>
+        </div>
+        <div class="p-2 border-b border-slate-100">
+            <input type="text" id="goodwill-l0-popover-search-input"
+                placeholder="Search code or description..."
+                value="${escapeHtml(query || '')}"
+                oninput="renderGoodwillL0PopoverContent(this.value, '${escapeHtml(entityCode)}')"
+                class="w-full h-7 px-2 text-xs font-mono rounded bg-slate-100 border border-slate-200 focus:bg-white focus:outline-none focus:ring-1 focus:ring-kpmg-blue">
+        </div>
+        <div class="max-h-60 overflow-y-auto divide-y divide-slate-100">
+            ${filtered.length === 0 ? `
+                <div class="p-4 text-center text-slate-400 text-xs">No Level 0 accounts match search.</div>
+            ` : filtered.map(c => `
+                <button type="button"
+                    onclick="selectGoodwillL0('${escapeHtml(entityCode)}', '${escapeHtml(c.account_code)}')"
+                    class="w-full text-left p-2 hover:bg-blue-50/80 transition flex items-start space-x-2 cursor-pointer">
+                    <span class="font-mono font-bold text-xs text-kpmg-blue shrink-0">${escapeHtml(c.account_code)}</span>
+                    <span class="text-xs text-slate-800 line-clamp-1">${escapeHtml(c.level_0_account || c.account_name || c.account_code)}</span>
+                </button>
+            `).join("")}
+        </div>
+    `;
+}
+
+async function selectGoodwillL0(entityCode, l0Code) {
+    const p = document.getElementById("step5-goodwill-l0-popover");
+    if (p) p.classList.add("hidden");
+
+    try {
+        const res = await fetch("/api/pipeline/goodwill/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                share_capital_l0_codes: { [entityCode]: l0Code }
+            })
+        });
+        const data = await res.json();
+        if (data.success && data.schedule) {
+            goodwillScheduleData.schedule = data.schedule;
+            renderStep5(document.getElementById("step-content"));
+            showToast("Share Capital Updated", `Level 0 ${l0Code} mapped for ${entityCode}.`, "success");
+        }
+    } catch (e) {
+        showToast("Update Error", "Failed to update Share Capital mapping: " + e, "error");
+    }
+}
+
+function recalcGoodwillClientSide() {
+    if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
+    const sched = goodwillScheduleData.schedule;
+    const adjs = sched.adjustments || [];
+    const dataByEnt = sched.data_by_entity || {};
+
+    let totalGw = 0.0;
+    let totalCr = 0.0;
+
+    sched.entities.forEach(ent => {
+        const d = dataByEnt[ent];
+        if (!d) return;
+
+        const adjSum = adjs.reduce((acc, a) => acc + (parseFloat(a.amounts_by_entity[ent]) || 0.0), 0.0);
+        const netAssets = roundNum(d.share_capital_amount + adjSum + (parseFloat(d.retained_earnings_amount) || 0.0));
+        d.net_assets_at_acquisition = netAssets;
+
+        const diff = roundNum((parseFloat(d.investment_amount) || 0.0) - netAssets);
+        if (diff > 0.001) {
+            d.goodwill_amount = diff;
+            d.capital_reserve_amount = 0.0;
+        } else if (diff < -0.001) {
+            d.goodwill_amount = 0.0;
+            d.capital_reserve_amount = Math.abs(diff);
+        } else {
+            d.goodwill_amount = 0.0;
+            d.capital_reserve_amount = 0.0;
+        }
+
+        totalGw += d.goodwill_amount;
+        totalCr += d.capital_reserve_amount;
+
+        // Update DOM elements if present
+        const elNa = document.getElementById(`goodwill-net-assets-${ent}`);
+        if (elNa) elNa.textContent = formatNum(d.net_assets_at_acquisition);
+        const elGw = document.getElementById(`goodwill-gw-val-${ent}`);
+        if (elGw) {
+            elGw.textContent = formatNum(d.goodwill_amount);
+            if (d.goodwill_amount > 0) {
+                elGw.classList.remove('text-slate-400');
+                elGw.classList.add('text-emerald-700');
+            } else {
+                elGw.classList.remove('text-emerald-700');
+                elGw.classList.add('text-slate-400');
+            }
+        }
+        const elCr = document.getElementById(`goodwill-cr-val-${ent}`);
+        if (elCr) {
+            elCr.textContent = formatNum(d.capital_reserve_amount);
+            if (d.capital_reserve_amount > 0) {
+                elCr.classList.remove('text-slate-400');
+                elCr.classList.add('text-amber-800');
+            } else {
+                elCr.classList.remove('text-amber-800');
+                elCr.classList.add('text-slate-400');
+            }
+        }
+    });
+
+    sched.total_goodwill = roundNum(totalGw);
+    sched.total_capital_reserve = roundNum(totalCr);
+
+    const bGw = document.getElementById("goodwill-total-gw-badge");
+    if (bGw) bGw.textContent = formatNum(sched.total_goodwill);
+    const bCr = document.getElementById("goodwill-total-cr-badge");
+    if (bCr) bCr.textContent = formatNum(sched.total_capital_reserve);
+}
+
+function syncGoodwillDebounced() {
+    clearTimeout(goodwillDebounceTimer);
+    goodwillDebounceTimer = setTimeout(async () => {
+        if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
+        const sched = goodwillScheduleData.schedule;
+        const payload = {
+            share_capital_l0_codes: {},
+            retained_earnings: {},
+            retained_earnings_remarks: {},
+            investments: {},
+            investment_accounts: {},
+            investment_remarks: {},
+            adjustments: sched.adjustments || []
+        };
+        sched.entities.forEach(ent => {
+            const d = sched.data_by_entity[ent] || {};
+            if (d.share_capital_l0_code) payload.share_capital_l0_codes[ent] = d.share_capital_l0_code;
+            payload.retained_earnings[ent] = d.retained_earnings_amount || 0.0;
+            payload.retained_earnings_remarks[ent] = d.retained_earnings_remarks || "";
+            payload.investments[ent] = d.investment_amount || 0.0;
+            if (d.investment_account_code) payload.investment_accounts[ent] = d.investment_account_code;
+            payload.investment_remarks[ent] = d.investment_remarks || "";
+        });
+
+        try {
+            const res = await fetch("/api/pipeline/goodwill/update", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.success && data.schedule) {
+                goodwillScheduleData.schedule = data.schedule;
+            }
+        } catch (e) {
+            console.error("Goodwill sync error:", e);
+        }
+    }, 400);
+}
+
+function onGoodwillAdjustmentAmountInput(adjId, entityCode, value) {
+    if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
+    const adj = (goodwillScheduleData.schedule.adjustments || []).find(a => a.id === adjId);
+    if (adj) {
+        if (!adj.amounts_by_entity) adj.amounts_by_entity = {};
+        adj.amounts_by_entity[entityCode] = parseFloat(value) || 0.0;
+    }
+    recalcGoodwillClientSide();
+    syncGoodwillDebounced();
+}
+
+function onGoodwillAdjustmentNameChange(adjId, value) {
+    if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
+    const adj = (goodwillScheduleData.schedule.adjustments || []).find(a => a.id === adjId);
+    if (adj) adj.name = value || "Adjustment";
+    syncGoodwillDebounced();
+}
+
+function onGoodwillAdjustmentRemarksChange(adjId, value) {
+    if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
+    const adj = (goodwillScheduleData.schedule.adjustments || []).find(a => a.id === adjId);
+    if (adj) adj.remarks = value || "";
+    syncGoodwillDebounced();
+}
+
+async function addGoodwillAdjustmentRow() {
+    try {
+        const res = await fetch("/api/pipeline/goodwill/add-adjustment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: "Fair Value & PPA Adjustment", remarks: "" })
+        });
+        const data = await res.json();
+        if (data.success && data.schedule) {
+            goodwillScheduleData.schedule = data.schedule;
+            renderStep5(document.getElementById("step-content"));
+            showToast("Row Added", "New adjustment line item created.", "info");
+        }
+    } catch (e) {
+        showToast("Error", "Could not add adjustment row: " + e, "error");
+    }
+}
+
+async function deleteGoodwillAdjustmentRow(adjId) {
+    try {
+        const res = await fetch("/api/pipeline/goodwill/delete-adjustment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: adjId })
+        });
+        const data = await res.json();
+        if (data.success && data.schedule) {
+            goodwillScheduleData.schedule = data.schedule;
+            renderStep5(document.getElementById("step-content"));
+            showToast("Row Removed", "Adjustment row deleted.", "info");
+        }
+    } catch (e) {
+        showToast("Error", "Could not remove adjustment row: " + e, "error");
+    }
+}
+
+function onGoodwillRetainedEarningsInput(entityCode, value) {
+    if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
+    const d = (goodwillScheduleData.schedule.data_by_entity || {})[entityCode];
+    if (d) d.retained_earnings_amount = parseFloat(value) || 0.0;
+    recalcGoodwillClientSide();
+    syncGoodwillDebounced();
+}
+
+function onGoodwillRetainedEarningsRemarksChange(entityCode, value) {
+    if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
+    const d = (goodwillScheduleData.schedule.data_by_entity || {})[entityCode];
+    if (d) d.retained_earnings_remarks = value || "";
+    syncGoodwillDebounced();
+}
+
+function onGoodwillInvestmentInput(entityCode, value) {
+    if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
+    const d = (goodwillScheduleData.schedule.data_by_entity || {})[entityCode];
+    if (d) {
+        d.investment_amount = parseFloat(value) || 0.0;
+        d.needs_hitl = false;
+    }
+    recalcGoodwillClientSide();
+    syncGoodwillDebounced();
+}
+
+function onGoodwillInvestmentAccountSelect(entityCode, accountCode) {
+    if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
+    const d = (goodwillScheduleData.schedule.data_by_entity || {})[entityCode];
+    const parentAccounts = goodwillScheduleData.parent_tb_accounts || [];
+    const acc = parentAccounts.find(a => a.code === accountCode);
+
+    if (d && acc) {
+        d.investment_account_code = acc.code;
+        d.investment_account_name = acc.description;
+        d.investment_amount = acc.amount;
+        d.needs_hitl = false;
+    } else if (d) {
+        d.investment_account_code = accountCode;
+    }
+    renderStep5(document.getElementById("step-content"));
+    syncGoodwillDebounced();
+}
+
+function onGoodwillInvestmentRemarksChange(entityCode, value) {
+    if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
+    const d = (goodwillScheduleData.schedule.data_by_entity || {})[entityCode];
+    if (d) d.investment_remarks = value || "";
+    syncGoodwillDebounced();
+}
+
+async function confirmGoodwillSchedule() {
+    try {
+        const res = await fetch("/api/pipeline/goodwill/confirm", {
+            method: "POST"
+        });
+        const data = await res.json();
+        if (data.success) {
+            appStatus.completed_steps = data.completed_steps || [];
+            showToast("Goodwill Verified", `Total Goodwill: ₹${formatNum(data.total_goodwill)} | Total Reserves: ₹${formatNum(data.total_capital_reserve)}`, "success");
+            await loadPipelineData();
+            switchStep(6);
+        } else {
+            showToast("Validation Error", data.detail || "Could not confirm Goodwill schedule.", "error");
+        }
+    } catch (e) {
+        showToast("Error", "Failed to confirm Goodwill schedule: " + e, "error");
+    }
+}
+
+function roundNum(n) {
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+// ============================================================================
+// STEP 6: CONSOLIDATION (TRIAL BALANCE MATRIX)
+// ============================================================================
+function renderStep6(el) {
     const ctb = pipelineData.consolidated_tb;
     if (!ctb || !ctb.rows) {
         el.innerHTML = `<div class="p-8 text-center text-kpmg-muted">Consolidated Trial Balance will appear once the pipeline executes.</div>`;
@@ -5169,14 +5917,13 @@ function renderStep5(el) {
                     <div class="text-xs font-mono px-3 py-1 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
                         Consolidated Sum: ${formatNum(ctb.total_consolidated)} (0.00)
                     </div>
-                    <button onclick="triggerRunPipeline()"
-                        class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
-                        title="Consolidate">
+                    <button onclick="switchStep(7)"
+                        class="h-7 px-3.5 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
+                        title="Proceed to Financial Statements">
                         <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                         </svg>
-                        <span>Consolidate</span>
+                        <span>Financial Statements</span>
                     </button>
                 </div>
             </div>
@@ -5201,20 +5948,22 @@ function renderStep5(el) {
 
 function toggleEntityCollapse() {
     collapseEntityColumns = !collapseEntityColumns;
-    renderStep5(document.getElementById("step-content"));
+    renderStep6(document.getElementById("step-content"));
 }
 
-// STEP 6: FINANCIAL STATEMENTS
+// ============================================================================
+// STEP 7: FINANCIAL STATEMENTS
+// ============================================================================
 let statementsData = null;
 let currentStatementTab = 'BS';
 
 function switchStatementTab(tab) {
     currentStatementTab = tab;
     const el = document.getElementById("step-content");
-    if (el) renderStep6(el);
+    if (el) renderStep7(el);
 }
 
-async function renderStep6(el) {
+async function renderStep7(el) {
     if (!statementsData) {
         try {
             const res = await fetch("/api/financial-statements");
@@ -6334,7 +7083,7 @@ async function triggerViewRun(runId) {
         switchNavSection('PIPELINE');
         isNavigatingDirectly = false;
 
-        switchStep(6);
+        switchStep(7);
         showToast("Viewing Run", `Loaded completed statements for ${data.run_name}`, "info");
     } catch (err) {
         showToast("View Error", "Network error opening run: " + err, "error");
@@ -6411,7 +7160,7 @@ async function triggerRunPipeline() {
             await fetchStatus();
             await loadPipelineData();
             if (activeSection === 'RUN') {
-                switchStep(6);
+                switchStep(7);
             } else {
                 renderObservabilityConsole();
             }

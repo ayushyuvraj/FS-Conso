@@ -7,6 +7,7 @@ from fs_conso.core.translator import TranslatedRow, TranslatedTrialBalance
 from fs_conso.models.coa import AccountClassification, ChartOfAccounts
 from fs_conso.models.elimination import EliminationVoucher
 from fs_conso.models.entity import EntityHierarchy
+from fs_conso.models.goodwill import GoodwillSchedule
 
 
 class ConsolidatedTBRow(BaseModel):
@@ -100,7 +101,8 @@ class TBAggregator:
         elimination_vouchers: Optional[List[EliminationVoucher]] = None,
         period: str = "31-Mar-2024",
         currency: str = "INR",
-        entity_hierarchy: Optional[EntityHierarchy] = None
+        entity_hierarchy: Optional[EntityHierarchy] = None,
+        goodwill_schedule: Optional[GoodwillSchedule] = None
     ) -> ConsolidatedTrialBalance:
         entity_codes = [tb.entity_code for tb in translated_tbs]
         all_accounts: Dict[str, str] = {}
@@ -110,8 +112,9 @@ class TBAggregator:
             for r in tb.rows:
                 all_accounts[r.account_code] = r.account_description
 
-        # Ensure Goodwill, NCI, and FCTR standard accounts exist in map
+        # Ensure Goodwill, Capital Reserve, NCI, and FCTR standard accounts exist in map
         all_accounts["A110301"] = "Goodwill on Consolidation"
+        all_accounts["E210103"] = "Capital Reserve on Consolidation"
         all_accounts["E210301"] = "Non-Controlling Interests (NCI)"
         all_accounts["O620102"] = "Foreign Currency Translation Differences (FCTR)"
 
@@ -137,7 +140,19 @@ class TBAggregator:
 
         # 3. Ind AS 103 Acquisition Accounting (Goodwill, Capital Reserve, NCI)
         acq_result = AcquisitionAccountingResult()
-        if entity_hierarchy:
+        if goodwill_schedule:
+            acq_result.goodwill_total = goodwill_schedule.total_goodwill
+            acq_result.capital_reserve_total = goodwill_schedule.total_capital_reserve
+            for ent_code, d in goodwill_schedule.data_by_entity.items():
+                if not d.is_parent:
+                    acq_result.details_by_sub[ent_code] = {
+                        "share_capital": d.share_capital_amount,
+                        "net_assets": d.net_assets_at_acquisition,
+                        "investment": d.investment_amount,
+                        "goodwill": d.goodwill_amount,
+                        "capital_reserve": d.capital_reserve_amount
+                    }
+        elif entity_hierarchy:
             for ent_code in entity_codes:
                 legal_ent = entity_hierarchy.get_entity(ent_code)
                 if legal_ent and not legal_ent.is_parent:
@@ -178,6 +193,11 @@ class TBAggregator:
             tot_ent = round(sum(ent_bals.values()), 2)
             elim = round(elim_map.get(code, 0.0), 2)
             adj = 0.0
+            if goodwill_schedule:
+                if code == "A110301" and goodwill_schedule.total_goodwill > 0:
+                    adj = round(goodwill_schedule.total_goodwill, 2)
+                elif code == "E210103" and goodwill_schedule.total_capital_reserve > 0:
+                    adj = round(-goodwill_schedule.total_capital_reserve, 2)
             conso_tot = round(tot_ent + elim + adj, 2)
 
             # Build individual entity elimination allocations for this account

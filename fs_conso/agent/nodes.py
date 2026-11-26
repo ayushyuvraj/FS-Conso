@@ -455,13 +455,20 @@ def aggregator_node(state: ConsolidationState) -> ConsolidationState:
     hierarchy = load_entity_hierarchy_for_company(state.company_id)
     vouchers = state.elimination_result.vouchers if state.elimination_result else []
 
+    if state.goodwill_schedule is None:
+        from fs_conso.core.goodwill_engine import GoodwillEngine
+        state.goodwill_schedule = GoodwillEngine.initialize_schedule(state.company_id, state.period, state, hierarchy)
+        if 5 not in state.completed_steps:
+            state.completed_steps.append(5)
+
     conso_tb = TBAggregator.aggregate(
         coa=coa,
         translated_tbs=state.translated_tbs,
         elimination_vouchers=vouchers,
         period=state.period or config.current_period,
         currency=config.reporting_currency,
-        entity_hierarchy=hierarchy
+        entity_hierarchy=hierarchy,
+        goodwill_schedule=state.goodwill_schedule
     )
 
     state.consolidated_tb = conso_tb
@@ -471,9 +478,9 @@ def aggregator_node(state: ConsolidationState) -> ConsolidationState:
     pl = FinancialStatementBuilder.build_profit_and_loss(conso_tb)
     state.financial_statements = {"balance_sheet": bs, "profit_and_loss": pl}
 
-    state.current_step = max(state.current_step, 6)
-    if 5 not in state.completed_steps:
-        state.completed_steps.append(5)
+    state.current_step = max(state.current_step, 7)
+    if 6 not in state.completed_steps:
+        state.completed_steps.append(6)
 
     t1 = time.perf_counter()
     elapsed_ms = round((t1 - t0) * 1000, 2)
@@ -510,11 +517,11 @@ def excel_builder_node(state: ConsolidationState) -> ConsolidationState:
     if state.is_blocked:
         return state
 
-    # GENERIC GATING: Cannot proceed if Step 5 is not completed
-    if 5 not in state.completed_steps or not state.consolidated_tb:
+    # GENERIC GATING: Cannot proceed if Step 6 is not completed
+    if 6 not in state.completed_steps or not state.consolidated_tb:
         state.is_blocked = True
-        state.current_step = 5
-        state.completed_steps = [s for s in state.completed_steps if s < 5]
+        state.current_step = 6
+        state.completed_steps = [s for s in state.completed_steps if s < 6]
         state.halted_node = "aggregator"
         state.halted_stage = "Consolidated Trial Balance Aggregation"
         state.error_message = "Cannot proceed to Financial Statements Deliverable: Consolidation Aggregation is not completed."
@@ -542,8 +549,9 @@ def excel_builder_node(state: ConsolidationState) -> ConsolidationState:
     )
 
     state.output_excel_path = str(out_file)
-    if 6 not in state.completed_steps:
-        state.completed_steps.append(6)
+    state.current_step = 7
+    if 7 not in state.completed_steps:
+        state.completed_steps.append(7)
 
     t1 = time.perf_counter()
     elapsed_ms = round((t1 - t0) * 1000, 2)
