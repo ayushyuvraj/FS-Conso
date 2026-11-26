@@ -6,6 +6,29 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-26 20:05] Milestone: Step 2 LLM-as-a-Judge Dynamic Mapping, Multi-Candidate Scoring, Hoverable Info Popover & 1-Click Accept
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **LLM as Judge Routing for Unmatched Accounts**:
+     - Upgraded `COAMappingEngine` to evaluate every account deterministically first (historical rules, exact code match, exact name match, standard synonym heuristics).
+     - Any accounts remaining unmapped are automatically routed to Gemini LLM-as-a-Judge in batched prompts containing the complete Group Chart of Accounts categorized by nature (Asset, Liability, Equity, Income, Expense) with Level 0 rollup groupings.
+  2. **Multi-Candidate Probabilities & Ambiguity Flagging**:
+     - The LLM evaluates and returns up to 3 candidate options in descending order of confidence percentage with explicit accounting justifications.
+     - **Default Top Selection**: The option with the highest percentage is automatically assigned by default in the Level 0 mapping column (`group_code`, `level_0_name`).
+     - **Ambiguity Rule**: If 2 or 3 candidate options are above or near the confidence threshold (or top confidence < threshold), `is_ambiguous = True` and `needs_review = True`, highlighting the row in yellow for required auditor oversight.
+  3. **Institutional UI: Confidence Hover Popover `(i)` & 1-Click Accept**:
+     - Added an informative `(i)` button in the Confidence column. Hovering or clicking opens `#step2-candidate-popover` displaying all top 3 candidate options with confidence % (Option 1, Option 2, Option 3) and accounting rationales, with 1-click option switching.
+     - Added an inline 1-click **`Accept`** checkmark button in the Status column next to `Review Required`. Clicking it immediately approves the default top match, calls `/api/hitl/resolve`, turns the row green, and clears the review requirement.
+     - The Level 0 dropdown button remains available for every row to search and select any account from the Group COA.
+  4. **Strict Gating**:
+     - The top-right **"Consolidate"** button and Step 3 remain locked until all pending reviews across all entity tabs are resolved.
+  5. **Verification & Hardening**:
+     - New Automated Suite: `tests/test_step2_llm_mapping.py` (3/3 PASSED).
+     - Full Test Suite: **89/89 PASSED (100%)** in 35.14s.
+     - JavaScript Syntax: `node -c "fs_conso/web/static/js/app.js"` exited with 0 errors.
+     - Live server: Verified operational on port 8000.
+     - Git: Staged and pushed to remote branch `feature/profile-v2`.
+
 ### [2026-11-26 19:40] Milestone: Step 2 Entity Tab Isolation, Non-Zero Amount Preservation & UI Clutter Cleanup
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:

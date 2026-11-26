@@ -1282,6 +1282,7 @@ async def resolve_hitl_item(req: HITLResolveRequest):
                     d.method = "USER_APPROVED_RULE"
                     d.confidence = 1.0
                     d.needs_review = False
+                    d.is_ambiguous = False
                     d.reasoning = req.reasoning
 
             # Also synchronize standardized_tbs if already created
@@ -1605,7 +1606,7 @@ async def get_pipeline_data():
 
     safe_mapping_decisions = []
     for d in st.mapping_decisions:
-        d_dict = d.dict()
+        d_dict = d.model_dump() if hasattr(d, "model_dump") else d.dict()
         if d_dict.get("reasoning"):
             d_dict["reasoning"] = sanitize_error_message(d_dict["reasoning"])
         safe_mapping_decisions.append(d_dict)

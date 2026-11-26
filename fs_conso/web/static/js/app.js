@@ -3958,17 +3958,222 @@ function renderStep2TableRows(tbody) {
                 </td>
 
                 <!-- 6. Confidence -->
-                <td class="num-cell py-2.5 px-3 text-xs font-mono font-bold ${confColor}">
-                    ${confPct}%
+                <td class="num-cell py-2.5 px-3 text-xs">
+                    <div class="inline-flex items-center justify-end space-x-1.5">
+                        <span class="font-mono font-bold ${confColor}">${confPct}%</span>
+                        ${m.candidates && m.candidates.length > 0
+                            ? `<button type="button"
+                                  onclick="openCandidatePopover(event, '${escapeHtml(m.entity_code || currentTab.entity_code)}', '${escapeHtml(m.local_code)}')"
+                                  class="w-4 h-4 rounded-full bg-slate-100 hover:bg-kpmg-blue hover:text-white text-slate-500 text-[10px] font-bold inline-flex items-center justify-center transition shadow-2xs cursor-pointer select-none"
+                                  title="View top AI options and percentages">
+                                  i
+                               </button>`
+                            : ''
+                        }
+                    </div>
                 </td>
 
                 <!-- 7. Status -->
                 <td class="text-center py-2.5 px-3 text-xs">
-                    ${statusBadge}
+                    <div class="inline-flex items-center justify-center space-x-1.5">
+                        ${statusBadge}
+                        ${isYellow && m.group_code && m.group_code !== '999999'
+                            ? `<button type="button"
+                                  onclick="acceptTopCandidate('${escapeHtml(m.entity_code || currentTab.entity_code)}', '${escapeHtml(m.local_code)}')"
+                                  class="h-6 px-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold inline-flex items-center space-x-1 transition shadow-xs cursor-pointer btn-tactile"
+                                  title="Accept default top AI match (${escapeHtml(m.group_code)})">
+                                  <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                                  <span>Accept</span>
+                               </button>`
+                            : ''
+                        }
+                    </div>
                 </td>
             </tr>
         `;
     }).join("");
+}
+
+// -------------------------------------------------------------
+// Step 2 AI Candidate Inspection Popover & 1-Click Accept
+// -------------------------------------------------------------
+
+let candidatePopoverTimer = null;
+
+function openCandidatePopover(event, entityCode, localCode) {
+    if (event) event.stopPropagation();
+    if (candidatePopoverTimer) clearTimeout(candidatePopoverTimer);
+
+    const btn = event.currentTarget;
+    const rect = btn.getBoundingClientRect();
+
+    let popover = document.getElementById("step2-candidate-popover");
+    if (!popover) {
+        popover = document.createElement("div");
+        popover.id = "step2-candidate-popover";
+        popover.className = "fixed z-50 bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl shadow-2xl w-96 max-w-[92vw] overflow-hidden text-xs transition-all pointer-events-auto";
+        popover.addEventListener("mouseenter", () => {
+            if (candidatePopoverTimer) clearTimeout(candidatePopoverTimer);
+        });
+        popover.addEventListener("mouseleave", () => {
+            candidatePopoverTimer = setTimeout(() => {
+                popover.classList.add("hidden");
+            }, 300);
+        });
+        document.body.appendChild(popover);
+
+        // Click outside listener
+        document.addEventListener("click", (e) => {
+            const p = document.getElementById("step2-candidate-popover");
+            if (p && !p.classList.contains("hidden") && !p.contains(e.target) && !e.target.closest("button[title*='View top AI options']")) {
+                p.classList.add("hidden");
+            }
+        });
+    }
+
+    const mappings = getMappingsForEntity(entityCode);
+    const m = mappings.find(item => String(item.local_code).trim() === String(localCode).trim());
+    if (!m) return;
+
+    const candidates = m.candidates || [];
+    let optionsHtml = '';
+    if (candidates.length === 0) {
+        optionsHtml = `
+            <div class="p-4 text-center text-slate-500 text-xs">
+                No secondary options available. Single match inferred via ${escapeHtml(m.method || 'Deterministic Rule')}.
+            </div>
+        `;
+    } else {
+        optionsHtml = candidates.map((c, i) => {
+            const cPct = Math.round((c.confidence || 0) * 100);
+            const isSelected = String(c.group_account_code) === String(m.group_code);
+            const confBadgeColor = cPct >= 85 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-amber-100 text-amber-800 border-amber-200';
+
+            return `
+                <div onclick="selectL0Option('${escapeHtml(c.group_account_code)}', '${escapeHtml(c.level_0_account || c.group_account_name)}')"
+                    class="p-2.5 rounded-lg border transition cursor-pointer select-none ${
+                        isSelected
+                            ? 'bg-blue-50/70 border-kpmg-blue/40 shadow-xs'
+                            : 'bg-white border-slate-100 hover:bg-slate-50/90 hover:border-slate-300'
+                    }">
+                    <div class="flex items-center justify-between mb-1">
+                        <div class="flex items-center space-x-1.5 truncate">
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Option ${i + 1}</span>
+                            <span class="font-mono font-bold text-slate-800 text-xs">${escapeHtml(c.group_account_code)}</span>
+                            ${isSelected ? '<span class="text-[10px] font-bold text-kpmg-blue px-1.5 py-0.2 bg-blue-100 rounded">Selected</span>' : ''}
+                        </div>
+                        <span class="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded border ${confBadgeColor}">
+                            ${cPct}%
+                        </span>
+                    </div>
+                    <div class="font-medium text-slate-900 text-xs mb-1 truncate">
+                        ${escapeHtml(c.level_0_account || c.group_account_name)}
+                    </div>
+                    ${c.reasoning
+                        ? `<p class="text-[11px] text-slate-500 italic line-clamp-2 leading-tight">${escapeHtml(c.reasoning)}</p>`
+                        : ''
+                    }
+                </div>
+            `;
+        }).join("");
+    }
+
+    popover.innerHTML = `
+        <div class="p-3 bg-slate-50/90 border-b border-slate-200 flex items-center justify-between">
+            <div class="truncate pr-2">
+                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">LLM as a Judge Evaluation</div>
+                <div class="font-bold text-xs text-kpmg-navy truncate">${escapeHtml(m.local_code)} - ${escapeHtml(m.local_description)}</div>
+            </div>
+            <button onclick="document.getElementById('step2-candidate-popover').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 p-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="p-2 space-y-2 max-h-72 overflow-y-auto">
+            ${optionsHtml}
+        </div>
+        <div class="p-2 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 flex items-center justify-between">
+            <span>Click any option to select and confirm</span>
+            <span class="font-mono">Threshold: ${Math.round((appStatus && appStatus.ai_confidence_threshold ? appStatus.ai_confidence_threshold : 0.85) * 100)}%</span>
+        </div>
+    `;
+
+    // Position popover intelligently
+    popover.classList.remove("hidden");
+    const popWidth = 384;
+    let left = rect.right - popWidth;
+    if (left < 10) left = 10;
+    if (left + popWidth > window.innerWidth - 10) left = window.innerWidth - popWidth - 10;
+    let top = rect.bottom + 6;
+    if (top + 280 > window.innerHeight) {
+        top = Math.max(10, rect.top - 280);
+    }
+    popover.style.top = `${top}px`;
+    popover.style.left = `${left}px`;
+}
+
+async function acceptTopCandidate(entityCode, localCode) {
+    const mappings = getMappingsForEntity(entityCode);
+    const m = mappings.find(item => String(item.local_code).trim() === String(localCode).trim());
+    if (!m || !m.group_code || m.group_code === '999999') {
+        showToast("Cannot Accept", "No candidate option selected to approve.", "warning");
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/hitl/resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                entity_code: entityCode,
+                local_code: localCode,
+                group_code: m.group_code,
+                reasoning: "Auditor approved default top AI match"
+            })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            // Update decision locally
+            if (!pipelineData.mapping_decisions) pipelineData.mapping_decisions = [];
+            const codeUpper = String(entityCode).trim().toUpperCase();
+            let d = pipelineData.mapping_decisions.find(item =>
+                item.entity_code && String(item.entity_code).trim().toUpperCase() === codeUpper && String(item.local_code).trim() === String(localCode).trim()
+            );
+            if (!d) {
+                d = {
+                    entity_code: entityCode,
+                    local_code: localCode,
+                    local_description: m.local_description,
+                    currency: m.currency,
+                    amount: m.amount
+                };
+                pipelineData.mapping_decisions.push(d);
+            }
+            d.group_code = m.group_code;
+            d.group_description = data.resolved_name || m.group_description;
+            d.level_0_code = m.group_code;
+            d.level_0_name = data.level_0_name || m.level_0_name;
+            d.method = "USER_APPROVED_RULE";
+            d.confidence = 1.0;
+            d.needs_review = false;
+            d.is_ambiguous = false;
+
+            if (appStatus && appStatus.hitl_pending_reviews) {
+                appStatus.hitl_pending_reviews = appStatus.hitl_pending_reviews.filter(r =>
+                    !(String(r.local_code).trim() === String(localCode).trim() && (!r.entity_code || String(r.entity_code).trim().toUpperCase() === codeUpper))
+                );
+            }
+
+            showToast("Mapping Approved", `Approved ${localCode} &rarr; ${m.group_code} (${d.level_0_name})`, "success");
+
+            // Re-render Step 2
+            const container = document.getElementById("step-content");
+            if (container) renderStep2(container);
+        } else {
+            showToast("Approval Failed", data.detail || "Could not save approval.", "error");
+        }
+    } catch (err) {
+        showToast("Network Error", "Approval failed: " + err, "error");
+    }
 }
 
 // Global Level 0 Floating Dropdown Popover
