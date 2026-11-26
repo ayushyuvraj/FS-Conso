@@ -111,8 +111,13 @@ class FileClassifier:
         return rows
 
     @classmethod
-    def _detect_columns_from_sample(cls, sample_rows: List[List[str]], is_fx: bool = False) -> Dict[str, str]:
-        """Detects column mappings from top sample rows using FlexibleTBParser aliases."""
+    def _detect_columns_from_sample(
+        cls,
+        sample_rows: List[List[str]],
+        is_fx: bool = False,
+        expected_period: Optional[str] = None
+    ) -> Dict[str, str]:
+        """Detects column mappings from top sample rows using FlexibleTBParser aliases and period intelligence."""
         if not sample_rows:
             return {}
 
@@ -151,11 +156,48 @@ class FileClassifier:
                 amount_col = FlexibleTBParser._find_column(row_vals, FlexibleTBParser.AMOUNT_ALIASES)
                 ind_col = FlexibleTBParser._find_column(row_vals, FlexibleTBParser.DR_CR_INDICATOR_ALIASES)
 
+                # Period / Fiscal year based amount column detection
+                if not (debit_col and credit_col) and not amount_col:
+                    candidates = [c for c in row_vals if c not in (code_col, desc_col, ind_col) and c.lower() not in ("currency", "curr")]
+                    target_digits = re.findall(r"\d{4}", expected_period) or re.findall(r"\b\d{2}\b", expected_period) if expected_period else []
+                    best_cand = None
+                    best_score = -1
+                    for c_idx, c in enumerate(candidates):
+                        score = 0
+                        c_lower = c.lower()
+                        if target_digits and any(td in c_lower for td in target_digits):
+                            score += 20
+                        if re.search(r"(?:fy|fiscal|yr|year|cy|py)?\s*(?:20\d\d|\d\d)", c_lower):
+                            score += 10
+                        if any(w in c_lower for w in ["lakh", "crore", "million", "thousand", "bal", "amt", "amount"]):
+                            score += 5
+                        # Check sample rows under this column for numbers
+                        col_idx_in_row = sample_rows[r_idx].index(c) if c in sample_rows[r_idx] else -1
+                        if col_idx_in_row >= 0:
+                            for s_row in sample_rows[r_idx + 1:r_idx + 4]:
+                                if col_idx_in_row < len(s_row):
+                                    cell_v = str(s_row[col_idx_in_row]).strip().replace(",", "").replace("(", "-").replace(")", "")
+                                    try:
+                                        float(cell_v)
+                                        score += 5
+                                        break
+                                    except ValueError:
+                                        pass
+                        if score > best_score:
+                            best_score = score
+                            best_cand = c
+                    if best_cand and best_score >= 5:
+                        amount_col = best_cand
+
                 if code_col: mapping["account_code"] = code_col
                 if desc_col: mapping["account_description"] = desc_col
                 if debit_col: mapping["debit"] = debit_col
                 if credit_col: mapping["credit"] = credit_col
-                if amount_col: mapping["amount"] = amount_col
+                if amount_col:
+                    mapping["amount"] = amount_col
+                    if not debit_col:
+                        mapping["debit"] = amount_col
+                    mapping["net_amount"] = amount_col
                 if ind_col: mapping["indicator"] = ind_col
 
                 if code_col and (debit_col or credit_col or amount_col or desc_col):
@@ -347,7 +389,7 @@ class FileClassifier:
                 "fx" in sname_norm.split()
             )
             if is_fx_sheet:
-                det_cols = cls._detect_columns_from_sample(rows, is_fx=True)
+                det_cols = cls._detect_columns_from_sample(rows, is_fx=True, expected_period=expected_period)
                 reason = f"Identified FX rate table for period {expected_period or '31-Mar-2024'}."
                 needs_rev = False
                 if date_status == "MISMATCH":
@@ -442,7 +484,7 @@ class FileClassifier:
             ftype = "PRIOR_TB" if is_prior else "CURRENT_TB"
 
             if matched_ent and matched_conf >= threshold:
-                det_cols = cls._detect_columns_from_sample(rows, is_fx=False)
+                det_cols = cls._detect_columns_from_sample(rows, is_fx=False, expected_period=expected_period)
                 reason = f"Deterministically matched legal entity '{matched_ent['name']}' ({matched_ent['code']})."
                 needs_rev = False
                 if date_status == "MISMATCH":
@@ -495,7 +537,7 @@ class FileClassifier:
                 ai_cf.date_status = date_status
                 ai_cf.detected_period = detected_date
                 if not ai_cf.detected_columns:
-                    ai_cf.detected_columns = cls._detect_columns_from_sample(rows, is_fx=(ai_cf.file_type == "FX_RATES"))
+                    ai_cf.detected_columns = cls._detect_columns_from_sample(rows, is_fx=(ai_cf.file_type == "FX_RATES"), expected_period=expected_period)
                 if date_status == "MISMATCH":
                     ai_cf.needs_review = True
                     ai_cf.reasoning += f" [Period Mismatch: Found {detected_date} vs Run Date {expected_period}]"
@@ -511,7 +553,7 @@ class FileClassifier:
 
         # Check if sheet is unassigned extra
         is_extra = best_code is None and not any(k in sname_lower for k in ["fx", "rate", "currency", "tb", "ledger", "trial", "balance", "gl"])
-        det_cols = cls._detect_columns_from_sample(rows, is_fx=False)
+        det_cols = cls._detect_columns_from_sample(rows, is_fx=False, expected_period=expected_period)
 
         reasoning_msg = f"Confidence ({best_conf:.2f}) below threshold ({threshold:.2f}). Routed to Human-in-the-Loop review."
         if not use_ai and use_deterministic:

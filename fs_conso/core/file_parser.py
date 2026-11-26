@@ -272,6 +272,9 @@ class FlexibleTBParser:
 
     @classmethod
     def _is_summary_row(cls, code: str, desc: str) -> bool:
+        code_clean = str(code).lower().strip()
+        if code_clean in ("check", "chk", "diff", "difference", "total", "tally"):
+            return True
         combined = f"{code} {desc}".lower().strip()
         if any(kw in combined for kw in cls.SUMMARY_ROW_KEYWORDS):
             return True
@@ -588,6 +591,30 @@ Schema:
         amount_col = amount_col if 'amount_col' in locals() and amount_col else cls._find_currency_specific_column(cols, cls.AMOUNT_ALIASES, target_currency=currency)
         dr_cr_col = dr_cr_col if 'dr_cr_col' in locals() and dr_cr_col else cls._find_column(cols, cls.DR_CR_INDICATOR_ALIASES)
 
+        # Smart period / annual column detection if neither debit nor credit nor amount was found
+        if not (debit_col and credit_col) and not amount_col:
+            candidates = [c for c in cols if c not in (code_col, desc_col, dr_cr_col) and c.lower() not in ("currency", "curr")]
+            target_digits = re.findall(r"\d{4}", period) or re.findall(r"\b\d{2}\b", period) if period else []
+            best_cand = None
+            best_score = -1
+            for c in candidates:
+                score = 0
+                c_lower = c.lower()
+                if target_digits and any(td in c_lower for td in target_digits):
+                    score += 20
+                if re.search(r"(?:fy|fiscal|yr|year|cy|py)?\s*(?:20\d\d|\d\d)", c_lower):
+                    score += 10
+                if any(w in c_lower for w in ["lakh", "crore", "million", "thousand", "bal", "amt", "amount"]):
+                    score += 5
+                # Check numeric presence
+                if pd.to_numeric(df[c].dropna().astype(str).str.replace(r"[,()₹$€£\s]", "", regex=True), errors="coerce").notna().any():
+                    score += 10
+                if score > best_score:
+                    best_score = score
+                    best_cand = c
+            if best_cand and best_score >= 10:
+                amount_col = best_cand
+
         # Apply manual column overrides if provided
         if column_overrides:
             if column_overrides.get("account_code") or column_overrides.get("code_col"):
@@ -598,8 +625,14 @@ Schema:
                 debit_col = column_overrides.get("debit") or column_overrides.get("debit_col")
             if column_overrides.get("credit") or column_overrides.get("credit_col"):
                 credit_col = column_overrides.get("credit") or column_overrides.get("credit_col")
-            if column_overrides.get("amount") or column_overrides.get("amount_col"):
-                amount_col = column_overrides.get("amount") or column_overrides.get("amount_col")
+            if column_overrides.get("amount") or column_overrides.get("amount_col") or column_overrides.get("net_amount"):
+                amount_col = column_overrides.get("amount") or column_overrides.get("amount_col") or column_overrides.get("net_amount")
+
+            # If debit column is provided without credit (or debit == credit), it's a signed net amount column
+            if debit_col and (not credit_col or debit_col == credit_col):
+                amount_col = debit_col
+                debit_col = None
+                credit_col = None
 
         # Check for wide dimensional layout (e.g. 75 cost center/subsidiary columns)
         numeric_cols = [c for c in cols if c not in (code_col, desc_col, dr_cr_col)]
@@ -621,41 +654,53 @@ Schema:
             if cls._is_summary_row(code, desc):
                 continue
 
-            debit_val = cls.clean_number(row_data[debit_col]) if debit_col else None
-            credit_val = cls.clean_number(row_data[credit_col]) if credit_col else None
-            amount_val = cls.clean_number(row_data[amount_col]) if amount_col else None
+            if amount_col:
+                # Single signed column: positive -> debit, negative -> credit
+                amount_val = cls.clean_number(row_data[amount_col])
+                if dr_cr_col and amount_val is not None:
+                    indicator = str(row_data[dr_cr_col]).strip().lower()
+                    if indicator in ("cr", "credit", "c", "-"):
+                        amount_val = -abs(amount_val)
+                    elif indicator in ("dr", "debit", "d", "+"):
+                        amount_val = abs(amount_val)
 
-            # Handle Dr/Cr indicator column if present
-            if dr_cr_col and amount_val is not None:
-                indicator = str(row_data[dr_cr_col]).strip().lower()
-                if indicator in ("cr", "credit", "c", "-"):
-                    amount_val = -abs(amount_val)
-                elif indicator in ("dr", "debit", "d", "+"):
-                    amount_val = abs(amount_val)
+                if scale_multiplier != 1.0 and scale_multiplier > 0 and amount_val is not None:
+                    amount_val = round(amount_val * float(scale_multiplier), 2)
 
-            # Apply scale multiplier if specified (e.g. Lakhs, Crores, Thousands, Millions)
-            if scale_multiplier != 1.0 and scale_multiplier > 0:
-                mult = float(scale_multiplier)
-                if debit_val is not None:
-                    debit_val = round(debit_val * mult, 2)
-                if credit_val is not None:
-                    credit_val = round(credit_val * mult, 2)
                 if amount_val is not None:
-                    amount_val = round(amount_val * mult, 2)
-
-            # Check if this is a two-column or single-column TB
-            if debit_col or credit_col:
-                rows.append(RawTBRow(
-                    account_code=code,
-                    account_description=desc,
-                    debit=debit_val,
-                    credit=credit_val
-                ))
+                    d_val = amount_val if amount_val >= 0 else 0.0
+                    c_val = abs(amount_val) if amount_val < 0 else 0.0
+                    rows.append(RawTBRow(
+                        account_code=code,
+                        account_description=desc,
+                        debit=d_val,
+                        credit=c_val,
+                        amount=amount_val
+                    ))
+                else:
+                    rows.append(RawTBRow(
+                        account_code=code,
+                        account_description=desc,
+                        debit=0.0,
+                        credit=0.0,
+                        amount=0.0
+                    ))
             else:
+                # Two-column TB
+                debit_val = cls.clean_number(row_data[debit_col]) if debit_col else 0.0
+                credit_val = cls.clean_number(row_data[credit_col]) if credit_col else 0.0
+                if scale_multiplier != 1.0 and scale_multiplier > 0:
+                    if debit_val is not None:
+                        debit_val = round(debit_val * float(scale_multiplier), 2)
+                    if credit_val is not None:
+                        credit_val = round(credit_val * float(scale_multiplier), 2)
+                amt_val = round((debit_val or 0.0) - (credit_val or 0.0), 2)
                 rows.append(RawTBRow(
                     account_code=code,
                     account_description=desc,
-                    amount=amount_val
+                    debit=debit_val or 0.0,
+                    credit=credit_val or 0.0,
+                    amount=amt_val
                 ))
 
         # Handle duplicate policy: "aggregate"

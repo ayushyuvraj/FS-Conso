@@ -400,3 +400,35 @@ def test_perimeter_approval_state_prefill_and_scale(sample_hierarchy):
     assert fx["detected_columns"]["average_rate"] == "Average Rate"
     assert fx["detected_columns"]["swap_rate"] == "Swap Rate"
 
+
+def test_annual_column_detection_and_debit_credit_population():
+    """Verifies that multi-year / annual columns like 'FY 2024-25 (Lakhs)' are automatically detected,
+    and single-column TBs split into populated positive Debits and positive Credits without remaining 0.00."""
+    sample_annual = [
+        ["Account Code", "Account Name", "Currency", "FY 2024-25 (Lakhs)", "FY 2025-26 (Lakhs)"],
+        ["1002", "Cash and Bank", "INR", "15000", "16200"],
+        ["1003", "Fixed Deposits", "INR", "5000", "5400"],
+        ["1028", "Trade Payables External", "INR", "-7000", "-7500"],
+        ["Check", "Profit FY24-25", "INR", "13000", ""]
+    ]
+    det_cols = FileClassifier._detect_columns_from_sample(sample_annual, is_fx=False, expected_period="31-03-2024")
+    assert det_cols.get("account_code") == "Account Code"
+    assert det_cols.get("amount") == "FY 2024-25 (Lakhs)"
+    assert det_cols.get("debit") == "FY 2024-25 (Lakhs)"
+
+    # Test parser
+    df = pd.DataFrame(sample_annual[1:], columns=sample_annual[0])
+    tb = FlexibleTBParser.parse_dataframe(df, "Company_P", period="31-03-2024", scale_multiplier=100000.0)
+    # Check row filtered out
+    assert len(tb.rows) == 3
+    # Debits: 15000*100000 + 5000*100000 = 2,000,000,000.00
+    assert tb.total_debit == 2000000000.0
+    # Credits: abs(-7000)*100000 = 700,000,000.00
+    assert tb.total_credit == 700000000.0
+    # Signed sum = 1,300,000,000.00
+    assert tb.total_signed_amount == 1300000000.0
+    # Both are non-zero!
+    assert tb.total_debit > 0
+    assert tb.total_credit > 0
+
+

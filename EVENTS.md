@@ -6,6 +6,25 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-26 15:50] UI Polish & Population: Row-Level Status Ticks, Banner Elimination & Debit/Credit Parsing
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Elimination of Readiness Banner**:
+     - Removed the full-width `"Perimeter Ingestion Complete: All 4 legal entities have valid ingested trial balances..."` banner from the Step 1 view for visual cleanliness and institutional aesthetics.
+  2. **Row-Level Status Indicator Ticks with Diagnostic Hover**:
+     - Added status indicator circles positioned to the left of the entity name and code:
+       - **Green Tick (`✓`)**: Displays when trial balance is uploaded, non-empty, and balanced. Tooltip details total accounts, debits, and credits.
+       - **Red Cross (`✕`)**: Displays when there are issues or doubts (missing TB, zero accounts, unparsed amounts, or debit/credit imbalance). Hovering shows bulleted diagnostics (`• Missing Trial Balance`, `• Amounts unpopulated`, `• Unbalanced Trial Balance: Debits != Credits`).
+     - Added matching green/red indicator for Foreign Exchange Rates row.
+  3. **Debit & Credit Balances Dynamic Population**:
+     - Resolved root cause where annual/period columns (e.g. `FY 2024-25 (Lakhs)`) in single signed amount sheets resulted in `0.00` debits and credits.
+     - Enhanced `FileClassifier` to score and detect period amount columns matching the active run date or sample numbers.
+     - Enhanced `FlexibleTBParser` to split signed single amount columns into debits (positive values) and credits (negative values as positive), normalized to absolute currency using the scale multiplier.
+  4. **Verification & Hardening**:
+     - Test Suite: 79/79 PASSED (including new test `test_annual_column_detection_and_debit_credit_population`).
+     - JavaScript syntax: `node -c "fs_conso/web/static/js/app.js"` exited with 0 errors.
+     - Live server: Verified operational on port 8000.
+
 ### [2026-11-26 14:50] UX Alignment: Restoration of Institutional Step 1 Look & Feel & Dedicated Perimeter Approval Dialog
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:
