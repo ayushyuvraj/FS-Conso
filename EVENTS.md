@@ -6,6 +6,41 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-26 23:50] Milestone: Stepper Header Border Unification & Generic Step Completion Gating Enforcement
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Stepper Header Border & Visual Unification (Issue 1)**:
+     - Fixed missing border around Step 2 and any inactive/locked steps in the top stepper navigation bar.
+     - Added base persistent border and container styling (`border: 1px solid #E2E8F0; border-radius: 6px; background-color: #FFFFFF; color: #475569`) to `.step-tab`.
+     - Added distinct `.step-tab.review-needed` amber pill styling (`border: 1px solid #FCD34D; background-color: #FFFBEB; color: #92400E; .step-num background-color: #F59E0B; color: #FFFFFF`) when Step 2 has pending human reviews.
+     - Updated `.step-tab.completed` (`border: 1px solid #CBD5E1; background-color: #F1F5F9; color: #0F172A`) and `.step-tab.locked` (`border: 1px solid #E2E8F0; background-color: #F8FAFC`).
+     - Every step in the header now possesses an intentional, crisp, and uniform pill border across all states (active, completed, review-needed, unlocked, locked).
+  2. **Generic Step Completion Gating Rule (Issue 2)**:
+     - Enforced mandatory rule: *If anything in any given step is not complete, the system CANNOT proceed to the next step.*
+     - **LangGraph Node Halting**:
+       - `mapper_node`: If any accounts require review (`needs_review=True` or `is_ambiguous=True`), sets `state.is_blocked = True`, `state.current_step = 2`, and strips all subsequent steps from `state.completed_steps` (`[s for s in state.completed_steps if s < 2]`). Conditional edge routes to `END`, preventing premature execution of translator, eliminations, aggregator, or excel builder.
+       - `translator_node`, `elimination_node`, `aggregator_node`, `excel_builder_node`: Each node now explicitly checks that its prerequisite step is in `completed_steps` and halts with `state.is_blocked = True` if any prerequisite is incomplete.
+     - **Backend State Healing & Gating**:
+       - In `/api/pipeline-data` and `/api/status`, automatically cleanses corrupted or stale `completed_steps` if mapping decisions have pending reviews, resetting `current_step = 2` and `completed_steps = [1]`.
+       - `/api/hitl/resolve`: Only adds `2` to `completed_steps` and advances to Step 3 when all pending reviews across all entity tabs are 0.
+       - `/api/run-pipeline`: Returns `success: False` with `current_step: 2` and `halted_node: "mapper"` when mapping requires human review, preventing client-side advancement.
+     - **Frontend Step Navigation (`switchStep`)**:
+       - Strictly blocks navigation to Step $K$ if any prior step $< K$ is incomplete:
+         - Target $\ge 2$: Step 1 must have uploaded, validated, and tallied trial balances with complete perimeter.
+         - Target $\ge 3$: Step 2 must have 0 pending reviews across all entity tabs.
+         - Target $\ge 4$: Step 3 FX translation must be complete.
+         - Target $\ge 5$: Step 4 eliminations must be complete.
+         - Target $\ge 6$: Step 5 consolidation aggregation must be complete.
+       - Intercepts invalid clicks, displays warning toast explaining the incomplete prerequisite, and redirects user to the earliest incomplete step.
+     - **Pipeline Trigger (`triggerRunPipeline`)**:
+       - When mapping reviews are required, halts and immediately lands the user on Step 2 (`switchStep(2)`), preventing any jump to Step 6.
+  3. **Verification & Hardening**:
+     - Added new automated suite: `tests/test_step_progression_gating.py` (4/4 PASSED).
+     - Full Regression Suite: **93/93 PASSED (100%)** in 24.77s (`python -m pytest tests/`).
+     - JavaScript Syntax Check: `node -c fs_conso/web/static/js/app.js` (0 errors).
+     - Live Server: HTTP 200 OK verified on `http://localhost:8000/api/status`.
+     - Git: Staged, committed, and pushed cleanly to remote branch `feature/profile-v2`.
+
 ### [2026-11-26 20:05] Milestone: Step 2 LLM-as-a-Judge Dynamic Mapping, Multi-Candidate Scoring, Hoverable Info Popover & 1-Click Accept
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:

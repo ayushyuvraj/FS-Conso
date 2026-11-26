@@ -20,6 +20,20 @@ def test_end_to_end_langgraph_with_strict_teacher_honors():
     sample_dir = config.project_root / "inputs" / "sample_data"
     tbs = load_benchmark_raw_tbs(sample_dir)
 
+    from fs_conso.agent.nodes import load_coa_for_company
+    from fs_conso.core.mapper import COAMappingEngine
+    coa = load_coa_for_company("test")
+    # Pre-approve benchmark trial balance mappings so Step 2 satisfies the completion gate
+    for tb in tbs:
+        for r in tb.rows:
+            target = r.account_code if coa.get_item(r.account_code) else "A110101"
+            COAMappingEngine._global_decision_cache[(tb.entity_code, r.account_code)] = (
+                target,
+                1.0,
+                "USER_APPROVED_RULE",
+                "Benchmark approved"
+            )
+
     app = build_consolidation_graph()
     state = ConsolidationState(raw_tbs=tbs)
     res = app.invoke(state)

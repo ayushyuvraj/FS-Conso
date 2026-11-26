@@ -212,10 +212,14 @@ def mapper_node(state: ConsolidationState) -> ConsolidationState:
     }
 
     if unmapped:
+        state.is_blocked = True
+        state.current_step = 2
+        state.completed_steps = [s for s in state.completed_steps if s < 2]
         state.halted_node = "mapper"
         state.halted_stage = "Chart of Accounts Standardization"
+        state.error_message = f"Mapping Incomplete: {len(unmapped)} account(s) require human review before consolidation can proceed."
         state.remediation_items = [
-            f"{len(unmapped)} accounts fell below AI confidence threshold ({config.ai_confidence_threshold:.0%}). Review mapped suggestions in the HITL Workbench or adjust the threshold slider in Settings."
+            f"{len(unmapped)} accounts fell below AI confidence threshold ({config.ai_confidence_threshold:.0%}) or are ambiguous. Review mapped suggestions in the HITL Workbench or adjust the threshold slider in Settings."
         ]
         state.hitl_pending_reviews = [
             {
@@ -229,10 +233,12 @@ def mapper_node(state: ConsolidationState) -> ConsolidationState:
         ]
         _log_event(state, "Mapping", "COAMapperAgent", f"Mapped {len(all_decisions)} accounts ({len(unmapped)} routed to HITL)", "REVIEW_REQUIRED", f"{len(unmapped)} accounts fell below threshold of {config.ai_confidence_threshold:.0%}.", "HUMAN_IN_THE_LOOP")
     else:
+        state.is_blocked = False
         state.current_step = max(state.current_step, 3)
         if 2 not in state.completed_steps:
             state.completed_steps.append(2)
         state.halted_node = None
+        state.error_message = None
         state.remediation_items = []
         state.hitl_pending_reviews = []
         _log_event(state, "Mapping", "COAMapperAgent", f"Mapped {len(all_decisions)} accounts to Group COA", "PASSED", "100% accounts aligned to standard import format.", "AGENTIC_BRAIN" if ai_count > 0 else "DETERMINISTIC")
@@ -268,6 +274,16 @@ def mapper_node(state: ConsolidationState) -> ConsolidationState:
 def translator_node(state: ConsolidationState) -> ConsolidationState:
     """FX Translation Agent: Converts foreign currencies to reporting presentation currency and plugs FCTR."""
     if state.is_blocked:
+        return state
+
+    # GENERIC GATING: Cannot proceed if Step 2 is not completed
+    if 2 not in state.completed_steps or not state.standardized_tbs or any(d.needs_review for d in state.mapping_decisions):
+        state.is_blocked = True
+        state.current_step = 2
+        state.completed_steps = [s for s in state.completed_steps if s < 2]
+        state.halted_node = "mapper"
+        state.halted_stage = "Chart of Accounts Standardization"
+        state.error_message = "Cannot proceed to FX Translation: Chart of Accounts mapping has unresolved human reviews."
         return state
 
     state.current_node = "translator"
@@ -329,6 +345,16 @@ def translator_node(state: ConsolidationState) -> ConsolidationState:
 def elimination_node(state: ConsolidationState) -> ConsolidationState:
     """Elimination Arbiter Agent: Matches intercompany balances across N entities, dual-sourcing, and builds N x N matrix."""
     if state.is_blocked:
+        return state
+
+    # GENERIC GATING: Cannot proceed if Step 3 is not completed
+    if 3 not in state.completed_steps or not state.translated_tbs:
+        state.is_blocked = True
+        state.current_step = 3
+        state.completed_steps = [s for s in state.completed_steps if s < 3]
+        state.halted_node = "translator"
+        state.halted_stage = "Currency Translation & FCTR"
+        state.error_message = "Cannot proceed to Eliminations: Currency Translation is not completed."
         return state
 
     state.current_node = "elimination"
@@ -394,6 +420,16 @@ def aggregator_node(state: ConsolidationState) -> ConsolidationState:
     if state.is_blocked:
         return state
 
+    # GENERIC GATING: Cannot proceed if Step 4 is not completed
+    if 4 not in state.completed_steps or not state.elimination_result:
+        state.is_blocked = True
+        state.current_step = 4
+        state.completed_steps = [s for s in state.completed_steps if s < 4]
+        state.halted_node = "elimination"
+        state.halted_stage = "Intercompany Eliminations"
+        state.error_message = "Cannot proceed to Consolidation Aggregation: Intercompany Eliminations are not completed."
+        return state
+
     state.current_node = "aggregator"
     state.current_stage = "Compiling Consolidated Trial Balance & Acquisition Accounting..."
 
@@ -456,7 +492,17 @@ def aggregator_node(state: ConsolidationState) -> ConsolidationState:
 
 def excel_builder_node(state: ConsolidationState) -> ConsolidationState:
     """Formula Builder Agent: Writes 100% formula-linked Excel deliverable with dynamic columns & collapsible grouping."""
-    if state.is_blocked or not state.consolidated_tb:
+    if state.is_blocked:
+        return state
+
+    # GENERIC GATING: Cannot proceed if Step 5 is not completed
+    if 5 not in state.completed_steps or not state.consolidated_tb:
+        state.is_blocked = True
+        state.current_step = 5
+        state.completed_steps = [s for s in state.completed_steps if s < 5]
+        state.halted_node = "aggregator"
+        state.halted_stage = "Consolidated Trial Balance Aggregation"
+        state.error_message = "Cannot proceed to Financial Statements Deliverable: Consolidation Aggregation is not completed."
         return state
 
     state.current_node = "excel_builder"

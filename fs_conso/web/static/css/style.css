@@ -49,11 +49,17 @@ body {
 
 /* Stepper Tabs with Apple Fluid Spring Micro-Interactions */
 .step-tab {
-    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, color 0.15s ease;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     user-select: none;
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+    background-color: #FFFFFF;
+    color: #475569;
 }
 .step-tab:hover:not(.locked) {
     transform: translateY(-1px);
+    border-color: #CBD5E1;
+    background-color: #F8FAFC;
 }
 .step-tab:active:not(.locked) {
     transform: scale(0.98);
@@ -61,6 +67,7 @@ body {
 
 .step-tab.active {
     background-color: var(--kpmg-blue);
+    border-color: var(--kpmg-blue);
     color: #FFFFFF;
     box-shadow: 0 4px 12px rgba(0, 51, 141, 0.25);
 }
@@ -71,23 +78,37 @@ body {
 }
 
 .step-tab.completed {
-    background-color: #E2E8F0;
+    background-color: #F1F5F9;
+    border-color: #CBD5E1;
     color: #0F172A;
 }
 .step-tab.completed .step-num {
     background-color: #10B981;
     color: #FFFFFF;
+    font-weight: 600;
+}
+
+.step-tab.review-needed {
+    background-color: #FFFBEB;
+    border-color: #FCD34D;
+    color: #92400E;
+}
+.step-tab.review-needed .step-num {
+    background-color: #F59E0B;
+    color: #FFFFFF;
+    font-weight: 700;
 }
 
 .step-tab.locked {
-    opacity: 0.45;
-    background-color: transparent;
+    opacity: 0.5;
+    background-color: #F8FAFC;
+    border-color: #E2E8F0;
     color: #94A3B8;
     cursor: not-allowed;
 }
 .step-tab.locked .step-num {
-    background-color: #CBD5E1;
-    color: #64748B;
+    background-color: #E2E8F0;
+    color: #94A3B8;
 }
 
 /* Financial Tables (Dense, High-Legibility, Tabular Figures) */

@@ -245,6 +245,14 @@ async def get_status():
 
     if session.state:
         session.state.missing_prerequisites = missing_prereqs
+        # Strict generic gating: if any mapping decision needs review, step 2 and subsequent steps cannot be completed
+        if session.state.mapping_decisions and any(getattr(d, "needs_review", False) for d in session.state.mapping_decisions):
+            if any(s >= 2 for s in session.state.completed_steps) or session.state.current_step > 2:
+                session.state.completed_steps = [s for s in session.state.completed_steps if s < 2]
+                session.state.current_step = min(session.state.current_step, 2)
+                session.state.is_blocked = True
+                session.state.halted_node = "mapper"
+                session.state.halted_stage = "Chart of Accounts Standardization"
 
     return {
         "has_active_api_key": has_key,
@@ -266,6 +274,7 @@ async def get_status():
         "missing_entities": missing_tbs,
         "is_perimeter_complete": len(missing_tbs) == 0,
         "missing_prerequisites": missing_prereqs,
+
         "hitl_pending_reviews": session.state.hitl_pending_reviews if session.state else [],
         "current_step": session.state.current_step if session.state else 1,
         "completed_steps": session.state.completed_steps if session.state else [],
@@ -1301,9 +1310,12 @@ async def resolve_hitl_item(req: HITLResolveRequest):
             ]
             if not session.state.hitl_pending_reviews and not any(d.needs_review for d in session.state.mapping_decisions):
                 session.state.halted_node = None
+                session.state.is_blocked = False
+                session.state.error_message = None
                 session.state.remediation_items = []
                 if 2 not in session.state.completed_steps:
                     session.state.completed_steps.append(2)
+                session.state.current_step = max(session.state.current_step, 3)
 
             if session.active_company_id and session.active_run_id and session.state:
                 run_manager.save_run_state(session.active_company_id, session.active_run_id, session.state)
@@ -1494,8 +1506,12 @@ async def run_pipeline():
             # Execute synchronous LangGraph engine in worker threadpool to keep event loop responsive
             result = await asyncio.to_thread(session.graph.invoke, session.state)
             session.state = ConsolidationState(**result)
-            session.current_stage = "Consolidation complete."
-            session.current_node = None
+            if session.state.is_blocked:
+                session.current_stage = f"Halted at {session.state.halted_node or 'Gate'}: {session.state.error_message or 'Action required.'}"
+                session.current_node = session.state.halted_node
+            else:
+                session.current_stage = "Consolidation complete."
+                session.current_node = None
         except Exception as exc:
             err_msg = sanitize_error_message(str(exc))
             session.state.is_blocked = True
@@ -1603,6 +1619,18 @@ async def get_pipeline_data():
                     run_manager.save_run_state(session.active_company_id, session.active_run_id, st)
             except Exception as exc:
                 logging.getLogger(__name__).warning(f"Auto-heal mapping decisions failed: {exc}")
+
+    # Strict generic gating: if any mapping decision needs review, step 2 and subsequent steps cannot be completed
+    if st.mapping_decisions and any(getattr(d, "needs_review", False) for d in st.mapping_decisions):
+        if any(s >= 2 for s in st.completed_steps) or st.current_step > 2 or not st.is_blocked:
+            st.completed_steps = [s for s in st.completed_steps if s < 2]
+            st.current_step = min(st.current_step, 2)
+            st.is_blocked = True
+            st.halted_node = "mapper"
+            st.halted_stage = "Chart of Accounts Standardization"
+            session.state = st
+            if session.active_company_id and session.active_run_id:
+                run_manager.save_run_state(session.active_company_id, session.active_run_id, st)
 
     safe_mapping_decisions = []
     for d in st.mapping_decisions:

@@ -1871,18 +1871,22 @@ function changeCompanyPageSize(newSize) {
 function renderStepperState() {
     const completed = appStatus.completed_steps || [];
     const maxUnlocked = Math.max(1, (appStatus.current_step || 1));
+    const mappings = (pipelineData && pipelineData.mapping_decisions) ? pipelineData.mapping_decisions : [];
+    const hasPendingStep2Reviews = mappings.some(m => m.needs_review);
 
     for (let s = 1; s <= 6; s++) {
         const btn = document.getElementById(`step-btn-${s}`);
         if (!btn) continue;
 
-        btn.classList.remove("active", "completed", "locked", "cursor-not-allowed", "cursor-pointer");
+        btn.classList.remove("active", "completed", "locked", "review-needed", "cursor-not-allowed", "cursor-pointer");
 
         if (s === activeStep) {
             btn.classList.add("active", "cursor-pointer");
-        } else if (completed.includes(s)) {
+        } else if (s === 2 && hasPendingStep2Reviews) {
+            btn.classList.add("review-needed", "cursor-pointer");
+        } else if (completed.includes(s) && (s <= 2 || !hasPendingStep2Reviews)) {
             btn.classList.add("completed", "cursor-pointer");
-        } else if (s <= maxUnlocked) {
+        } else if (s <= maxUnlocked && (s <= 2 || !hasPendingStep2Reviews)) {
             btn.classList.add("cursor-pointer");
         } else {
             btn.classList.add("locked", "cursor-not-allowed");
@@ -1894,20 +1898,68 @@ function switchStep(step) {
     if (activeNavSection !== 'PIPELINE') {
         switchNavSection('PIPELINE');
     }
-    const maxUnlocked = Math.max(1, (appStatus.current_step || 1));
-    if (step > maxUnlocked && !appStatus.completed_steps?.includes(step)) {
-        showToast("Step Locked", `Step ${step} is locked. Please execute earlier steps first.`, "warning");
-        return;
-    }
-    // Gating check: Cannot proceed past Step 2 if any human-in-the-loop reviews are open in Step 2
-    if (step > 2) {
-        const mappings = (pipelineData && pipelineData.mapping_decisions) ? pipelineData.mapping_decisions : [];
-        const hasPending = mappings.some(m => m.needs_review);
-        if (hasPending) {
-            showToast("Review Required", "Please resolve all highlighted account reviews across all entity tabs before proceeding to Step 3.", "warning");
+    const completed = appStatus.completed_steps || [];
+    const rawTbs = (pipelineData && pipelineData.raw_tbs) ? pipelineData.raw_tbs : [];
+    const mappings = (pipelineData && pipelineData.mapping_decisions) ? pipelineData.mapping_decisions : [];
+    const hasPendingStep2Reviews = mappings.some(m => m.needs_review);
+
+    // GENERIC RULE: If anything in any given step is not complete, cannot proceed to the next step.
+    if (step >= 2) {
+        // Step 1 prerequisite: Raw TBs uploaded and verified
+        if (rawTbs.length === 0 || appStatus.is_perimeter_complete === false) {
+            showToast("Step Locked", "Cannot proceed to Step 2: Step 1 Ingestion is not complete. Please upload and validate all perimeter trial balances first.", "warning");
+            activeStep = 1;
+            renderStepperState();
+            renderActiveStepContent();
             return;
         }
     }
+
+    if (step >= 3) {
+        // Step 2 prerequisite: Chart of Accounts mapping complete with zero pending reviews
+        if (mappings.length === 0 || hasPendingStep2Reviews || !completed.includes(2)) {
+            const pendingCount = mappings.filter(m => m.needs_review).length;
+            showToast("Step Locked", `Cannot proceed to Step ${step}: Step 2 Mapping is not complete. ${pendingCount > 0 ? `${pendingCount} account review(s) require resolution.` : 'Please resolve pending reviews in Step 2 first.'}`, "warning");
+            activeStep = 2;
+            renderStepperState();
+            renderActiveStepContent();
+            return;
+        }
+    }
+
+    if (step >= 4) {
+        // Step 3 prerequisite: FX Translation complete
+        if (!completed.includes(3) || !pipelineData.translated_tbs || pipelineData.translated_tbs.length === 0) {
+            showToast("Step Locked", `Cannot proceed to Step ${step}: Step 3 Currency Translation is not complete.`, "warning");
+            activeStep = 3;
+            renderStepperState();
+            renderActiveStepContent();
+            return;
+        }
+    }
+
+    if (step >= 5) {
+        // Step 4 prerequisite: Intercompany Eliminations complete
+        if (!completed.includes(4) || !pipelineData.eliminations) {
+            showToast("Step Locked", `Cannot proceed to Step ${step}: Step 4 Intercompany Eliminations are not complete.`, "warning");
+            activeStep = 4;
+            renderStepperState();
+            renderActiveStepContent();
+            return;
+        }
+    }
+
+    if (step >= 6) {
+        // Step 5 prerequisite: Consolidation Aggregation complete
+        if (!completed.includes(5) || !pipelineData.consolidated_tb) {
+            showToast("Step Locked", "Cannot proceed to Step 6: Step 5 Consolidation Aggregation is not complete.", "warning");
+            activeStep = 5;
+            renderStepperState();
+            renderActiveStepContent();
+            return;
+        }
+    }
+
     activeStep = Math.min(6, Math.max(1, step));
     renderStepperState();
     renderActiveStepContent();
@@ -5767,15 +5819,19 @@ async function triggerRunPipeline() {
         const data = await res.json();
 
         if (!res.ok || data.success === false) {
-            const errDetail = data.error_message || data.detail || "Consolidation failed";
+            const errDetail = data.error_message || data.detail || "Consolidation execution halted";
             if (res.status === 403 || errDetail.toLowerCase().includes("api key") || !appStatus.has_active_api_key) {
                 showToast("Execution Blocked", "Active Google Gemini API Key is required. Please configure your key in Settings.", "error");
                 toggleSettingsDrawer(true);
+            } else if (data.halted_node === "mapper" || errDetail.toLowerCase().includes("mapping") || errDetail.toLowerCase().includes("review")) {
+                showToast("Mapping Review Required", "Accounts standardized: human review is required in Step 2 before consolidation can proceed.", "warning");
             } else {
                 showToast("Execution Halted", errDetail, "error");
             }
             await fetchStatus();
             await loadPipelineData();
+            const targetStep = data.current_step || (data.halted_node === "mapper" ? 2 : 1);
+            switchStep(targetStep);
             if (activeSection === 'AUDIT') renderObservabilityConsole();
         } else {
             showToast("Consolidation Succeeded", `Auditor Score: ${data.teacher_score || 100}/100. Deliverable generated with 100% formulas.`, "success");
