@@ -56,30 +56,43 @@ body {
     background-color: #FFFFFF;
     color: #475569;
 }
-.step-tab:hover:not(.locked) {
+.step-tab:hover:not(.active):not(.locked) {
     transform: translateY(-1px);
     border-color: #CBD5E1;
     background-color: #F8FAFC;
+    color: #0F172A;
 }
 .step-tab:active:not(.locked) {
     transform: scale(0.98);
 }
 
-.step-tab.active {
-    background-color: var(--kpmg-blue);
-    border-color: var(--kpmg-blue);
-    color: #FFFFFF;
+.step-tab.active,
+.step-tab.active:hover,
+.step-tab.active:focus {
+    background-color: var(--kpmg-blue) !important;
+    border-color: var(--kpmg-blue) !important;
+    color: #FFFFFF !important;
     box-shadow: 0 4px 12px rgba(0, 51, 141, 0.25);
 }
-.step-tab.active .step-num {
-    background-color: #FFFFFF;
-    color: var(--kpmg-blue);
+.step-tab.active span,
+.step-tab.active:hover span {
+    color: #FFFFFF !important;
+}
+.step-tab.active .step-num,
+.step-tab.active:hover .step-num {
+    background-color: #FFFFFF !important;
+    color: var(--kpmg-blue) !important;
     font-weight: 700;
 }
 
-.step-tab.completed {
-    background-color: #F1F5F9;
+.step-tab.completed:not(.active) {
+    background-color: #F8FAFC;
     border-color: #CBD5E1;
+    color: #0F172A;
+}
+.step-tab.completed:not(.active):hover {
+    background-color: #F1F5F9;
+    border-color: #94A3B8;
     color: #0F172A;
 }
 .step-tab.completed .step-num {

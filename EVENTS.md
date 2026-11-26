@@ -660,7 +660,35 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
   - Live server verification on `http://127.0.0.1:8000`: HTTP 200 OK for `/api/companies` and `/api/runs`.
 
-### [2026-11-26] - Milestone: Step 1 Ingestion Mappings Review Polish & Denomination Normalization
+### [2026-11-27] - Milestone: Step 3 Dynamic Entity Tabs, 5-Category Ind AS 21 FX Translation Engine & Stepper Polish
+- **Architectural & UI Enhancements**:
+  - **Stepper Visual Washout Restoration**:
+    - Fixed CSS specificity bug in `style.css` where `.step-tab:hover:not(.locked)` overrode `.step-tab.active`, eliminating white-on-white text washout.
+    - Enforced unbreakable KPMG Royal Blue (`#00338D`) with bold white text on active steps, clear green checkmarks on completed steps, and crisp dark typography on inactive steps.
+  - **HITL Review Counter Synchronization**:
+    - Unified single source of truth between backend `state.hitl_pending_reviews` (including `entity_code`) and frontend `pipelineData.mapping_decisions`.
+    - Counter accurately reflects total pending reviews across all perimeter entities, decrements strictly by 1 upon each individual approval ($N \to N-1 \dots \to 0$), and disappears cleanly at 0.
+    - Synchronized per-entity tab dots (`step2-tab-dot-${entity_code}`) with exact per-entity counts.
+  - **Step 3 Title & Dynamic Entity Tabs**:
+    - Cleaned Step 3 heading from "Foreign Currency Translation (Ind AS 21)" to "Foreign Currency Translation".
+    - Restructured Step 3 using Dynamic Entity Tabs ($N$ tabs: 1 Parent + 1 for each Subsidiary), eliminating vertical stacking and scaling seamlessly to 100+ entities.
+  - **5-Category FX Translation Engine & Rate Application**:
+    - In `FXTranslationEngine`, categorized all Level 0 items into the 5 core accounting categories: `Asset`, `Liability`, `Equity`, `Income`, `Expense`.
+    - Applied exact Ind AS 21 translation rules from ingested Step 1 rates:
+      - `Asset` & `Liability` &rarr; Closing Rate (`CLOSING`)
+      - `Income` & `Expense` &rarr; Average Rate (`AVERAGE`)
+      - `Equity` &rarr; Historical Rate (`HISTORICAL`)
+      - Functional currency == Reporting currency &rarr; `1.0000 (Identity)`
+    - Dynamically resolved true functional currency per entity (`USD`, `EUR`, `INR`) rather than hardcoding INR.
+  - **FCTR Reserve Balancing Plug & Full Row Display**:
+    - Calculated exact FCTR balancing plug row (`O620102`) bringing net translated balance strictly to `0.00`.
+    - Prominently styled FCTR plug row in amber frosted glass with gold accent badge.
+    - Removed 15-row truncation in `/api/pipeline-data`; returns all rows with full search filter capability.
+- **Verification & Testing**:
+  - Added `tests/test_step3_translation_tabs.py`: verifies 5-category classification, Closing/Average/Historical rate routing, FCTR plug math, and API serialization.
+  - Full test suite: **98/98 tests PASSED** in 26.36s (100% pass rate).
+  - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+
 - **Architectural & UI Enhancements**:
   - **Modal Polish & Anti-Clutter**:
     - Renamed modal header from "Review Ingestion & Perimeter Mappings" to "Review Ingestion Mappings".

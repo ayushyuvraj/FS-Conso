@@ -3879,11 +3879,19 @@ function refreshHITLCounters() {
     let totalPendingAllEntities = 0;
     let totalMappedAccounts = 0;
 
+    const allDecisions = (pipelineData && pipelineData.mapping_decisions) ? pipelineData.mapping_decisions : [];
+    if (allDecisions.length > 0) {
+        totalPendingAllEntities = allDecisions.filter(m => m.needs_review).length;
+        totalMappedAccounts = allDecisions.length;
+    }
+
     tabs.forEach(t => {
         const ms = getMappingsForEntity(t.entity_code);
-        totalMappedAccounts += ms.length;
         const tabPending = ms.filter(m => m.needs_review).length;
-        totalPendingAllEntities += tabPending;
+        if (allDecisions.length === 0) {
+            totalPendingAllEntities += tabPending;
+            totalMappedAccounts += ms.length;
+        }
 
         // Update tab dot directly in DOM
         const tabDot = document.getElementById(`step2-tab-dot-${t.entity_code}`);
@@ -3899,6 +3907,10 @@ function refreshHITLCounters() {
             }
         }
     });
+
+    if (appStatus && appStatus.hitl_pending_reviews && allDecisions.length === 0) {
+        totalPendingAllEntities = appStatus.hitl_pending_reviews.length;
+    }
 
     // Update top header HITL button & badge
     const hitlBtn = document.getElementById("btn-hitl-trigger");
@@ -4687,61 +4699,251 @@ async function selectL0Option(groupCode, l0Name) {
     currentL0PopoverTarget = null;
 }
 
-// STEP 3: FX TRANSLATION
-function renderStep3(el) {
+// STEP 3: FX TRANSLATION (Dynamic Entity Tabs & 5-Category Presentation)
+let activeStep3Entity = null;
+let step3AccountSearchQuery = '';
+
+function switchStep3EntityTab(entityCode) {
+    activeStep3Entity = entityCode;
+    const container = document.getElementById("step-content");
+    if (container) renderStep3(container);
+}
+
+function handleStep3AccountSearch(query) {
+    step3AccountSearchQuery = (query || '').trim().toLowerCase();
+    const tbody = document.getElementById("step3-table-tbody");
+    if (!tbody) return;
+    renderStep3TableRows(tbody);
+}
+
+function getStep3EntityTabs() {
+    const perimeter = (appStatus && appStatus.perimeter_entities && appStatus.perimeter_entities.length > 0)
+        ? appStatus.perimeter_entities
+        : ((pipelineData && pipelineData.perimeter_entities) ? pipelineData.perimeter_entities : []);
+
+    const transTbs = (pipelineData && pipelineData.translated_tbs) ? pipelineData.translated_tbs : [];
+    const transMap = new Map();
+    transTbs.forEach(tb => {
+        if (tb.entity_code) transMap.set(tb.entity_code.toUpperCase(), tb);
+    });
+
+    const rawTbs = (pipelineData && pipelineData.raw_tbs) ? pipelineData.raw_tbs : [];
+    const rawTbMap = new Map();
+    rawTbs.forEach(tb => {
+        if (tb.entity_code) rawTbMap.set(tb.entity_code.toUpperCase(), tb);
+    });
+
+    const tabs = [];
+    const seen = new Set();
+
+    if (perimeter.length > 0) {
+        // 1. Parent entity first
+        const parent = perimeter.find(p => p.is_parent) || perimeter[0];
+        if (parent) {
+            const code = parent.entity_code.toUpperCase();
+            seen.add(code);
+            const tr = transMap.get(code);
+            const raw = rawTbMap.get(code);
+            tabs.push({
+                entity_code: parent.entity_code,
+                entity_name: parent.entity_name || (raw && raw.entity_name) || parent.entity_code,
+                currency: parent.currency || parent.input_currency || (tr && tr.currency) || (raw && raw.currency) || (appStatus && appStatus.reporting_currency) || 'INR',
+                is_parent: true
+            });
+        }
+        // 2. Each subsidiary in order
+        perimeter.forEach(p => {
+            const code = p.entity_code.toUpperCase();
+            if (!seen.has(code)) {
+                seen.add(code);
+                const tr = transMap.get(code);
+                const raw = rawTbMap.get(code);
+                tabs.push({
+                    entity_code: p.entity_code,
+                    entity_name: p.entity_name || (raw && raw.entity_name) || p.entity_code,
+                    currency: p.currency || p.input_currency || (tr && tr.currency) || (raw && raw.currency) || '—',
+                    is_parent: false
+                });
+            }
+        });
+    } else if (transTbs.length > 0) {
+        transTbs.forEach((tb, idx) => {
+            const code = tb.entity_code.toUpperCase();
+            if (!seen.has(code)) {
+                seen.add(code);
+                tabs.push({
+                    entity_code: tb.entity_code,
+                    entity_name: tb.entity_name || tb.entity_code,
+                    currency: tb.currency || '—',
+                    is_parent: idx === 0
+                });
+            }
+        });
+    }
+
+    return tabs;
+}
+
+function getCategoryBadge(cat) {
+    const c = String(cat || 'Asset').trim();
+    switch (c) {
+        case 'Asset':
+            return `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-200">Asset</span>`;
+        case 'Liability':
+            return `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-800 border border-purple-200">Liability</span>`;
+        case 'Equity':
+            return `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">Equity</span>`;
+        case 'Income':
+            return `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">Income</span>`;
+        case 'Expense':
+            return `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-800 border border-rose-200">Expense</span>`;
+        default:
+            return `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">${escapeHtml(c)}</span>`;
+    }
+}
+
+function renderStep3TableRows(tbody) {
+    if (!tbody) return;
     const trans = pipelineData.translated_tbs || [];
-    let sections = trans.map(tb => {
-        let rows = tb.rows.map(r => `
-            <tr class="${r.is_fctr_plug ? 'bg-amber-50/60 font-semibold' : 'hover:bg-slate-50/70'} border-b border-gray-100 transition">
-                <td class="font-mono text-xs py-2 px-3">${escapeHtml(r.account_code)}</td>
-                <td class="py-2 px-3 text-xs text-gray-800">${escapeHtml(r.account_description)}</td>
-                <td class="py-2 px-3 text-xs"><span class="px-1.5 py-0.5 rounded bg-gray-100 font-mono text-[10px]">${escapeHtml(r.source_currency)}</span></td>
-                <td class="num-cell py-2 px-3 text-xs font-mono">${formatNum(r.source_amount)}</td>
-                <td class="num-cell py-2 px-3 text-xs font-mono">${r.rate_applied.toFixed(4)} (${r.rate_type})</td>
-                <td class="num-cell py-2 px-3 text-xs font-mono font-bold text-kpmg-navy formula-interactive" 
-                    onmouseenter="showFormula(event, '=${formatNum(r.source_amount)} * ${r.rate_applied.toFixed(4)}', 'Source: TB_${tb.entity_code}')"
+    const activeCode = (activeStep3Entity || (trans[0] && trans[0].entity_code) || '').trim().toUpperCase();
+    const tb = trans.find(t => (t.entity_code || '').trim().toUpperCase() === activeCode);
+
+    if (!tb || !tb.rows || tb.rows.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="p-8 text-center text-slate-400 text-xs">
+                    No translated line items found for entity <strong>${escapeHtml(activeStep3Entity || 'Selected')}</strong>.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    let rows = tb.rows;
+    if (step3AccountSearchQuery) {
+        rows = rows.filter(r =>
+            String(r.account_code || '').toLowerCase().includes(step3AccountSearchQuery) ||
+            String(r.account_description || '').toLowerCase().includes(step3AccountSearchQuery) ||
+            String(r.category || '').toLowerCase().includes(step3AccountSearchQuery)
+        );
+    }
+
+    if (rows.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="p-8 text-center text-slate-400 text-xs">
+                    No accounts matching "${escapeHtml(step3AccountSearchQuery)}".
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = rows.map(r => {
+        const catBadge = getCategoryBadge(r.category);
+        const isFctr = Boolean(r.is_fctr_plug);
+        const repCurr = tb.reporting_currency || (appStatus && appStatus.reporting_currency) || 'INR';
+        const rowClass = isFctr
+            ? 'bg-amber-50/80 font-semibold border-b border-amber-200 shadow-2xs'
+            : 'hover:bg-slate-50/70 border-b border-gray-100 transition';
+
+        return `
+            <tr class="${rowClass}">
+                <td class="font-mono text-xs py-2.5 px-3 ${isFctr ? 'text-amber-950 font-bold' : 'text-slate-800'}">
+                    ${isFctr ? `<span class="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-bold text-[10px] mr-1.5">FCTR</span>` : ''}
+                    ${escapeHtml(r.account_code)}
+                </td>
+                <td class="py-2.5 px-3 text-xs ${isFctr ? 'text-amber-950 font-bold' : 'text-gray-800'}">
+                    ${escapeHtml(r.account_description)}
+                </td>
+                <td class="py-2.5 px-3 text-xs">
+                    ${catBadge}
+                </td>
+                <td class="py-2.5 px-3 text-xs">
+                    <span class="px-2 py-0.5 rounded bg-slate-100 font-mono text-[10px] font-semibold text-slate-700 border border-slate-200">
+                        ${escapeHtml(r.source_currency)}
+                    </span>
+                </td>
+                <td class="num-cell py-2.5 px-3 text-xs font-mono font-semibold text-slate-800">
+                    ${formatNum(r.source_amount)}
+                </td>
+                <td class="num-cell py-2.5 px-3 text-xs font-mono text-slate-700">
+                    ${typeof r.rate_applied === 'number' ? r.rate_applied.toFixed(4) : r.rate_applied}
+                    <span class="text-[10px] text-slate-500 ml-1">(${escapeHtml(r.rate_type)})</span>
+                </td>
+                <td class="num-cell py-2.5 px-3 text-xs font-mono font-bold text-kpmg-navy formula-interactive"
+                    onmouseenter="showFormula(event, '=${formatNum(r.source_amount)} * ${typeof r.rate_applied === 'number' ? r.rate_applied.toFixed(4) : r.rate_applied}', 'Source: TB_${tb.entity_code}')"
                     onmouseleave="hideFormula()">
                     ${formatNum(r.translated_amount)}
                 </td>
             </tr>
-        `).join("");
+        `;
+    }).join("");
+}
+
+function renderStep3(el) {
+    const tabs = getStep3EntityTabs();
+    if (!activeStep3Entity && tabs.length > 0) {
+        activeStep3Entity = tabs[0].entity_code;
+    }
+
+    const trans = pipelineData.translated_tbs || [];
+    const activeCode = (activeStep3Entity || (tabs[0] && tabs[0].entity_code) || '').trim().toUpperCase();
+    const tb = trans.find(t => (t.entity_code || '').trim().toUpperCase() === activeCode);
+    const repCurr = (tb && tb.reporting_currency) || (appStatus && appStatus.reporting_currency) || 'INR';
+    const srcCurr = (tb && (tb.source_currency || tb.currency)) || (tabs.find(t => t.entity_code.toUpperCase() === activeCode) || {}).currency || 'INR';
+    const isIdentity = srcCurr.toUpperCase() === repCurr.toUpperCase();
+
+    // Render Entity Tabs
+    const tabsHtml = tabs.map(t => {
+        const isSel = (t.entity_code.toUpperCase() === activeCode);
+        const tabLabel = t.is_parent ? `${escapeHtml(t.entity_name)} (Parent)` : `${escapeHtml(t.entity_name)} (Subsidiary)`;
+        const curLabel = t.currency || 'INR';
 
         return `
-            <div class="mb-6 border border-kpmg-border rounded-lg p-4 bg-white shadow-xs">
-                <div class="flex items-center justify-between mb-3 border-b border-gray-100 pb-2">
-                    <span class="font-bold text-sm text-kpmg-navy">${escapeHtml(tb.entity_code)} (${escapeHtml(tb.currency)} &rarr; ${appStatus.reporting_currency || 'INR'})</span>
-                    <span class="text-xs font-mono text-kpmg-muted">Net Translated: <strong class="text-emerald-700">${formatNum(tb.total_translated)}</strong></span>
-                </div>
-                <div class="overflow-x-auto min-h-[380px] max-h-[calc(100vh-320px)]">
-                    <table class="fin-table">
-                        <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
-                            <tr>
-                                <th>Account Code</th>
-                                <th>Description</th>
-                                <th>Currency</th>
-                                <th class="num-cell">Source Amount</th>
-                                <th class="num-cell">FX Rate</th>
-                                <th class="num-cell">Translated (${appStatus.reporting_currency || 'INR'})</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>
-            </div>
+            <button type="button"
+                onclick="switchStep3EntityTab('${escapeHtml(t.entity_code)}')"
+                class="px-4 py-2 text-xs font-semibold rounded-t-lg transition flex items-center space-x-2 border-b-2 cursor-pointer ${
+                    isSel
+                        ? 'bg-kpmg-blue text-white border-kpmg-blue shadow-xs'
+                        : 'bg-white hover:bg-slate-50 text-slate-600 border-transparent hover:text-slate-900'
+                }">
+                <span>${tabLabel}</span>
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                    isSel ? 'bg-white/20 text-white font-bold' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                }">${escapeHtml(curLabel)}</span>
+            </button>
         `;
     }).join("");
 
+    // KPI and Rate Flow Summary for active entity
+    const fctrAmt = (tb && tb.has_fctr && typeof tb.fctr_amount === 'number') ? tb.fctr_amount : 0.0;
+    const hasFctrPlug = Boolean(tb && tb.has_fctr && Math.abs(fctrAmt) > 0.001);
+    const netTranslated = (tb && typeof tb.total_translated === 'number') ? tb.total_translated : 0.0;
+
     el.innerHTML = `
         <div class="space-y-4">
+            <!-- Header Section -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-kpmg-border pb-3">
                 <div>
-                    <h3 class="font-bold text-base text-kpmg-navy">Foreign Currency Translation (Ind AS 21)</h3>
-                    <p class="text-xs text-kpmg-muted">Closing rates for Balance Sheet, Average rates for P&L, Historical for Equity, with automated FCTR plug.</p>
+                    <h3 class="font-bold text-base text-kpmg-navy">Foreign Currency Translation</h3>
+                    <p class="text-xs text-kpmg-muted">Multi-currency financial standardization using Closing rates for Assets & Liabilities, Average rates for P&L, and Historical rates for Equity, with automated FCTR reserve balancing.</p>
                 </div>
-                <div class="flex items-center space-x-2">
+                <div class="flex items-center space-x-3">
+                    <div class="relative w-64">
+                        <input type="text"
+                            id="step3-search-input"
+                            oninput="handleStep3AccountSearch(this.value)"
+                            placeholder="Search accounts or categories..."
+                            value="${escapeHtml(step3AccountSearchQuery)}"
+                            class="w-full h-8 pl-8 pr-3 text-xs bg-slate-50 border border-kpmg-border rounded-md focus:bg-white focus:outline-none focus:ring-1 focus:ring-kpmg-blue" />
+                        <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
                     <button onclick="triggerRunPipeline()"
-                        class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
-                        title="Consolidate">
+                        class="h-8 px-4 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
+                        title="Proceed to Step 4 Eliminations">
                         <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -4750,9 +4952,87 @@ function renderStep3(el) {
                     </button>
                 </div>
             </div>
-            ${sections || '<div class="p-8 text-center text-kpmg-muted">Run consolidation to view foreign currency translation.</div>'}
+
+            <!-- Dynamic Entity Tabs Bar -->
+            <div class="border-b border-kpmg-border flex items-center space-x-1 overflow-x-auto">
+                ${tabsHtml}
+            </div>
+
+            <!-- Active Entity Translation Strip & Metadata -->
+            <div class="bg-slate-50 border border-kpmg-border rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+                <div class="flex items-center space-x-3">
+                    <span class="text-xs font-bold text-kpmg-navy flex items-center space-x-1.5">
+                        <span>Currency Routing:</span>
+                    </span>
+                    ${isIdentity
+                        ? `<span class="px-2.5 py-1 rounded bg-slate-200/80 text-slate-800 font-mono text-xs font-bold border border-slate-300">
+                               ${escapeHtml(srcCurr)} &mdash; Identity (1.0000)
+                           </span>`
+                        : `<span class="px-2.5 py-1 rounded bg-blue-100 text-kpmg-navy font-mono text-xs font-bold border border-blue-300 flex items-center space-x-1">
+                               <span>${escapeHtml(srcCurr)}</span>
+                               <span>&rarr;</span>
+                               <span>${escapeHtml(repCurr)}</span>
+                           </span>`
+                    }
+                    ${!isIdentity && tb && tb.rows && tb.rows.length > 0 ? `
+                        <div class="hidden md:flex items-center space-x-2 text-[11px] text-slate-600 font-mono bg-white px-2.5 py-1 rounded border border-slate-200 shadow-2xs">
+                            <span title="Assets & Liabilities converted at Closing Rate">Closing: <strong class="text-slate-800">${(tb.rows.find(r => r.rate_type === 'Closing') || {}).rate_applied || '—'}</strong></span>
+                            <span class="text-slate-300">|</span>
+                            <span title="Income & Expenses converted at Average Rate">Average: <strong class="text-slate-800">${(tb.rows.find(r => r.rate_type === 'Average') || {}).rate_applied || '—'}</strong></span>
+                            <span class="text-slate-300">|</span>
+                            <span title="Equity converted at Historical Rate">Historical: <strong class="text-slate-800">${(tb.rows.find(r => r.rate_type === 'Historical') || {}).rate_applied || '—'}</strong></span>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="flex items-center space-x-3">
+                    <!-- FCTR Plug Badge -->
+                    ${hasFctrPlug
+                        ? `<div class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-xs font-semibold shadow-2xs" title="Foreign Currency Translation Reserve Plug automatically balancing the ledger">
+                               <svg class="w-3.5 h-3.5 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                               </svg>
+                               <span>FCTR Reserve:</span>
+                               <span class="font-mono font-bold">${formatNum(fctrAmt)}</span>
+                           </div>`
+                        : `<div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 border border-slate-200 text-xs font-medium">
+                               <span>FCTR:</span>
+                               <span class="font-mono">None (Identity)</span>
+                           </div>`
+                    }
+
+                    <!-- Net Translated Balance -->
+                    <div class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-bold shadow-2xs">
+                        <span>Net Translated:</span>
+                        <span class="font-mono">${formatNum(netTranslated)} (${Math.abs(netTranslated) < 0.01 ? '0.00' : 'Diff'})</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ledger Table -->
+            <div class="overflow-x-auto min-h-[380px] max-h-[calc(100vh-320px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
+                <table class="fin-table">
+                    <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
+                        <tr>
+                            <th class="py-2.5 px-3 text-left">Account Code</th>
+                            <th class="py-2.5 px-3 text-left">Description</th>
+                            <th class="py-2.5 px-3 text-left">Category</th>
+                            <th class="py-2.5 px-3 text-left">Currency</th>
+                            <th class="py-2.5 px-3 num-cell">Source Amount</th>
+                            <th class="py-2.5 px-3 num-cell">FX Rate Applied</th>
+                            <th class="py-2.5 px-3 num-cell">Translated (${escapeHtml(repCurr)})</th>
+                        </tr>
+                    </thead>
+                    <tbody id="step3-table-tbody" class="divide-y divide-gray-100">
+                        <!-- Populated by renderStep3TableRows -->
+                    </tbody>
+                </table>
+            </div>
         </div>
     `;
+
+    const tbody = document.getElementById("step3-table-tbody");
+    if (tbody) renderStep3TableRows(tbody);
 }
 
 // STEP 4: ELIMINATIONS

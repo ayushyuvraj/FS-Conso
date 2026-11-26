@@ -223,6 +223,7 @@ def mapper_node(state: ConsolidationState) -> ConsolidationState:
         ]
         state.hitl_pending_reviews = [
             {
+                "entity_code": d.entity_code,
                 "local_code": d.local_code,
                 "local_description": d.local_description,
                 "suggested_group_code": d.group_code,
@@ -296,9 +297,18 @@ def translator_node(state: ConsolidationState) -> ConsolidationState:
     fx_table = load_fx_rates_for_company(state.company_id, state.period)
     engine = FXTranslationEngine(coa, fx_table)
 
+    rep_curr = config.reporting_currency
+    try:
+        from fs_conso.core.company_manager import company_manager
+        prof = company_manager.get_company(state.company_id)
+        if prof and prof.reporting_currency:
+            rep_curr = prof.reporting_currency
+    except Exception:
+        pass
+
     trans_tbs = []
     for std_tb in state.standardized_tbs:
-        trans_tb = engine.translate(std_tb, reporting_currency=config.reporting_currency)
+        trans_tb = engine.translate(std_tb, reporting_currency=rep_curr)
         trans_tbs.append(trans_tb)
 
     state.translated_tbs = trans_tbs

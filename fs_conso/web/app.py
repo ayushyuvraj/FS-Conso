@@ -1304,9 +1304,11 @@ async def resolve_hitl_item(req: HITLResolveRequest):
                                 if resolved_item:
                                     row.account_description = resolved_item.account_name
 
+            req_ent = (req.entity_code or "").strip().upper()
+            req_loc = str(req.local_code or "").strip()
             session.state.hitl_pending_reviews = [
                 r for r in session.state.hitl_pending_reviews
-                if not ((not req.entity_code or r.get("entity_code") == req.entity_code) and r.get("local_code") == req.local_code)
+                if not ((not req_ent or not r.get("entity_code") or str(r.get("entity_code")).strip().upper() == req_ent) and str(r.get("local_code", "")).strip() == req_loc)
             ]
             if not session.state.hitl_pending_reviews and not any(d.needs_review for d in session.state.mapping_decisions):
                 session.state.halted_node = None
@@ -1670,11 +1672,13 @@ async def get_pipeline_data():
         "translated_tbs": [
             {
                 "entity_code": tb.entity_code,
-                "currency": tb.reporting_currency,
+                "currency": getattr(tb, "source_currency", None) or (tb.rows[0].source_currency if tb.rows else "INR"),
+                "source_currency": getattr(tb, "source_currency", None) or (tb.rows[0].source_currency if tb.rows else "INR"),
+                "reporting_currency": tb.reporting_currency or "INR",
                 "total_translated": tb.total_translated,
                 "has_fctr": tb.fctr_row is not None,
                 "fctr_amount": tb.fctr_row.translated_amount if tb.fctr_row else 0.0,
-                "rows": [r.dict() for r in tb.rows[:15]]
+                "rows": [r.dict() for r in tb.rows]
             }
             for tb in st.translated_tbs
         ],

@@ -17,6 +17,7 @@ class TranslatedRow(BaseModel):
     """An individual line item translated into the parent reporting currency (e.g. INR)."""
     account_code: str
     account_description: str
+    category: str = "Asset"  # "Asset", "Liability", "Equity", "Income", "Expense"
     source_currency: str
     source_amount: float
     rate_applied: float
@@ -30,6 +31,7 @@ class TranslatedTrialBalance(BaseModel):
     """Translated Trial Balance in reporting currency (Sum == 0.00)."""
     entity_code: str
     period: str
+    source_currency: str = "INR"
     reporting_currency: str = "INR"
     rows: List[TranslatedRow] = Field(default_factory=list)
     fctr_row: Optional[TranslatedRow] = None
@@ -72,6 +74,40 @@ class FXTranslationEngine:
                         missing.append(pair)
         return missing
 
+    def _classify_category(self, account_code: str, account_description: str) -> str:
+        """Categorizes an account strictly into one of the 5 standard financial categories:
+        Asset, Liability, Equity, Income, Expense."""
+        coa_item = self.coa.get_item(account_code)
+        if coa_item and coa_item.account_type:
+            at = coa_item.account_type
+            if at == AccountClassification.ASSET or at == "Asset":
+                return "Asset"
+            if at == AccountClassification.LIABILITY or at == "Liability":
+                return "Liability"
+            if at == AccountClassification.EQUITY or at == "Equity":
+                return "Equity"
+            if at == AccountClassification.INCOME or at == "Income":
+                return "Income"
+            if at == AccountClassification.EXPENSE or at == "Expense":
+                return "Expense"
+
+        # Heuristic prefix & keyword fallback
+        code = str(account_code).strip().upper()
+        desc = str(account_description).strip().lower()
+
+        if code.startswith(("A", "10", "11", "12", "13", "14", "15")) or any(k in desc for k in ["cash", "bank", "receivable", "inventory", "asset", "equipment", "property", "investment", "deposit", "advance"]):
+            return "Asset"
+        if code.startswith(("L", "20", "21", "22", "23", "24", "25")) or any(k in desc for k in ["payable", "liability", "borrowing", "loan", "debt", "provision", "overdraft"]):
+            return "Liability"
+        if code.startswith(("E", "C", "30", "31", "32", "33")) or any(k in desc for k in ["equity", "share capital", "retained", "reserve", "dividend", "fctr", "minority"]):
+            return "Equity"
+        if code.startswith(("R", "I", "40", "41", "42", "43")) or any(k in desc for k in ["revenue", "sales", "income", "turnover", "gain", "interest received"]):
+            return "Income"
+        if code.startswith(("X", "50", "51", "52", "60", "61", "70", "80")) or any(k in desc for k in ["expense", "cost", "depreciation", "amortisation", "amortization", "salary", "employee", "tax", "fee", "rent", "utility"]):
+            return "Expense"
+
+        return "Asset"
+
     def translate(
         self,
         std_tb: StandardizedTrialBalance,
@@ -90,8 +126,7 @@ class FXTranslationEngine:
             )
 
         for idx, row in enumerate(std_tb.rows, start=1):
-            coa_item = self.coa.get_item(row.account_code)
-            acc_type = coa_item.account_type if coa_item else AccountClassification.ASSET
+            category = self._classify_category(row.account_code, row.account_description)
 
             if is_identity or fx_entry is None:
                 rate = 1.0
@@ -101,13 +136,13 @@ class FXTranslationEngine:
                 # Balance Sheet Assets & Liabilities: Closing Rate
                 # Profit & Loss (Income & Expenses): Average Rate
                 # Equity & Share Capital: Historical Rate
-                if acc_type in (AccountClassification.ASSET, AccountClassification.LIABILITY):
+                if category in ("Asset", "Liability"):
                     rate = fx_entry.closing_rate
                     rate_type = "Closing"
-                elif acc_type in (AccountClassification.INCOME, AccountClassification.EXPENSE):
+                elif category in ("Income", "Expense"):
                     rate = fx_entry.average_rate
                     rate_type = "Average"
-                elif acc_type == AccountClassification.EQUITY:
+                elif category == "Equity":
                     rate = fx_entry.historical_rate
                     rate_type = "Historical"
                 else:
@@ -118,6 +153,7 @@ class FXTranslationEngine:
             translated_rows.append(TranslatedRow(
                 account_code=row.account_code,
                 account_description=row.account_description,
+                category=category,
                 source_currency=std_tb.currency,
                 source_amount=row.amount,
                 rate_applied=rate,
@@ -136,6 +172,7 @@ class FXTranslationEngine:
             fctr_row = TranslatedRow(
                 account_code="O620102",  # Group COA: Foreign Currency Translation Differences
                 account_description="Foreign Currency Translation Reserve (FCTR Plug)",
+                category="Equity",
                 source_currency=std_tb.currency,
                 source_amount=0.0,
                 rate_applied=1.0,
@@ -148,6 +185,7 @@ class FXTranslationEngine:
         return TranslatedTrialBalance(
             entity_code=std_tb.entity_code,
             period=std_tb.period,
+            source_currency=std_tb.currency,
             reporting_currency=reporting_currency,
             rows=translated_rows,
             fctr_row=fctr_row
