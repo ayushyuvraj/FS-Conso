@@ -2339,6 +2339,57 @@ function closePerimeterApprovalModal() {
     if (modal) modal.classList.add('hidden');
 }
 
+let approvalActiveFilter = 'ALL';
+let approvalSearchQuery = '';
+
+function filterApprovalGrid(filterType, searchQuery) {
+    if (filterType !== undefined) approvalActiveFilter = filterType;
+    if (searchQuery !== undefined) approvalSearchQuery = (searchQuery || '').trim().toLowerCase();
+
+    // Update filter tabs UI
+    const tabs = ['ALL', 'FLAGGED', 'READY'];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`tab-approval-${t.toLowerCase()}`);
+        if (btn) {
+            if (t === approvalActiveFilter) {
+                btn.className = 'px-2.5 py-1 rounded-md text-xs font-semibold bg-kpmg-navy text-white shadow-xs transition';
+            } else {
+                btn.className = 'px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-slate-900 transition';
+            }
+        }
+    });
+
+    const rows = document.querySelectorAll('[data-approval-row]');
+    let visibleCount = 0;
+    rows.forEach(row => {
+        const rowStatus = row.getAttribute('data-status'); // 'ready' or 'flagged'
+        const rowSearch = (row.getAttribute('data-search') || '').toLowerCase();
+        const entityCode = row.getAttribute('data-entity-code') || '';
+        const drawerRow = document.getElementById(`drawer-${entityCode}`);
+
+        let matchesFilter = true;
+        if (approvalActiveFilter === 'FLAGGED' && rowStatus !== 'flagged') matchesFilter = false;
+        if (approvalActiveFilter === 'READY' && rowStatus !== 'ready') matchesFilter = false;
+
+        let matchesSearch = true;
+        if (approvalSearchQuery && !rowSearch.includes(approvalSearchQuery)) matchesSearch = false;
+
+        if (matchesFilter && matchesSearch) {
+            row.classList.remove('hidden');
+            visibleCount++;
+        } else {
+            row.classList.add('hidden');
+            if (drawerRow) drawerRow.classList.add('hidden');
+        }
+    });
+
+    const emptyRow = document.getElementById('approval-grid-empty');
+    if (emptyRow) {
+        if (visibleCount === 0) emptyRow.classList.remove('hidden');
+        else emptyRow.classList.add('hidden');
+    }
+}
+
 function renderPerimeterApprovalModalContent(state) {
     const container = document.getElementById('perimeter-approval-cards-container');
     const footerStatus = document.getElementById('perimeter-approval-footer-status');
@@ -2453,360 +2504,508 @@ function renderPerimeterApprovalModalContent(state) {
         return opts;
     };
 
-    let cardsHtml = '';
-
-    // 1. PARENT COMPANY CARD
     const parent = state.parent;
+    const subs = state.subsidiaries || [];
+    const fx = state.fx_rates || {};
+    const unassigned = state.unassigned_sheets || state.unassigned_items || [];
+
+    const totalEntities = (parent ? 1 : 0) + subs.length;
+    const mappedEntities = (parent && parent.filename ? 1 : 0) + subs.filter(s => s.filename).length;
+    const isFxMapped = !!fx.filename;
+
+    // Check issues for parent
+    const isParentFlagged = !parent || !parent.filename || parent.date_status === 'MISMATCH' || !(parent.detected_columns && parent.detected_columns.account_code);
+    const flaggedSubsCount = subs.filter(s => !s.filename || s.date_status === 'MISMATCH' || !(s.detected_columns && s.detected_columns.account_code)).length;
+    const flaggedCount = (isParentFlagged ? 1 : 0) + flaggedSubsCount + (!isFxMapped ? 1 : 0);
+    const readyCount = Math.max(0, totalEntities + 1 - flaggedCount);
+
+    let html = `
+        <div class="space-y-3">
+            <!-- Institutional Summary KPI Bar & Quick Controls -->
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                <!-- Counters -->
+                <div class="flex items-center space-x-2 text-xs">
+                    <div class="flex items-center space-x-1 px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs font-mono">
+                        <span class="text-slate-500 font-sans">Perimeter:</span>
+                        <strong class="text-slate-800">${mappedEntities}/${totalEntities} Mapped</strong>
+                    </div>
+                    <div class="flex items-center space-x-1 px-2.5 py-1 rounded-md ${flaggedCount > 0 ? 'bg-amber-50 border border-amber-200 text-amber-900' : 'bg-emerald-50 border border-emerald-200 text-emerald-900'} shadow-2xs font-mono">
+                        <span>${flaggedCount > 0 ? '⚠️' : '✓'}</span>
+                        <strong>${flaggedCount > 0 ? `${flaggedCount} Flagged` : '0 Issues'}</strong>
+                    </div>
+                    <div class="flex items-center space-x-1 px-2.5 py-1 rounded-md ${isFxMapped ? 'bg-indigo-50 border border-indigo-200 text-indigo-900' : 'bg-rose-50 border border-rose-200 text-rose-900'} shadow-2xs font-mono">
+                        <span>${isFxMapped ? '💱' : '⚠️'}</span>
+                        <strong>${isFxMapped ? 'FX Ready' : 'FX Missing'}</strong>
+                    </div>
+                </div>
+
+                <!-- Filter Tabs & Fast Search -->
+                <div class="flex items-center space-x-2">
+                    <div class="inline-flex items-center p-0.5 bg-slate-200/70 rounded-lg space-x-0.5 text-xs">
+                        <button type="button" id="tab-approval-all" onclick="filterApprovalGrid('ALL')"
+                            class="px-2.5 py-1 rounded-md text-xs font-semibold ${approvalActiveFilter === 'ALL' ? 'bg-kpmg-navy text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                            All (${totalEntities})
+                        </button>
+                        <button type="button" id="tab-approval-flagged" onclick="filterApprovalGrid('FLAGGED')"
+                            class="px-2.5 py-1 rounded-md text-xs font-semibold ${approvalActiveFilter === 'FLAGGED' ? 'bg-kpmg-navy text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                            Flagged (${flaggedCount})
+                        </button>
+                        <button type="button" id="tab-approval-ready" onclick="filterApprovalGrid('READY')"
+                            class="px-2.5 py-1 rounded-md text-xs font-semibold ${approvalActiveFilter === 'READY' ? 'bg-kpmg-navy text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                            Ready (${readyCount})
+                        </button>
+                    </div>
+                    <div class="relative">
+                        <input type="text" placeholder="Filter entity or code..."
+                            value="${escapeHtml(approvalSearchQuery)}"
+                            oninput="filterApprovalGrid(undefined, this.value)"
+                            class="w-44 h-7 pl-6 pr-2 text-xs rounded-md border border-slate-200 bg-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-kpmg-blue font-mono" />
+                        <svg class="w-3 h-3 text-slate-400 absolute left-2 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- High-Density Financial Ledger Table -->
+            <div class="border border-slate-200 rounded-xl overflow-x-auto bg-white shadow-xs max-h-[56vh]">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead class="sticky top-0 z-20 bg-slate-100 border-b border-slate-200 font-semibold text-slate-700 shadow-2xs">
+                        <tr>
+                            <th class="py-2 px-2 text-center w-11">Status</th>
+                            <th class="py-2 px-2.5 min-w-[160px]">Entity & Role</th>
+                            <th class="py-2 px-2 min-w-[140px]">Assigned File</th>
+                            <th class="py-2 px-2 min-w-[115px]">Worksheet</th>
+                            <th class="py-2 px-2 min-w-[110px]">Account Code Col</th>
+                            <th class="py-2 px-2 min-w-[110px]">Debit / Net Col</th>
+                            <th class="py-2 px-2 min-w-[100px]">Credit Col</th>
+                            <th class="py-2 px-2 min-w-[125px]">Scale / Denom</th>
+                            <th class="py-2 px-2 text-center w-14">View</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 font-mono text-[11px]">
+    `;
+
+    // 1. RENDER PARENT COMPANY ROW
     if (parent) {
         const sampleRows = parent.sample_rows || [];
         const isMapped = !!parent.filename;
         const confPct = Math.round((parent.confidence || 1.0) * 100);
+        const code = parent.entity_code;
+        const hasDateMismatch = parent.date_status === 'MISMATCH';
+        const hasMissingCode = !(parent.detected_columns && parent.detected_columns.account_code);
+        const isFlagged = !isMapped || hasDateMismatch || hasMissingCode;
+        const rowStatus = isFlagged ? 'flagged' : 'ready';
 
-        const dateAlert = parent.date_status === 'MISMATCH'
-            ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">⚠️ Date Mismatch: Found ${escapeHtml(parent.detected_period || '')} vs Run ${escapeHtml(state.target_period || '')}</span>`
-            : '';
+        // Bullets for hover tooltip
+        const bullets = [];
+        if (hasDateMismatch) {
+            bullets.push(`<li class="text-rose-400 font-semibold">• Date Discrepancy: File has ${escapeHtml(parent.detected_period || '')} vs Cutoff ${escapeHtml(state.target_period || '')}</li>`);
+        } else {
+            bullets.push(`<li class="text-emerald-400">• Period: Aligned with ${escapeHtml(state.target_period || '')}</li>`);
+        }
+        if (!isMapped) {
+            bullets.push(`<li class="text-rose-400 font-semibold">• File Status: No trial balance sheet assigned</li>`);
+        } else {
+            bullets.push(`<li class="text-slate-300">• File: <span class="font-mono text-slate-200">${escapeHtml(parent.filename)}</span></li>`);
+            bullets.push(`<li class="text-slate-300">• Sheet: <span class="font-mono text-slate-200">${escapeHtml(parent.sheet_name || 'Default')}</span></li>`);
+        }
+        bullets.push(`<li class="text-indigo-300">• Scale: ${escapeHtml(parent.scale_instruction || 'Reported in exact absolute currency')}</li>`);
+        bullets.push(`<li class="text-slate-300">• Mapped: Code: ${escapeHtml((parent.detected_columns || {}).account_code || 'Auto')}, Debit/Net: ${escapeHtml((parent.detected_columns || {}).debit || (parent.detected_columns || {}).amount || 'Auto')}, Credit: ${escapeHtml((parent.detected_columns || {}).credit || 'None')}</li>`);
+        bullets.push(`<li class="text-slate-400">• Method: ${confPct}% Confidence (${escapeHtml(parent.method || 'Deterministic')})</li>`);
 
-        const dateMismatchBanner = parent.date_status === 'MISMATCH'
-            ? `<div class="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center space-x-2">
-                   <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                   <span><strong>Period Discrepancy:</strong> File contains data for <strong>${escapeHtml(parent.detected_period || '')}</strong>, but active consolidation run cutoff is <strong>${escapeHtml(state.target_period || '31-03-2024')}</strong>. This data belongs to a different reporting period.</span>
-               </div>`
-            : '';
+        const statusIcon = isFlagged
+            ? `<span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</span>`
+            : `<span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</span>`;
 
-        cardsHtml += `
-            <div class="bg-white border-2 border-kpmg-blue/30 rounded-xl p-4 shadow-xs space-y-3">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                    <div class="flex items-center space-x-2.5">
-                        <div class="w-7 h-7 rounded-lg bg-kpmg-navy text-white flex items-center justify-center font-bold text-xs">P</div>
-                        <div>
-                            <div class="flex items-center space-x-2">
-                                <h4 class="font-bold text-sm text-kpmg-navy">${escapeHtml(parent.entity_name || parent.entity_code)}</h4>
-                                <span class="px-1.5 py-0.2 rounded text-[10px] bg-blue-100 text-kpmg-blue font-semibold">PARENT</span>
-                                <span class="font-mono text-xs text-slate-500 font-semibold">(${escapeHtml(parent.entity_code)})</span>
+        html += `
+            <tr data-approval-row data-status="${rowStatus}" data-search="${escapeHtml((parent.entity_name || code) + ' ' + code)}" data-entity-code="parent" class="hover:bg-slate-50/70 transition">
+                <td class="py-1.5 px-2 text-center align-middle">
+                    <div class="group relative inline-flex items-center justify-center cursor-help">
+                        ${statusIcon}
+                        <!-- Rich Tooltip -->
+                        <div class="pointer-events-none absolute left-7 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-72 p-2.5 bg-slate-900/95 backdrop-blur-md text-white text-[11px] rounded-lg shadow-xl border border-slate-700/60 font-sans">
+                            <div class="font-bold text-xs border-b border-slate-700 pb-1 mb-1.5 flex items-center justify-between">
+                                <span class="truncate pr-1">${escapeHtml(parent.entity_name || code)}</span>
+                                <span class="font-mono text-[9px] px-1 py-0.2 rounded ${isFlagged ? 'bg-rose-900/80 text-rose-200' : 'bg-emerald-900/80 text-emerald-200'}">${isFlagged ? 'FLAGGED' : 'READY'}</span>
                             </div>
-                            <span class="text-[11px] text-slate-500 font-mono">Currency: <strong class="text-slate-700">${escapeHtml(parent.currency || state.reporting_currency || 'INR')}</strong></span>
+                            <ul class="space-y-1">
+                                ${bullets.join('')}
+                            </ul>
                         </div>
                     </div>
+                </td>
+                <td class="py-1.5 px-2.5 align-middle">
                     <div class="flex items-center space-x-2">
-                        ${dateAlert}
-                        ${sampleRows.length > 0 ? `
-                            <button type="button" onclick="toggleSamplePreview('parent-sample-preview')"
-                                class="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-kpmg-blue flex items-center justify-center transition btn-tactile cursor-pointer"
-                                title="Preview Extracted Data">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg>
-                            </button>
-                        ` : ''}
-                        <span class="font-mono text-xs font-bold text-slate-700">${confPct}%</span>
-                        ${!isMapped ? `
-                            <button type="button" onclick="openSingleUploadModal('${escapeHtml(parent.entity_code)}', '${escapeHtml(parent.entity_name)}')"
-                                class="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white font-semibold text-[11px] transition btn-tactile cursor-pointer">
-                                Upload File
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>
-
-                ${dateMismatchBanner}
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Assigned File</label>
-                        <select onchange="updateEntityFileMapping('${escapeHtml(parent.entity_code)}', this.value)"
-                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genFileOptions(parent.filename)}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Worksheet</label>
-                        <select onchange="updateEntitySheetMapping('${escapeHtml(parent.entity_code)}', this.value)"
-                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genSheetOptions(parent.filename, parent.sheet_name)}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Account Code Col</label>
-                        <select id="col-parent-code" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genColOptions(sampleRows, (parent.detected_columns || {}).account_code, 'Account Code')}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Debit / Net Col</label>
-                        <select id="col-parent-debit" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genColOptions(sampleRows, (parent.detected_columns || {}).debit || (parent.detected_columns || {}).amount, 'Debit')}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Credit Col</label>
-                        <select id="col-parent-credit" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genColOptions(sampleRows, (parent.detected_columns || {}).credit, 'Credit')}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Scale / Denom</label>
-                        <select id="scale-parent" onchange="updateEntityScaleInstruction('${escapeHtml(parent.entity_code)}', this.value)"
-                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genScaleOptions(parent.scale_multiplier)}
-                        </select>
-                    </div>
-                </div>
-
-                <div id="scale-banner-${escapeHtml(parent.entity_code)}" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 font-medium">
-                    <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
-                    </svg>
-                    <span><strong class="font-semibold">Scale Normalization:</strong> <span id="scale-instr-${escapeHtml(parent.entity_code)}">${escapeHtml(parent.scale_instruction || 'Reported in exact absolute currency (multiplier 1.0)')}</span></span>
-                </div>
-
-                ${sampleRows.length > 0 ? `
-                    <div id="parent-sample-preview" class="hidden mt-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200 overflow-x-auto text-[11px] font-mono max-h-44">
-                        <div class="text-[10px] uppercase font-bold text-slate-500 mb-1 tracking-wider">Top 5 Extracted Sample Rows (Raw):</div>
-                        <table class="w-full text-left">
-                            <tbody>
-                                ${sampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    }
-
-    // 2. SUBSIDIARY CARDS
-    const subs = state.subsidiaries || [];
-    subs.forEach((sub, sIdx) => {
-        const sampleRows = sub.sample_rows || [];
-        const isMapped = !!sub.filename;
-        const confPct = Math.round((sub.confidence || 1.0) * 100);
-
-        const dateAlert = sub.date_status === 'MISMATCH'
-            ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">⚠️ Date Mismatch: ${escapeHtml(sub.detected_period || '')}</span>`
-            : '';
-
-        const dateMismatchBanner = sub.date_status === 'MISMATCH'
-            ? `<div class="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center space-x-2">
-                   <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                   <span><strong>Period Discrepancy:</strong> File contains data for <strong>${escapeHtml(sub.detected_period || '')}</strong>, but active consolidation run cutoff is <strong>${escapeHtml(state.target_period || '31-03-2024')}</strong>. This data belongs to a different reporting period.</span>
-               </div>`
-            : '';
-
-        cardsHtml += `
-            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                    <div class="flex items-center space-x-2.5">
-                        <div class="w-7 h-7 rounded-lg bg-slate-700 text-white flex items-center justify-center font-bold text-xs">S${sIdx + 1}</div>
+                        <div class="w-6 h-6 rounded bg-kpmg-navy text-white flex items-center justify-center font-bold text-[10px]">P</div>
                         <div>
-                            <div class="flex items-center space-x-2">
-                                <h4 class="font-bold text-sm text-slate-800">${escapeHtml(sub.entity_name || sub.entity_code)}</h4>
-                                <span class="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 text-slate-600 font-semibold">${sub.holding_pct != null ? `${sub.holding_pct}%` : (sub.holding_percentage != null ? `${Math.round(sub.holding_percentage * 100)}%` : '100%')} OWNED</span>
-                                <span class="font-mono text-xs text-slate-500 font-semibold">(${escapeHtml(sub.entity_code)})</span>
+                            <div class="flex items-center space-x-1.5">
+                                <span class="font-bold text-slate-800 text-xs">${escapeHtml(parent.entity_name || code)}</span>
+                                <span class="px-1.5 py-0.2 rounded text-[9px] bg-blue-100 text-kpmg-blue font-semibold">PARENT</span>
+                                <span class="text-[10px] text-slate-400 font-mono">(${escapeHtml(code)})</span>
                             </div>
-                            <span class="text-[11px] text-slate-500 font-mono">Currency: <strong class="text-slate-700">${escapeHtml(sub.currency || 'INR')}</strong></span>
+                            <div class="text-[10px] text-slate-500 font-mono">Currency: <strong class="text-slate-700">${escapeHtml(parent.currency || state.reporting_currency || 'INR')}</strong></div>
                         </div>
                     </div>
-                    <div class="flex items-center space-x-2">
-                        ${dateAlert}
-                        ${sampleRows.length > 0 ? `
-                            <button type="button" onclick="toggleSamplePreview('sub-${escapeHtml(sub.entity_code)}-preview')"
-                                class="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-kpmg-blue flex items-center justify-center transition btn-tactile cursor-pointer"
-                                title="Preview Extracted Data">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg>
-                            </button>
-                        ` : ''}
-                        <span class="font-mono text-xs font-bold text-slate-700">${confPct}%</span>
-                        ${!isMapped ? `
-                            <button type="button" onclick="openSingleUploadModal('${escapeHtml(sub.entity_code)}', '${escapeHtml(sub.entity_name)}')"
-                                class="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white font-semibold text-[11px] transition btn-tactile cursor-pointer">
-                                Upload Single File
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>
-
-                ${dateMismatchBanner}
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Assigned File</label>
-                        <select onchange="updateEntityFileMapping('${escapeHtml(sub.entity_code)}', this.value)"
-                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genFileOptions(sub.filename)}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Worksheet</label>
-                        <select onchange="updateEntitySheetMapping('${escapeHtml(sub.entity_code)}', this.value)"
-                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genSheetOptions(sub.filename, sub.sheet_name)}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Account Code Col</label>
-                        <select id="col-${escapeHtml(sub.entity_code)}-code" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genColOptions(sampleRows, (sub.detected_columns || {}).account_code, 'Account Code')}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Debit / Net Col</label>
-                        <select id="col-${escapeHtml(sub.entity_code)}-debit" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genColOptions(sampleRows, (sub.detected_columns || {}).debit || (sub.detected_columns || {}).amount, 'Debit')}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Credit Col</label>
-                        <select id="col-${escapeHtml(sub.entity_code)}-credit" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genColOptions(sampleRows, (sub.detected_columns || {}).credit, 'Credit')}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Scale / Denom</label>
-                        <select id="scale-${escapeHtml(sub.entity_code)}" onchange="updateEntityScaleInstruction('${escapeHtml(sub.entity_code)}', this.value)"
-                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genScaleOptions(sub.scale_multiplier)}
-                        </select>
-                    </div>
-                </div>
-
-                <div id="scale-banner-${escapeHtml(sub.entity_code)}" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 font-medium">
-                    <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
-                    </svg>
-                    <span><strong class="font-semibold">Scale Normalization:</strong> <span id="scale-instr-${escapeHtml(sub.entity_code)}">${escapeHtml(sub.scale_instruction || 'Reported in exact absolute currency (multiplier 1.0)')}</span></span>
-                </div>
-
-                ${sampleRows.length > 0 ? `
-                    <div id="sub-${escapeHtml(sub.entity_code)}-preview" class="hidden mt-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200 overflow-x-auto text-[11px] font-mono max-h-44">
-                        <div class="text-[10px] uppercase font-bold text-slate-500 mb-1 tracking-wider">Top 5 Extracted Sample Rows (Raw):</div>
-                        <table class="w-full text-left">
-                            <tbody>
-                                ${sampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    });
-
-    // 3. MANDATORY FX RATES TABLE CARD
-    const fx = state.fx_rates || {};
-    const fxSampleRows = fx.sample_rows || [];
-    const isFxMapped = !!fx.filename;
-    const fxConfPct = Math.round((fx.confidence || 1.0) * 100);
-
-    cardsHtml += `
-        <div class="bg-white border-2 border-indigo-200 rounded-xl p-4 shadow-xs space-y-3">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100 pb-2.5">
-                <div class="flex items-center space-x-2.5">
-                    <div class="w-7 h-7 rounded-lg bg-indigo-700 text-white flex items-center justify-center font-bold text-xs">FX</div>
-                    <div>
-                        <div class="flex items-center space-x-2">
-                            <h4 class="font-bold text-sm text-indigo-950">Foreign Exchange Rates Table</h4>
-                            <span class="px-2 py-0.5 rounded text-[10px] bg-indigo-100 text-indigo-800 font-semibold border border-indigo-200">MANDATORY</span>
-                        </div>
-                        <span class="text-[11px] text-slate-500 font-mono">Required for Step 3 Currency Translation & Swap Adjustments</span>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-2">
-                    ${isFxMapped ? `
-                        <button type="button" onclick="toggleSamplePreview('fx-sample-preview')"
-                            class="w-7 h-7 rounded-lg hover:bg-indigo-100 text-indigo-700 flex items-center justify-center transition btn-tactile cursor-pointer"
-                            title="Preview Extracted FX Table">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                </td>
+                <td class="py-1.5 px-2 align-middle">
+                    <select onchange="updateEntityFileMapping('${escapeHtml(code)}', this.value)"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                        ${genFileOptions(parent.filename)}
+                    </select>
+                </td>
+                <td class="py-1.5 px-2 align-middle">
+                    <select onchange="updateEntitySheetMapping('${escapeHtml(code)}', this.value)"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                        ${genSheetOptions(parent.filename, parent.sheet_name)}
+                    </select>
+                </td>
+                <td class="py-1.5 px-2 align-middle">
+                    <select id="col-parent-code" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                        ${genColOptions(sampleRows, (parent.detected_columns || {}).account_code, 'Account Code')}
+                    </select>
+                </td>
+                <td class="py-1.5 px-2 align-middle">
+                    <select id="col-parent-debit" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                        ${genColOptions(sampleRows, (parent.detected_columns || {}).debit || (parent.detected_columns || {}).amount, 'Debit')}
+                    </select>
+                </td>
+                <td class="py-1.5 px-2 align-middle">
+                    <select id="col-parent-credit" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                        ${genColOptions(sampleRows, (parent.detected_columns || {}).credit, 'Credit')}
+                    </select>
+                </td>
+                <td class="py-1.5 px-2 align-middle">
+                    <select id="scale-parent" onchange="updateEntityScaleInstruction('${escapeHtml(code)}', this.value)"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                        ${genScaleOptions(parent.scale_multiplier)}
+                    </select>
+                </td>
+                <td class="py-1.5 px-2 text-center align-middle">
+                    <div class="flex items-center justify-center space-x-1">
+                        <button type="button" onclick="toggleSamplePreview('drawer-parent')"
+                            class="w-6 h-6 rounded hover:bg-slate-200 text-slate-600 hover:text-kpmg-blue inline-flex items-center justify-center transition cursor-pointer"
+                            title="Toggle Sample Data & Scale Details">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
                         </button>
-                        <span class="font-mono text-xs font-bold text-slate-700">${fxConfPct}%</span>
-                    ` : `
-                        <button type="button" onclick="openSingleUploadModal('FX_RATES', 'Foreign Exchange Rates')"
-                            class="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-[11px] transition btn-tactile cursor-pointer">
-                            Upload FX Rates
+                        <span class="text-[10px] font-mono text-slate-500 font-bold">${confPct}%</span>
+                    </div>
+                </td>
+            </tr>
+
+            <!-- Parent Drawer Row -->
+            <tr id="drawer-parent" class="hidden bg-slate-50/80 border-b border-slate-200">
+                <td colspan="9" class="p-3 font-sans">
+                    ${hasDateMismatch ? `
+                        <div class="mb-2 p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center space-x-2">
+                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            <span><strong>Period Discrepancy:</strong> File contains data for <strong>${escapeHtml(parent.detected_period || '')}</strong>, but active consolidation run cutoff is <strong>${escapeHtml(state.target_period || '31-03-2024')}</strong>. This data belongs to a different reporting period.</span>
+                        </div>
+                    ` : ''}
+                    <div class="text-[11px] text-indigo-900 font-medium mb-1.5 flex items-center space-x-1.5">
+                        <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                        <span>Scale Normalization: <strong id="scale-instr-${escapeHtml(code)}">${escapeHtml(parent.scale_instruction || 'Reported in exact absolute currency (multiplier 1.0)')}</strong></span>
+                    </div>
+                    ${sampleRows.length > 0 ? `
+                        <div class="overflow-x-auto text-[10px] font-mono border border-slate-200 rounded bg-white max-h-36">
+                            <table class="w-full text-left">
+                                <tbody>
+                                    ${sampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : '<div class="text-[11px] text-slate-400">No raw rows extracted yet.</div>'}
+                </td>
+            </tr>
+        `;
+    }
+
+    // 2. RENDER SUBSIDIARY ROWS
+    subs.forEach((sub, sIdx) => {
+        const sampleRows = sub.sample_rows || [];
+        const isMapped = !!sub.filename;
+        const confPct = Math.round((sub.confidence || 1.0) * 100);
+        const code = sub.entity_code;
+        const hasDateMismatch = sub.date_status === 'MISMATCH';
+        const hasMissingCode = !(sub.detected_columns && sub.detected_columns.account_code);
+        const isFlagged = !isMapped || hasDateMismatch || hasMissingCode;
+        const rowStatus = isFlagged ? 'flagged' : 'ready';
+
+        const bullets = [];
+        if (hasDateMismatch) {
+            bullets.push(`<li class="text-rose-400 font-semibold">• Date Discrepancy: File has ${escapeHtml(sub.detected_period || '')} vs Cutoff ${escapeHtml(state.target_period || '')}</li>`);
+        } else {
+            bullets.push(`<li class="text-emerald-400">• Period: Aligned with ${escapeHtml(state.target_period || '')}</li>`);
+        }
+        if (!isMapped) {
+            bullets.push(`<li class="text-rose-400 font-semibold">• File Status: No trial balance sheet assigned</li>`);
+        } else {
+            bullets.push(`<li class="text-slate-300">• File: <span class="font-mono text-slate-200">${escapeHtml(sub.filename)}</span></li>`);
+            bullets.push(`<li class="text-slate-300">• Sheet: <span class="font-mono text-slate-200">${escapeHtml(sub.sheet_name || 'Default')}</span></li>`);
+        }
+        bullets.push(`<li class="text-indigo-300">• Scale: ${escapeHtml(sub.scale_instruction || 'Reported in exact absolute currency')}</li>`);
+        bullets.push(`<li class="text-slate-300">• Mapped: Code: ${escapeHtml((sub.detected_columns || {}).account_code || 'Auto')}, Debit/Net: ${escapeHtml((sub.detected_columns || {}).debit || (sub.detected_columns || {}).amount || 'Auto')}, Credit: ${escapeHtml((sub.detected_columns || {}).credit || 'None')}</li>`);
+        bullets.push(`<li class="text-slate-400">• Method: ${confPct}% Confidence (${escapeHtml(sub.method || 'Deterministic')})</li>`);
+
+        const statusIcon = isFlagged
+            ? `<span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</span>`
+            : `<span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</span>`;
+
+        html += `
+            <tr data-approval-row data-status="${rowStatus}" data-search="${escapeHtml((sub.entity_name || code) + ' ' + code)}" data-entity-code="${escapeHtml(code)}" class="hover:bg-slate-50/70 transition">
+                <td class="py-1.5 px-2 text-center align-middle">
+                    <div class="group relative inline-flex items-center justify-center cursor-help">
+                        ${statusIcon}
+                        <!-- Rich Tooltip -->
+                        <div class="pointer-events-none absolute left-7 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-72 p-2.5 bg-slate-900/95 backdrop-blur-md text-white text-[11px] rounded-lg shadow-xl border border-slate-700/60 font-sans">
+                            <div class="font-bold text-xs border-b border-slate-700 pb-1 mb-1.5 flex items-center justify-between">
+                                <span class="truncate pr-1">${escapeHtml(sub.entity_name || code)}</span>
+                                <span class="font-mono text-[9px] px-1 py-0.2 rounded ${isFlagged ? 'bg-rose-900/80 text-rose-200' : 'bg-emerald-900/80 text-emerald-200'}">${isFlagged ? 'FLAGGED' : 'READY'}</span>
+                            </div>
+                            <ul class="space-y-1">
+                                ${bullets.join('')}
+                            </ul>
+                        </div>
+                    </div>
+                </td>
+                <td class="py-1.5 px-2.5 align-middle">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-6 h-6 rounded bg-slate-700 text-white flex items-center justify-center font-bold text-[10px]">S${sIdx + 1}</div>
+                        <div>
+                            <div class="flex items-center space-x-1.5">
+                                <span class="font-bold text-slate-800 text-xs">${escapeHtml(sub.entity_name || code)}</span>
+                                <span class="px-1.5 py-0.2 rounded text-[9px] bg-slate-100 text-slate-600 font-semibold">${sub.holding_pct != null ? `${sub.holding_pct}%` : (sub.holding_percentage != null ? `${Math.round(sub.holding_percentage * 100)}%` : '100%')}</span>
+                                <span class="text-[10px] text-slate-400 font-mono">(${escapeHtml(code)})</span>
+                            </div>
+                            <div class="text-[10px] text-slate-500 font-mono">Currency: <strong class="text-slate-700">${escapeHtml(sub.currency || 'INR')}</strong></div>
+                        </div>
+                    </div>
+                </td>
+                <td class="py-1.5 px-2 align-middle">
+                    <select onchange="updateEntityFileMapping('${escapeHtml(code)}', this.value)"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                        ${genFileOptions(sub.filename)}
+                    </select>
+                </td>
+                <td class="py-1.5 px-2 align-middle">
+                    <select onchange="updateEntitySheetMapping('${escapeHtml(code)}', this.value)"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                        ${genSheetOptions(sub.filename, sub.sheet_name)}
+                    </select>
+                </td>
+                <td class="py-1.5 px-2 align-middle">
+                    <select id="col-${escapeHtml(code)}-code" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                        ${genColOptions(sampleRows, (sub.detected_columns || {}).account_code, 'Account Code')}
+                    </select>
+                </td>
+                <td class="py-1.5 px-2 align-middle">
+                    <select id="col-${escapeHtml(code)}-debit" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                        ${genColOptions(sampleRows, (sub.detected_columns || {}).debit || (sub.detected_columns || {}).amount, 'Debit')}
+                    </select>
+                </td>
+                <td class="py-1.5 px-2 align-middle">
+                    <select id="col-${escapeHtml(code)}-credit" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                        ${genColOptions(sampleRows, (sub.detected_columns || {}).credit, 'Credit')}
+                    </select>
+                </td>
+                <td class="py-1.5 px-2 align-middle">
+                    <select id="scale-${escapeHtml(code)}" onchange="updateEntityScaleInstruction('${escapeHtml(code)}', this.value)"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                        ${genScaleOptions(sub.scale_multiplier)}
+                    </select>
+                </td>
+                <td class="py-1.5 px-2 text-center align-middle">
+                    <div class="flex items-center justify-center space-x-1">
+                        <button type="button" onclick="toggleSamplePreview('drawer-${escapeHtml(code)}')"
+                            class="w-6 h-6 rounded hover:bg-slate-200 text-slate-600 hover:text-kpmg-blue inline-flex items-center justify-center transition cursor-pointer"
+                            title="Toggle Sample Data & Scale Details">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
                         </button>
-                    `}
-                </div>
-            </div>
+                        <span class="text-[10px] font-mono text-slate-500 font-bold">${confPct}%</span>
+                    </div>
+                </td>
+            </tr>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 text-xs">
-                <div>
-                    <label class="block font-semibold text-slate-700 mb-1">Assigned File</label>
-                    <select onchange="updateEntityFileMapping('FX_RATES', this.value)"
-                        class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                        ${genFileOptions(fx.filename)}
-                    </select>
-                </div>
-                <div>
-                    <label class="block font-semibold text-slate-700 mb-1">Worksheet</label>
-                    <select onchange="updateEntitySheetMapping('FX_RATES', this.value)"
-                        class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                        ${genSheetOptions(fx.filename, fx.sheet_name)}
-                    </select>
-                </div>
-                <div>
-                    <label class="block font-semibold text-slate-700 mb-1">Closing Rate Col</label>
-                    <select id="col-fx-closing" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                        ${genColOptions(fxSampleRows, (fx.detected_columns || {}).closing_rate, 'Closing Rate')}
-                    </select>
-                </div>
-                <div>
-                    <label class="block font-semibold text-slate-700 mb-1">Average Rate Col</label>
-                    <select id="col-fx-average" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                        ${genColOptions(fxSampleRows, (fx.detected_columns || {}).average_rate, 'Average Rate')}
-                    </select>
-                </div>
-                <div>
-                    <label class="block font-semibold text-slate-700 mb-1">Swap Rate Col</label>
-                    <select id="col-fx-swap" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                        ${genColOptions(fxSampleRows, (fx.detected_columns || {}).swap_rate, 'Swap Rate (Optional)')}
-                    </select>
-                </div>
-            </div>
+            <!-- Subsidiary Drawer Row -->
+            <tr id="drawer-${escapeHtml(code)}" class="hidden bg-slate-50/80 border-b border-slate-200">
+                <td colspan="9" class="p-3 font-sans">
+                    ${hasDateMismatch ? `
+                        <div class="mb-2 p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center space-x-2">
+                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            <span><strong>Period Discrepancy:</strong> File contains data for <strong>${escapeHtml(sub.detected_period || '')}</strong>, but active consolidation run cutoff is <strong>${escapeHtml(state.target_period || '31-03-2024')}</strong>. This data belongs to a different reporting period.</span>
+                        </div>
+                    ` : ''}
+                    <div class="text-[11px] text-indigo-900 font-medium mb-1.5 flex items-center space-x-1.5">
+                        <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                        <span>Scale Normalization: <strong id="scale-instr-${escapeHtml(code)}">${escapeHtml(sub.scale_instruction || 'Reported in exact absolute currency (multiplier 1.0)')}</strong></span>
+                    </div>
+                    ${sampleRows.length > 0 ? `
+                        <div class="overflow-x-auto text-[10px] font-mono border border-slate-200 rounded bg-white max-h-36">
+                            <table class="w-full text-left">
+                                <tbody>
+                                    ${sampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : '<div class="text-[11px] text-slate-400">No raw rows extracted yet.</div>'}
+                </td>
+            </tr>
+        `;
+    });
 
-            ${fxSampleRows.length > 0 ? `
-                <div id="fx-sample-preview" class="hidden mt-2 p-2.5 rounded-lg bg-indigo-50/40 border border-indigo-200 overflow-x-auto text-[11px] font-mono max-h-44">
-                    <div class="text-[10px] uppercase font-bold text-indigo-900 mb-1 tracking-wider">Top 5 Extracted FX Rows (Raw):</div>
-                    <table class="w-full text-left">
-                        <tbody>
-                            ${fxSampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-indigo-100/60' : 'border-b border-indigo-100/40'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
-                        </tbody>
-                    </table>
+    // 3. RENDER MANDATORY FX RATES ROW
+    const fxSampleRows = fx.sample_rows || [];
+    const fxConfPct = Math.round((fx.confidence || 1.0) * 100);
+    const fxRowStatus = isFxMapped ? 'ready' : 'flagged';
+
+    const fxBullets = [
+        isFxMapped
+            ? `<li class="text-emerald-400">• FX Status: Exchange rate table detected & mapped</li>`
+            : `<li class="text-rose-400 font-semibold">• FX Status: Mandatory FX rates file missing</li>`,
+        `<li class="text-slate-300">• File: <span class="font-mono text-slate-200">${escapeHtml(fx.filename || 'None')}</span></li>`,
+        `<li class="text-slate-300">• Sheet: <span class="font-mono text-slate-200">${escapeHtml(fx.sheet_name || 'Default')}</span></li>`,
+        `<li class="text-indigo-300">• Currency Pairs: Used in Step 3 for Translation & CTA</li>`,
+        `<li class="text-slate-400">• Classification: ${fxConfPct}% Confidence</li>`
+    ];
+
+    const fxStatusIcon = isFxMapped
+        ? `<span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</span>`
+        : `<span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</span>`;
+
+    html += `
+        <tr data-approval-row data-status="${fxRowStatus}" data-search="foreign exchange rates fx fx_rates" data-entity-code="FX_RATES" class="bg-indigo-50/40 hover:bg-indigo-50/70 transition border-t-2 border-indigo-200">
+            <td class="py-1.5 px-2 text-center align-middle">
+                <div class="group relative inline-flex items-center justify-center cursor-help">
+                    ${fxStatusIcon}
+                    <div class="pointer-events-none absolute left-7 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-72 p-2.5 bg-slate-900/95 backdrop-blur-md text-white text-[11px] rounded-lg shadow-xl border border-slate-700/60 font-sans">
+                        <div class="font-bold text-xs border-b border-slate-700 pb-1 mb-1.5 flex items-center justify-between">
+                            <span>FX Rates Table</span>
+                            <span class="font-mono text-[9px] px-1 py-0.2 rounded ${isFxMapped ? 'bg-emerald-900/80 text-emerald-200' : 'bg-rose-900/80 text-rose-200'}">${isFxMapped ? 'VERIFIED' : 'MANDATORY'}</span>
+                        </div>
+                        <ul class="space-y-1">
+                            ${fxBullets.join('')}
+                        </ul>
+                    </div>
                 </div>
-            ` : ''}
-        </div>
+            </td>
+            <td class="py-1.5 px-2.5 align-middle">
+                <div class="flex items-center space-x-2">
+                    <div class="w-6 h-6 rounded bg-indigo-700 text-white flex items-center justify-center font-bold text-[10px]">FX</div>
+                    <div>
+                        <div class="flex items-center space-x-1.5">
+                            <span class="font-bold text-indigo-950 text-xs">Foreign Exchange Rates</span>
+                            <span class="px-1.5 py-0.2 rounded text-[9px] bg-indigo-100 text-indigo-800 font-semibold border border-indigo-200">MANDATORY</span>
+                        </div>
+                        <div class="text-[10px] text-slate-500 font-mono">Closing / Average / Swap Rates</div>
+                    </div>
+                </div>
+            </td>
+            <td class="py-1.5 px-2 align-middle">
+                <select onchange="updateEntityFileMapping('FX_RATES', this.value)"
+                    class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    ${genFileOptions(fx.filename)}
+                </select>
+            </td>
+            <td class="py-1.5 px-2 align-middle">
+                <select onchange="updateEntitySheetMapping('FX_RATES', this.value)"
+                    class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    ${genSheetOptions(fx.filename, fx.sheet_name)}
+                </select>
+            </td>
+            <td class="py-1.5 px-2 align-middle">
+                <select id="col-fx-closing" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    ${genColOptions(fxSampleRows, (fx.detected_columns || {}).closing_rate, 'Closing Rate')}
+                </select>
+            </td>
+            <td class="py-1.5 px-2 align-middle">
+                <select id="col-fx-average" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    ${genColOptions(fxSampleRows, (fx.detected_columns || {}).average_rate, 'Average Rate')}
+                </select>
+            </td>
+            <td class="py-1.5 px-2 align-middle">
+                <select id="col-fx-swap" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    ${genColOptions(fxSampleRows, (fx.detected_columns || {}).swap_rate, 'Swap Rate (Optional)')}
+                </select>
+            </td>
+            <td class="py-1.5 px-2 text-center align-middle font-sans text-slate-400 italic text-[10px]">
+                N/A (Rates)
+            </td>
+            <td class="py-1.5 px-2 text-center align-middle">
+                <div class="flex items-center justify-center space-x-1">
+                    <button type="button" onclick="toggleSamplePreview('drawer-FX_RATES')"
+                        class="w-6 h-6 rounded hover:bg-indigo-100 text-indigo-700 inline-flex items-center justify-center transition cursor-pointer"
+                        title="Toggle FX Rates Table Preview">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                    </button>
+                    <span class="text-[10px] font-mono text-slate-500 font-bold">${fxConfPct}%</span>
+                </div>
+            </td>
+        </tr>
+
+        <!-- FX Drawer Row -->
+        <tr id="drawer-FX_RATES" class="hidden bg-indigo-50/30 border-b border-indigo-100">
+            <td colspan="9" class="p-3 font-sans">
+                <div class="text-[10px] uppercase font-bold text-indigo-950 mb-1 tracking-wider">Top Extracted FX Rates Rows:</div>
+                ${fxSampleRows.length > 0 ? `
+                    <div class="overflow-x-auto text-[10px] font-mono border border-indigo-200 rounded bg-white max-h-36">
+                        <table class="w-full text-left">
+                            <tbody>
+                                ${fxSampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-indigo-100/60' : 'border-b border-indigo-100/40'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                ` : '<div class="text-[11px] text-slate-400">No raw FX rows extracted yet.</div>'}
+            </td>
+        </tr>
+    `;
+
+    // Empty state row for filter/search
+    html += `
+                        <tr id="approval-grid-empty" class="hidden">
+                            <td colspan="9" class="p-8 text-center text-slate-400 font-sans">
+                                No entities match the active filter or search query.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
     `;
 
     // 4. IGNORED / EXTRA SHEETS TRAY
-    const unassigned = state.unassigned_sheets || state.unassigned_items || [];
     if (unassigned.length > 0) {
-        cardsHtml += `
-            <div class="border border-slate-200 rounded-xl overflow-hidden bg-white">
+        html += `
+            <div class="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
                 <button type="button" onclick="toggleSamplePreview('unassigned-sheets-tray')"
-                    class="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/80 flex items-center justify-between text-xs font-semibold text-slate-700 transition cursor-pointer">
+                    class="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/80 flex items-center justify-between text-xs font-semibold text-slate-700 transition cursor-pointer">
                     <div class="flex items-center space-x-2">
-                        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                         </svg>
                         <span>Ignored / Extra Sheets (${unassigned.length} sheets)</span>
-                        <span class="text-[11px] font-normal text-slate-500">— excluded from consolidation perimeter</span>
+                        <span class="text-[10px] font-normal text-slate-500">— excluded from consolidation perimeter</span>
                     </div>
-                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
-                <div id="unassigned-sheets-tray" class="hidden p-4 bg-white border-t border-slate-200 space-y-2 text-xs">
+                <div id="unassigned-sheets-tray" class="hidden p-3 bg-white border-t border-slate-200 space-y-2 text-xs">
                     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                         ${unassigned.map(u => `
-                            <div class="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between">
+                            <div class="p-2 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between">
                                 <div class="truncate pr-2">
                                     <div class="font-mono font-semibold text-slate-700 truncate text-[11px]">${escapeHtml(u.sheet_name || 'Sheet')}</div>
                                     <div class="text-[10px] text-slate-400 truncate">${escapeHtml(u.filename)}</div>
                                 </div>
-                                <span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-200 text-slate-600 font-semibold">Ignored</span>
+                                <span class="px-1.5 py-0.5 rounded text-[9px] bg-slate-200 text-slate-600 font-semibold">Ignored</span>
                             </div>
                         `).join('')}
                     </div>
@@ -2815,16 +3014,20 @@ function renderPerimeterApprovalModalContent(state) {
         `;
     }
 
-    container.innerHTML = cardsHtml;
+    html += `</div>`;
+    container.innerHTML = html;
+
+    if (approvalActiveFilter !== 'ALL' || approvalSearchQuery !== '') {
+        filterApprovalGrid(approvalActiveFilter, approvalSearchQuery);
+    }
 
     // Update footer status
     if (footerStatus) {
-        const totalEntities = (parent ? 1 : 0) + subs.length;
-        const mappedEntities = (parent && parent.filename ? 1 : 0) + subs.filter(s => s.filename).length;
         const fxStatusText = isFxMapped ? 'FX Rates Verified' : 'FX Rates Missing';
         footerStatus.innerHTML = `<span class="font-semibold text-slate-700">${mappedEntities}/${totalEntities} Entities Mapped</span> • <span class="${isFxMapped ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}">${fxStatusText}</span>`;
     }
 }
+
 
 function updateEntityScaleInstruction(entityCode, scaleValue) {
     const mult = parseFloat(scaleValue) || 1.0;

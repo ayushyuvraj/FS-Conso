@@ -98,6 +98,20 @@ body {
     table-layout: auto;
 }
 
+/* High-Density Perimeter Review Ledger Table */
+.dense-fin-table th {
+    padding: 6px 10px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.dense-fin-table td {
+    padding: 6px 10px;
+    font-size: 11px;
+    vertical-align: middle;
+}
+
 .fin-table th {
     background-color: #F8FAFC;
     color: #475569;

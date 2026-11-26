@@ -6,6 +6,37 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-26 17:00] Milestone: High-Density Financial Ledger Grid for Ingestion Review Modal (Option 1)
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Option 1 Implementation (High-Density Financial Ledger Grid)**:
+     - Replaced the tall, vertically stacked perimeter approval cards in `#modal-perimeter-approval` with an institutional, high-density financial table (~36px row height) matching the Company Profile and Audit Runs tables.
+     - Scales smoothly from small groups to 100+ subsidiary perimeters without endless vertical scrolling.
+     - Sticky header with 9 structured columns: `Status`, `Entity & Role`, `Assigned File`, `Worksheet`, `Account Code Col`, `Debit / Net Col`, `Credit Col`, `Scale / Denom`, and `View`.
+  2. **Minimal Surface Clutter with Rich Diagnostic Hover Tooltips**:
+     - Surface displays crisp status icons (Green ✓ for Ready, Red ✕ for Date Mismatch or Missing File, Amber ⚠️ for Review Mapping).
+     - Hovering on any status indicator activates a KPMG Obsidian-lacquer (`#0B0F17`) floating card with structured diagnostic bullets:
+       • Period alignment / discrepancy details (`File has FY 2024-25 vs Cutoff 31-03-2024`).
+       • File & worksheet assignments.
+       • Scale normalization multiplier.
+       • Column mappings (Code, Debit, Credit).
+       • Engine confidence score and classification method.
+  3. **Real-Time KPI Strip, Filter Tabs & Fast Search**:
+     - Summary bar displays live perimeter counts: `4/4 Entities Mapped`, `1 Flagged`, and `FX Ready/Missing`.
+     - Instant filter tabs: `All`, `Flagged`, and `Ready`.
+     - Instant search box filtering entities by name or code without resetting dropdown states or selections.
+  4. **Preserved Micro-Drawer Preview & FX Table Row**:
+     - Preserved collapsible preview drawer rows (toggled via eye icon `👁`) showing raw extracted 5 sample rows and scale multipliers.
+     - Dedicated Foreign Exchange Rates row with purple/indigo styling and explicit closing, average, and swap rate dropdowns (`col-fx-closing`, `col-fx-average`, `col-fx-swap`).
+     - Preserved ignored/extra sheets tray at the bottom for unassigned sheets (e.g. `Acquisition`).
+     - Preserved all critical DOM IDs required by `confirmPerimeterApprovalModal`.
+  5. **Verification & Hardening**:
+     - Test Suite: **80/80 PASSED (100%)** in 9.14s.
+     - JavaScript syntax: `node -c "fs_conso/web/static/js/app.js"` exited 0.
+     - CSS: Added `.dense-fin-table` rules with tabular numeric figures and proper vertical alignment.
+     - Modal container expanded to `max-w-6xl` for seamless horizontal spacing.
+
+
 ### [2026-11-26 16:20] Milestone: Strict Fiscal Year Date Discrepancy Gate, Multi-Sheet Precedence & Review Mappings Action
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:
