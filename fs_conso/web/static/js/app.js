@@ -3682,11 +3682,67 @@ async function runCOAMappingNow() {
     }
 }
 
+function getMappingsForEntity(entityCode) {
+    if (!entityCode) return [];
+    const codeUpper = String(entityCode).trim().toUpperCase();
+    const allMappings = (pipelineData && pipelineData.mapping_decisions) ? pipelineData.mapping_decisions : [];
+
+    // Strict match on entity_code
+    let matches = allMappings.filter(m => m.entity_code && String(m.entity_code).trim().toUpperCase() === codeUpper);
+
+    // Find raw TB for this entity
+    const rawTbs = (pipelineData && pipelineData.raw_tbs) ? pipelineData.raw_tbs : [];
+    const rawTb = rawTbs.find(tb => (tb.entity_code || '').trim().toUpperCase() === codeUpper);
+
+    // Fallback: If no mappings directly tagged with this entity_code, extract directly from raw_tbs
+    if (matches.length === 0 && rawTb && rawTb.rows && rawTb.rows.length > 0) {
+        matches = rawTb.rows.map(r => ({
+            entity_code: entityCode,
+            local_code: r.account_code,
+            local_description: r.account_description,
+            currency: rawTb.currency || 'INR',
+            amount: (r.amount !== null && r.amount !== undefined && r.amount !== 0) ? r.amount : ((r.debit || 0) - (r.credit || 0)),
+            group_code: '999999',
+            group_description: `Unmapped: ${r.account_description}`,
+            level_0_code: null,
+            level_0_name: null,
+            confidence: 0.0,
+            needs_review: true,
+            method: 'RAW_TB_IMPORT'
+        }));
+    } else if (matches.length > 0 && rawTb && rawTb.rows && rawTb.rows.length > 0) {
+        // Enforce that amounts and currencies from raw TB are preserved if mapping has missing/zero amount
+        const rawRowMap = new Map();
+        rawTb.rows.forEach(r => {
+            if (r.account_code) rawRowMap.set(String(r.account_code).trim(), r);
+        });
+        matches.forEach(m => {
+            if (m.amount === null || m.amount === undefined || m.amount === 0) {
+                const rawR = rawRowMap.get(String(m.local_code).trim());
+                if (rawR) {
+                    const rawAmt = (rawR.amount !== null && rawR.amount !== undefined && rawR.amount !== 0)
+                        ? rawR.amount
+                        : ((rawR.debit || 0) - (rawR.credit || 0));
+                    if (rawAmt !== 0) m.amount = rawAmt;
+                }
+            }
+            if (!m.currency && rawTb.currency) {
+                m.currency = rawTb.currency;
+            }
+        });
+    }
+    return matches;
+}
+
 function onStep2ConsolidateClick() {
-    const mappings = (pipelineData && pipelineData.mapping_decisions) ? pipelineData.mapping_decisions : [];
-    const pending = mappings.filter(m => m.needs_review);
-    if (pending.length > 0) {
-        showToast("Review Required", `Cannot proceed: ${pending.length} account(s) require review across entity tabs.`, "warning");
+    const tabs = getStep2EntityTabs();
+    let totalPending = 0;
+    tabs.forEach(t => {
+        const ms = getMappingsForEntity(t.entity_code);
+        totalPending += ms.filter(m => m.needs_review).length;
+    });
+    if (totalPending > 0) {
+        showToast("Review Required", `Cannot proceed: ${totalPending} account(s) require review across entity tabs.`, "warning");
         return;
     }
     // Proceed to Step 3 and execute consolidation
@@ -3714,44 +3770,43 @@ function renderStep2(el) {
     }
 
     const currentTab = tabs.find(t => t.entity_code === activeStep2Entity) || tabs[0];
-    const allMappings = pipelineData.mapping_decisions || [];
 
     // Global review count across ALL entities
-    const totalPendingAllEntities = allMappings.filter(m => m.needs_review).length;
-    const canConsolidate = totalPendingAllEntities === 0 && allMappings.length > 0;
+    let totalPendingAllEntities = 0;
+    let totalMappedAccounts = 0;
+    tabs.forEach(t => {
+        const ms = getMappingsForEntity(t.entity_code);
+        totalMappedAccounts += ms.length;
+        totalPendingAllEntities += ms.filter(m => m.needs_review).length;
+    });
+    const canConsolidate = totalPendingAllEntities === 0 && totalMappedAccounts > 0;
 
     // Entity tabs HTML
     const tabsHtml = tabs.map(t => {
         const isActive = t.entity_code === activeStep2Entity;
-        const entMappings = allMappings.filter(m => !m.entity_code || m.entity_code.toUpperCase() === t.entity_code.toUpperCase());
+        const entMappings = getMappingsForEntity(t.entity_code);
         const pendingInTab = entMappings.filter(m => m.needs_review).length;
         const roleLabel = t.is_parent ? 'Parent' : 'Subsidiary';
 
         return `
             <button onclick="switchStep2EntityTab('${escapeHtml(t.entity_code)}')"
-                class="px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-2 transition cursor-pointer select-none shrink-0 ${
+                class="px-4 py-2 rounded-lg text-xs font-semibold flex items-center space-x-2 transition cursor-pointer select-none shrink-0 ${
                     isActive
-                        ? 'bg-kpmg-blue text-white shadow-xs'
+                        ? 'bg-kpmg-blue text-white shadow-xs ring-2 ring-kpmg-blue/20'
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200/80 hover:text-kpmg-navy'
                 }">
                 <span>${escapeHtml(t.entity_name || t.entity_code)}</span>
                 <span class="text-[10px] font-mono opacity-80">(${roleLabel})</span>
                 ${pendingInTab > 0
-                    ? `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="${pendingInTab} review(s) pending"></span>`
-                    : (entMappings.length > 0 ? `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>` : '')
+                    ? `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-1" title="${pendingInTab} review(s) pending"></span>`
+                    : (entMappings.length > 0 ? `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1"></span>` : '')
                 }
             </button>
         `;
     }).join("");
 
-    // Entity details
-    const currentEntityCode = currentTab.entity_code;
-    const currentEntityMappings = allMappings.filter(m => !m.entity_code || m.entity_code.toUpperCase() === currentEntityCode.toUpperCase());
-    const currentEntityPendingCount = currentEntityMappings.filter(m => m.needs_review).length;
-    const currentEntityCurrency = currentTab.currency || 'INR';
-
     el.innerHTML = `
-        <div class="space-y-3.5 w-full">
+        <div class="space-y-3 w-full">
             <!-- 1. Header Toolbar -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-kpmg-border pb-3">
                 <div>
@@ -3788,33 +3843,8 @@ function renderStep2(el) {
                 ${tabsHtml}
             </div>
 
-            <!-- 3. Concerned Entity Header Banner -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-                <div class="flex flex-wrap items-center gap-2 text-slate-700">
-                    <span class="font-bold text-kpmg-navy text-sm">${escapeHtml(currentTab.entity_name || currentTab.entity_code)}</span>
-                    <span class="text-slate-300">•</span>
-                    <span class="font-mono font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">${escapeHtml(currentTab.entity_code)}</span>
-                    <span class="text-slate-300">•</span>
-                    <span class="text-slate-600 font-medium">Currency: <strong class="text-kpmg-blue font-mono font-bold">${escapeHtml(currentEntityCurrency)}</strong></span>
-                    <span class="text-slate-300">•</span>
-                    <span class="text-slate-600 font-medium">${currentEntityMappings.length} Accounts</span>
-                </div>
-                <div class="mt-2 sm:mt-0 flex items-center space-x-2">
-                    ${currentEntityPendingCount > 0
-                        ? `<span class="inline-flex items-center px-2.5 py-1 rounded text-[11px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
-                               <svg class="w-3.5 h-3.5 mr-1 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                               ${currentEntityPendingCount} Account(s) Require Review
-                           </span>`
-                        : `<span class="inline-flex items-center px-2.5 py-1 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                               <svg class="w-3.5 h-3.5 mr-1 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                               All Accounts Mapped & Verified
-                           </span>`
-                    }
-                </div>
-            </div>
-
-            <!-- 4. High-Density Financial Ledger Table -->
-            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-320px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
+            <!-- 3. High-Density Financial Ledger Table -->
+            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-270px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
                 <table class="fin-table">
                     <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
                         <tr>
@@ -3845,16 +3875,15 @@ function renderStep2TableRows(tbody) {
     if (!currentTab) return;
 
     const currentEntityCode = currentTab.entity_code;
-    const allMappings = pipelineData.mapping_decisions || [];
-    let entityMappings = allMappings.filter(m => !m.entity_code || m.entity_code.toUpperCase() === currentEntityCode.toUpperCase());
+    let entityMappings = getMappingsForEntity(currentEntityCode);
 
     // Search filter
     if (step2AccountSearchQuery) {
         entityMappings = entityMappings.filter(m =>
-            (m.local_code && m.local_code.toLowerCase().includes(step2AccountSearchQuery)) ||
-            (m.local_description && m.local_description.toLowerCase().includes(step2AccountSearchQuery)) ||
-            (m.group_code && m.group_code.toLowerCase().includes(step2AccountSearchQuery)) ||
-            (m.level_0_name && m.level_0_name.toLowerCase().includes(step2AccountSearchQuery))
+            (m.local_code && String(m.local_code).toLowerCase().includes(step2AccountSearchQuery)) ||
+            (m.local_description && String(m.local_description).toLowerCase().includes(step2AccountSearchQuery)) ||
+            (m.group_code && String(m.group_code).toLowerCase().includes(step2AccountSearchQuery)) ||
+            (m.level_0_name && String(m.level_0_name).toLowerCase().includes(step2AccountSearchQuery))
         );
     }
 
@@ -4062,23 +4091,36 @@ async function selectL0Option(groupCode, l0Name) {
         const data = await res.json();
         if (res.ok && data.success) {
             // Update decision locally in pipelineData
-            const d = (pipelineData.mapping_decisions || []).find(m =>
-                (!m.entity_code || m.entity_code.toUpperCase() === entityCode.toUpperCase()) && m.local_code === localCode
+            if (!pipelineData.mapping_decisions) pipelineData.mapping_decisions = [];
+            const codeUpper = String(entityCode).trim().toUpperCase();
+            let d = pipelineData.mapping_decisions.find(m =>
+                m.entity_code && String(m.entity_code).trim().toUpperCase() === codeUpper && String(m.local_code).trim() === String(localCode).trim()
             );
-            if (d) {
-                d.group_code = groupCode;
-                d.group_description = data.resolved_name || l0Name;
-                d.level_0_code = groupCode;
-                d.level_0_name = data.level_0_name || l0Name;
-                d.method = "USER_APPROVED_RULE";
-                d.confidence = 1.0;
-                d.needs_review = false;
+            if (!d) {
+                // If not found in mapping_decisions, construct from raw TB rows
+                const ms = getMappingsForEntity(entityCode);
+                const source = ms.find(m => String(m.local_code).trim() === String(localCode).trim());
+                d = {
+                    entity_code: entityCode,
+                    local_code: localCode,
+                    local_description: source ? source.local_description : localCode,
+                    currency: source ? source.currency : 'INR',
+                    amount: source ? source.amount : 0.0
+                };
+                pipelineData.mapping_decisions.push(d);
             }
+            d.group_code = groupCode;
+            d.group_description = data.resolved_name || l0Name;
+            d.level_0_code = groupCode;
+            d.level_0_name = data.level_0_name || l0Name;
+            d.method = "USER_APPROVED_RULE";
+            d.confidence = 1.0;
+            d.needs_review = false;
 
             // Also check hitl_pending_reviews in appStatus
             if (appStatus && appStatus.hitl_pending_reviews) {
                 appStatus.hitl_pending_reviews = appStatus.hitl_pending_reviews.filter(r =>
-                    r.local_code !== localCode
+                    !(String(r.local_code).trim() === String(localCode).trim() && (!r.entity_code || String(r.entity_code).trim().toUpperCase() === codeUpper))
                 );
             }
 

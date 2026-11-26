@@ -1586,6 +1586,23 @@ async def get_pipeline_data():
             "is_parent": True
         })
 
+    # Auto-heal legacy or missing mapping decisions so entity_code and amounts are strictly populated
+    if st.raw_tbs:
+        needs_heal = False
+        if not st.mapping_decisions:
+            needs_heal = True
+        elif any(getattr(d, "entity_code", None) is None or getattr(d, "amount", None) is None for d in st.mapping_decisions):
+            needs_heal = True
+        if needs_heal:
+            try:
+                from fs_conso.agent.nodes import mapper_node
+                st = mapper_node(st)
+                session.state = st
+                if session.active_company_id and session.active_run_id:
+                    run_manager.save_run_state(session.active_company_id, session.active_run_id, st)
+            except Exception as exc:
+                logging.getLogger(__name__).warning(f"Auto-heal mapping decisions failed: {exc}")
+
     safe_mapping_decisions = []
     for d in st.mapping_decisions:
         d_dict = d.dict()
@@ -1614,7 +1631,8 @@ async def get_pipeline_data():
                 "signed_sum": tb.total_signed_amount or round(tb.total_debit - tb.total_credit, 2),
                 "is_tallied": abs(tb.total_signed_amount or (tb.total_debit - tb.total_credit)) < 0.01,
                 "detected_columns": getattr(tb, "detected_columns", {}),
-                "detection_trace": getattr(tb, "detection_trace", "")
+                "detection_trace": getattr(tb, "detection_trace", ""),
+                "rows": [r.dict() for r in tb.rows]
             }
             for tb in st.raw_tbs
         ],

@@ -172,3 +172,127 @@ def test_pipeline_data_returns_level_0_choices_and_full_mappings(test_client):
         choice = data["level_0_choices"][0]
         assert "account_code" in choice
         assert "label" in choice
+
+
+def test_multi_entity_ingestion_and_strict_entity_partitioning():
+    """Verifies that multi-entity trial balances are strictly partitioned with non-zero amounts."""
+    from fs_conso.core.file_parser import FlexibleTBParser
+    from fs_conso.agent.state import ConsolidationState
+    from fs_conso.agent.nodes import mapper_node
+
+    sheets = {
+        "C2": "Parent TB",
+        "A": "Sub A TB",
+        "B": "Sub B TB",
+        "C": "Sub C TB"
+    }
+    raw_tbs = []
+    for code, sheet in sheets.items():
+        tb = FlexibleTBParser.parse_file(
+            file_path_or_bytes="inputs/uploads/c2_Two_Year_Consolidation_TBs_balanced-v2.xlsx",
+            filename="c2_Two_Year_Consolidation_TBs_balanced-v2.xlsx",
+            entity_code=code,
+            sheet_name=sheet,
+            period="31-Mar-2025"
+        )
+        raw_tbs.append(tb)
+
+    # Verify raw TB row counts matching exact ingested file
+    c2_tb = next(t for t in raw_tbs if t.entity_code == "C2")
+    assert len(c2_tb.rows) == 70
+    assert c2_tb.rows[0].account_code == "1002"
+    assert c2_tb.rows[0].amount == 15000.0  # Non-zero balance!
+
+    a_tb = next(t for t in raw_tbs if t.entity_code == "A")
+    assert len(a_tb.rows) == 80
+    assert a_tb.rows[0].account_code == "2002"
+    assert a_tb.rows[0].amount == 9750.0
+
+    b_tb = next(t for t in raw_tbs if t.entity_code == "B")
+    assert len(b_tb.rows) == 90
+    assert b_tb.rows[0].account_code == "3002"
+    assert b_tb.rows[0].amount == 12750.0
+
+    c_tb = next(t for t in raw_tbs if t.entity_code == "C")
+    assert len(c_tb.rows) == 100
+    assert c_tb.rows[0].account_code == "4002"
+    assert c_tb.rows[0].amount == 11250.0
+
+    # Run mapper_node
+    st = ConsolidationState(
+        company_id="c2",
+        period="31-Mar-2025",
+        raw_tbs=raw_tbs,
+        current_step=2
+    )
+    st = mapper_node(st)
+
+    # Verify mapping decisions count and per-entity isolation
+    assert len(st.mapping_decisions) == 340  # 70 + 80 + 90 + 100
+
+    c2_decisions = [d for d in st.mapping_decisions if d.entity_code == "C2"]
+    assert len(c2_decisions) == 70
+    assert all(d.entity_code == "C2" for d in c2_decisions)
+    assert all(d.amount is not None and abs(d.amount) > 0 for d in c2_decisions)
+    assert c2_decisions[0].local_code == "1002"
+
+    a_decisions = [d for d in st.mapping_decisions if d.entity_code == "A"]
+    assert len(a_decisions) == 80
+    assert all(d.entity_code == "A" for d in a_decisions)
+    assert all(d.amount is not None and abs(d.amount) > 0 for d in a_decisions)
+    assert a_decisions[0].local_code == "2002"
+
+    b_decisions = [d for d in st.mapping_decisions if d.entity_code == "B"]
+    assert len(b_decisions) == 90
+    assert all(d.entity_code == "B" for d in b_decisions)
+    assert all(d.amount is not None and abs(d.amount) > 0 for d in b_decisions)
+    assert b_decisions[0].local_code == "3002"
+
+    c_decisions = [d for d in st.mapping_decisions if d.entity_code == "C"]
+    assert len(c_decisions) == 100
+    assert all(d.entity_code == "C" for d in c_decisions)
+    assert all(d.amount is not None and abs(d.amount) > 0 for d in c_decisions)
+    assert c_decisions[0].local_code == "4002"
+
+
+def test_pipeline_data_auto_heals_missing_mapping_metadata(test_client):
+    """Verifies that /api/pipeline-data automatically heals legacy mapping decisions lacking entity_code or amount."""
+    from fs_conso.core.file_parser import FlexibleTBParser
+    from fs_conso.agent.state import ConsolidationState
+
+    session.initialize_company("c2", load_samples=False)
+
+    tb = FlexibleTBParser.parse_file(
+        file_path_or_bytes="inputs/uploads/c2_Two_Year_Consolidation_TBs_balanced-v2.xlsx",
+        filename="c2_Two_Year_Consolidation_TBs_balanced-v2.xlsx",
+        entity_code="C2",
+        sheet_name="Parent TB",
+        period="31-Mar-2025"
+    )
+    session.state.raw_tbs = [tb]
+    # Set legacy decisions with None entity_code and None amount
+    session.state.mapping_decisions = [
+        MappingDecision(
+            local_code="1002",
+            local_description="Cash and Bank",
+            group_code="120400",
+            group_description="Cash and Cash Equivalents",
+            method="LEGACY",
+            confidence=0.9,
+            needs_review=False,
+            entity_code=None,
+            amount=None,
+            level_0_name=None
+        )
+    ]
+
+    res = test_client.get("/api/pipeline-data")
+    assert res.status_code == 200
+    data = res.json()
+
+    # Must be auto-healed with entity_code and non-zero amount
+    mappings = data.get("mapping_decisions", [])
+    assert len(mappings) >= 1
+    healed = next(m for m in mappings if m.get("local_code") == "1002")
+    assert healed.get("entity_code") == "C2"
+    assert healed.get("amount") is not None and healed.get("amount") > 0

@@ -6,6 +6,33 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-26 19:40] Milestone: Step 2 Entity Tab Isolation, Non-Zero Amount Preservation & UI Clutter Cleanup
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Strict Entity Tab Partitioning (Zero Cross-Entity Queue Mixing)**:
+     - Fixed root cause where legacy or missing `entity_code` in mapping decisions triggered `!m.entity_code` fallback, causing all 340 accounts from all entities to be lumped into every tab.
+     - Implemented `getMappingsForEntity(entityCode)` with strict case-insensitive entity code matching.
+     - For Parent `Client 2` (`C2`), only its exact 70 accounts (`1002` to `10071`) from the ingested file's `Parent TB` sheet appear.
+     - For `Sub A` (`A`), only its exact 80 accounts (`2002`+) from `Sub A TB` appear.
+     - For `Sub B` (`B`), only its exact 90 accounts (`3002`+) from `Sub B TB` appear.
+     - For `Sub C` (`C`), only its exact 100 accounts (`4002`+) from `Sub C TB` appear.
+  2. **Non-Zero Ingested Amount Preservation**:
+     - Fixed root cause where single signed amount columns (e.g. `FY 2024-25 (Lakhs)`) produced `0.00` because `row.debit == row.credit` zeroed out the calculated signed amount.
+     - Hardened `FlexibleTBParser.parse_dataframe` and `COAMappingEngine.standardize_trial_balance` to prioritize `row.amount` whenever debit and credit match or when single amount column is ingested.
+     - In `fs_conso/web/app.py`, included `"rows": [r.dict() for r in tb.rows]` inside each item in `raw_tbs` returned by `/api/pipeline-data`.
+     - In `app.js`, cross-referenced `pipelineData.raw_tbs` rows to guarantee that amounts and currencies from the primary trial balance are never displayed as 0.00 if the raw TB contains non-zero balances.
+  3. **Auto-Healing of Legacy Run States**:
+     - Added auto-healing in `/api/pipeline-data` and `/api/status`: if an active run's mapping decisions lack `entity_code` or `amount`, the backend auto-invokes `mapper_node` to enrich all decisions and persists the healed state via `run_manager.save_run_state`.
+     - Updated `MappingDecision` model fields (`entity_code`, `currency`, `amount`) to `Optional` with default `None` to prevent Pydantic deserialization crashes on legacy run records.
+  4. **Elimination of Secondary Gray Strip Clutter**:
+     - Removed the redundant secondary gray banner strip (`<!-- 3. Concerned Entity Header Banner -->`) below the tabs that cluttered the UI.
+     - The active tab in the dynamic tabs bar is prominently highlighted in KPMG Blue (`bg-kpmg-blue text-white shadow-xs ring-2 ring-kpmg-blue/20`) with entity name, role (`Parent` / `Subsidiary`), currency, and review status indicator, maximizing vertical screen real estate for the financial ledger table.
+  5. **Verification & Hardening**:
+     - Automated Test Suite: **86/86 PASSED (100%)** in 27.09s (including `test_multi_entity_ingestion_and_strict_entity_partitioning` and `test_pipeline_data_auto_heals_missing_mapping_metadata`).
+     - JavaScript syntax check: `node -c "fs_conso/web/static/js/app.js"` exited with 0 errors.
+     - Live server: Verified running and responding with HTTP 200 on port 8000.
+     - Git: Staged and pushed to remote branch `feature/profile-v2`.
+
 ### [2026-11-26 19:05] Milestone: Step 2 Dynamic Entity Mapping Tabs, Required Columns, Level 0 Searchable Dropdowns & HITL Review Gating
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:

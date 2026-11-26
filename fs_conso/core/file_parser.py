@@ -643,6 +643,15 @@ Schema:
                 amount_col = debit_col
                 debit_col = None
                 credit_col = None
+            elif credit_col and not debit_col:
+                amount_col = credit_col
+                credit_col = None
+
+        # General guard: If debit == credit (single net balance column passed as both), convert to amount_col
+        if debit_col and credit_col and str(debit_col).strip().lower() == str(credit_col).strip().lower():
+            amount_col = debit_col
+            debit_col = None
+            credit_col = None
 
         # Check for wide dimensional layout (e.g. 75 cost center/subsidiary columns)
         numeric_cols = [c for c in cols if c not in (code_col, desc_col, dr_cr_col)]

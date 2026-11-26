@@ -22,9 +22,9 @@ class MappingDecision(BaseModel):
     confidence: float = 1.0
     reasoning: Optional[str] = None
     needs_review: bool = False
-    entity_code: str = ""
-    currency: str = ""
-    amount: float = 0.0
+    entity_code: Optional[str] = None
+    currency: Optional[str] = None
+    amount: Optional[float] = None
     level_0_code: Optional[str] = None
     level_0_name: Optional[str] = None
 
@@ -35,7 +35,8 @@ ACCOUNTING_SYNONYMS = [
     (re.compile(r"equity\s*(share)?\s*capital|common\s*stock|share\s*capital", re.IGNORECASE), "E210101", 0.98, "Matched standard Equity Share Capital line item."),
     (re.compile(r"retained\s*earnings|accumulated\s*profit", re.IGNORECASE), "210200", 0.98, "Matched standard Retained Earnings line item."),
     # Cash & Bank
-    (re.compile(r"cash\s*at\s*bank|bank\s*cash|cash\s*and\s*cash\s*equivalents|cash\s*on\s*hand", re.IGNORECASE), "120400", 0.98, "Matched Cash & Cash Equivalents standard Group COA."),
+    (re.compile(r"cash\s*(and|&)?\s*bank|bank\s*and\s*cash|cash\s*at\s*bank|bank\s*cash|cash\s*and\s*cash\s*equivalents|cash\s*on\s*hand", re.IGNORECASE), "120400", 0.98, "Matched Cash & Cash Equivalents standard Group COA."),
+    (re.compile(r"fixed\s*deposits?|term\s*deposits?|fd\b", re.IGNORECASE), "A120403", 0.95, "Matched Bank Deposits standard Group COA."),
     # Trade Receivables / Payables
     (re.compile(r"trade\s*receivables|debtors|customer\s*balances", re.IGNORECASE), "A120301", 0.95, "Matched Trade Receivables asset line."),
     (re.compile(r"trade\s*payables|trade\s*creditors|vendor\s*balances", re.IGNORECASE), "320300", 0.95, "Matched Trade Payables liability line."),
@@ -208,7 +209,9 @@ INSTRUCTIONS:
             local_code = row.account_code.strip()
             local_desc = row.account_description.strip()
 
-            if row.debit is not None or row.credit is not None:
+            if row.amount is not None and (row.debit is None or row.credit is None or row.debit == row.credit):
+                signed_amount = row.amount
+            elif row.debit is not None or row.credit is not None:
                 signed_amount = (row.debit or 0.0) - (row.credit or 0.0)
             else:
                 signed_amount = row.amount or 0.0
