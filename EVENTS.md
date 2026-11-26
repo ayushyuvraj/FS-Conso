@@ -6,6 +6,34 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-26 19:05] Milestone: Step 2 Dynamic Entity Mapping Tabs, Required Columns, Level 0 Searchable Dropdowns & HITL Review Gating
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Dynamic Multi-Entity Tabs (Parent + N Subsidiaries)**:
+     - Replaced the single flat table in Step 2 with dynamic entity tabs: exactly 1 tab for the Parent company + 1 tab for each Subsidiary (e.g. 4 tabs for Parent + 3 subs, 8 tabs for Parent + 7 subs).
+     - Clicking an entity tab smoothly transitions the view, displaying the concerned entity's header banner on top (Entity Name, Entity Code, Input Currency, Total Line Items, and Pending Review Count).
+  2. **Standardized High-Density Financial Ledger Grid**:
+     - Strict 7-column layout:
+       `Account Code` | `Account Name` | `Currency` | `Amount` | `Level 0 Mapping` | `Confidence` | `Status`
+     - Populated directly from the respective entity's primary trial balance and standardized Group Chart of Accounts.
+  3. **Searchable Level 0 Dropdowns with Real-Time Filtering**:
+     - Every row in the table provides an interactive Level 0 dropdown button displaying `Code - L0 Account Name`.
+     - Clicking opens a viewport-anchored floating popover with instant real-time search filtering across code and description.
+     - Selecting an option immediately invokes `/api/hitl/resolve`, commits the mapping to Learning Memory, updates confidence to 100%, turns the row from yellow to green, updates the pending review counter, and evaluates Step 3 gating.
+  4. **Strict Human-in-the-Loop Yellow Highlight & Gating**:
+     - Any account requiring review (confidence below threshold or unmapped) is highlighted in yellow (`bg-amber-50/80 border-amber-200 text-amber-950`).
+     - The top-right toolbar action button is renamed to **"Consolidate"** across all 6 steps in the exact same position, shape, and size.
+     - In Step 2, the **"Consolidate"** button and Step 3 in the stepper navigation bar remain locked/disabled until all reviews across all tabs are closed.
+     - As soon as 0 reviews remain, the button enables and clicking it cleanly advances to Step 3 and runs the consolidation pipeline.
+  5. **Auto-Triggering Mapping on Ingestion Approval**:
+     - Extended `/api/pipeline/confirm-ingestion` to auto-trigger the COA mapping engine upon Step 1 confirmation, ensuring Step 2 tabs are immediately pre-populated upon navigation.
+     - Added `/api/pipeline/run-mapping` endpoint for on-demand mapping execution.
+     - Removed the 50-item truncation cap in `/api/pipeline-data` and returned complete multi-entity mapping decisions along with `level_0_choices`.
+  6. **Verification & Hardening**:
+     - Test Suite: **84/84 PASSED (100%)** in 23.38s across all unit and API test suites.
+     - JavaScript syntax: `node -c "fs_conso/web/static/js/app.js"` exited with 0 errors.
+     - Git: Staged and pushed to remote branch `feature/profile-v2`.
+
 ### [2026-11-26 18:20] Milestone: Action Button Streamlining & Global Header Cleanup
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:

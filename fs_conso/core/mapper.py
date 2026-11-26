@@ -22,6 +22,11 @@ class MappingDecision(BaseModel):
     confidence: float = 1.0
     reasoning: Optional[str] = None
     needs_review: bool = False
+    entity_code: str = ""
+    currency: str = ""
+    amount: float = 0.0
+    level_0_code: Optional[str] = None
+    level_0_name: Optional[str] = None
 
 
 # Canonical accounting synonym heuristics mapping normalized patterns to Group COA codes
@@ -272,6 +277,8 @@ INSTRUCTIONS:
             if target_item is None:
                 target_code = "999999"
                 target_desc = f"Unmapped: {local_desc}"
+                l0_code = None
+                l0_name = None
                 method = "UNMAPPED_EXCEPTION"
                 confidence = 0.0
                 reasoning = reasoning or "No candidate match found; flagged for user resolution."
@@ -279,6 +286,8 @@ INSTRUCTIONS:
             else:
                 target_code = target_item.account_code
                 target_desc = target_item.account_name
+                l0_code = target_item.account_code
+                l0_name = target_item.level_0_account or target_item.account_name
                 needs_rev = confidence < config.ai_confidence_threshold
                 # Cache successful decision
                 self._global_decision_cache[(raw_tb.entity_code, local_code)] = (target_code, confidence, method, reasoning)
@@ -291,7 +300,12 @@ INSTRUCTIONS:
                 method=method,
                 confidence=confidence,
                 reasoning=reasoning,
-                needs_review=needs_rev
+                needs_review=needs_rev,
+                entity_code=raw_tb.entity_code,
+                currency=raw_tb.currency,
+                amount=round(signed_amount, 2),
+                level_0_code=l0_code,
+                level_0_name=l0_name
             )
             decisions.append(decision)
 

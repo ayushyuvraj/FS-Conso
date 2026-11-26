@@ -1128,6 +1128,13 @@ async def confirm_ingestion(payload: ConfirmIngestionPayload):
         session.state.current_step = 2
         session.state.is_blocked = False
 
+        # Auto-compute COA Mappings for Step 2 so tabs are pre-populated
+        try:
+            from fs_conso.agent.nodes import mapper_node
+            session.state = mapper_node(session.state)
+        except Exception as exc:
+            logging.getLogger(__name__).warning(f"Auto COA mapping error during ingestion confirmation: {exc}")
+
         session.state.audit_trail.append({
             "node_id": "Ingestion",
             "event": "STEP_1_CONFIRMED",
@@ -1143,6 +1150,22 @@ async def confirm_ingestion(payload: ConfirmIngestionPayload):
         "message": "Step 1 Ingestion successfully confirmed and locked. Step 2 unlocked.",
         "completed_steps": session.state.completed_steps,
         "current_step": session.state.current_step
+    }
+
+@app.post("/api/pipeline/run-mapping")
+async def run_coa_mapping():
+    """Runs the COA mapping engine on all ingested trial balances."""
+    async with pipeline_lock:
+        if not session.state or not session.state.raw_tbs:
+            raise HTTPException(status_code=400, detail="No ingested trial balances available to map.")
+        from fs_conso.agent.nodes import mapper_node
+        session.state = mapper_node(session.state)
+        if session.active_company_id and session.active_run_id and session.state:
+            run_manager.save_run_state(session.active_company_id, session.active_run_id, session.state)
+    return {
+        "success": True,
+        "total_mapped": len(session.state.mapping_decisions),
+        "pending_reviews": len(session.state.hitl_pending_reviews)
     }
 
 # --- Human-in-the-Loop Mapping Confirmation Endpoint ---
@@ -1237,24 +1260,60 @@ async def resolve_hitl_item(req: HITLResolveRequest):
         prof.add_mapping(req.entity_code, req.local_code, req.group_code)
         company_manager.save_company(prof)
 
+    # Also update in-memory mapping engine cache
+    from fs_conso.core.mapper import COAMappingEngine
+    COAMappingEngine._global_decision_cache[(req.entity_code, req.local_code)] = (
+        req.group_code, 1.0, "USER_APPROVED_RULE", req.reasoning
+    )
+
+    resolved_item = prof.group_coa.get_item(req.group_code) if (prof and prof.group_coa) else None
+
     async with pipeline_lock:
         if session.state:
             for d in session.state.mapping_decisions:
-                if d.local_code == req.local_code:
+                # Match entity_code (case-insensitive) and local_code
+                ent_match = not req.entity_code or not d.entity_code or (d.entity_code.upper() == req.entity_code.upper())
+                if ent_match and d.local_code == req.local_code:
                     d.group_code = req.group_code
+                    if resolved_item:
+                        d.group_description = resolved_item.account_name
+                        d.level_0_code = resolved_item.account_code
+                        d.level_0_name = resolved_item.level_0_account or resolved_item.account_name
                     d.method = "USER_APPROVED_RULE"
                     d.confidence = 1.0
                     d.needs_review = False
                     d.reasoning = req.reasoning
+
+            # Also synchronize standardized_tbs if already created
+            if session.state.standardized_tbs:
+                for std_tb in session.state.standardized_tbs:
+                    if not req.entity_code or std_tb.entity_code.upper() == req.entity_code.upper():
+                        for row in std_tb.rows:
+                            if row.local_account_code == req.local_code:
+                                row.account_code = req.group_code
+                                if resolved_item:
+                                    row.account_description = resolved_item.account_name
+
             session.state.hitl_pending_reviews = [
                 r for r in session.state.hitl_pending_reviews
-                if r.get("local_code") != req.local_code
+                if not ((not req.entity_code or r.get("entity_code") == req.entity_code) and r.get("local_code") == req.local_code)
             ]
-            if not session.state.hitl_pending_reviews:
+            if not session.state.hitl_pending_reviews and not any(d.needs_review for d in session.state.mapping_decisions):
                 session.state.halted_node = None
                 session.state.remediation_items = []
+                if 2 not in session.state.completed_steps:
+                    session.state.completed_steps.append(2)
 
-    return {"success": True, "message": f"Mapping for '{req.local_code}' saved to learning memory."}
+            if session.active_company_id and session.active_run_id and session.state:
+                run_manager.save_run_state(session.active_company_id, session.active_run_id, session.state)
+
+    return {
+        "success": True,
+        "message": f"Mapping for '{req.local_code}' saved to learning memory.",
+        "resolved_code": req.group_code,
+        "resolved_name": resolved_item.account_name if resolved_item else req.group_code,
+        "level_0_name": (resolved_item.level_0_account or resolved_item.account_name) if resolved_item else req.group_code
+    }
 
 # 5. Production-Hardened File Upload Endpoint
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB cap
@@ -1496,8 +1555,39 @@ async def get_pipeline_data():
     prof = company_manager.get_company(session.active_company_id) if session.active_company_id else None
     hierarchy = prof.entity_hierarchy if prof else None
     st = session.state
+
+    level_0_choices = []
+    if prof and prof.group_coa and prof.group_coa.items:
+        for it in sorted(prof.group_coa.items.values(), key=lambda x: str(x.account_code)):
+            l0_name = it.level_0_account or it.account_name
+            level_0_choices.append({
+                "account_code": it.account_code,
+                "account_name": it.account_name,
+                "level_0_account": l0_name,
+                "label": f"{it.account_code} - {l0_name}"
+            })
+
+    perimeter_entities = []
+    if hierarchy and hierarchy.entities:
+        for ent in hierarchy.entities.values():
+            perimeter_entities.append({
+                "entity_code": ent.entity_code,
+                "entity_name": ent.entity_name,
+                "input_currency": ent.input_currency,
+                "holding_percentage": ent.holding_percentage,
+                "is_parent": ent.is_parent
+            })
+    elif prof:
+        perimeter_entities.append({
+            "entity_code": prof.company_code or "P",
+            "entity_name": prof.company_name or "Parent Company",
+            "input_currency": prof.reporting_currency or "INR",
+            "holding_percentage": 1.0,
+            "is_parent": True
+        })
+
     safe_mapping_decisions = []
-    for d in st.mapping_decisions[:50]:
+    for d in st.mapping_decisions:
         d_dict = d.dict()
         if d_dict.get("reasoning"):
             d_dict["reasoning"] = sanitize_error_message(d_dict["reasoning"])
@@ -1510,6 +1600,8 @@ async def get_pipeline_data():
         "halted_node": st.halted_node,
         "halted_stage": st.halted_stage,
         "remediation_items": st.remediation_items,
+        "perimeter_entities": perimeter_entities,
+        "level_0_choices": level_0_choices,
         "raw_tbs": [
             {
                 "entity_code": tb.entity_code,

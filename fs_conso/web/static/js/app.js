@@ -1515,11 +1515,10 @@ function renderPaginationControls({
         return `
             <button type="button"
                 onclick="${onPageChangeFnName}(${p})"
-                class="min-w-[28px] h-7 px-2 rounded text-xs font-mono font-medium transition flex items-center justify-center btn-tactile ${
-                    isActive
-                        ? 'bg-kpmg-blue text-white shadow-xs font-bold pointer-events-none'
-                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 cursor-pointer'
-                }"
+                class="min-w-[28px] h-7 px-2 rounded text-xs font-mono font-medium transition flex items-center justify-center btn-tactile ${isActive
+                ? 'bg-kpmg-blue text-white shadow-xs font-bold pointer-events-none'
+                : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 cursor-pointer'
+            }"
                 aria-label="Page ${p}" ${isActive ? 'aria-current="page"' : ''}>
                 ${p}
             </button>
@@ -1558,9 +1557,8 @@ function renderPaginationControls({
                     <button type="button"
                         onclick="${onPageChangeFnName}(${validCurrentPage - 1})"
                         ${prevDisabled ? 'disabled' : ''}
-                        class="h-7 px-2 rounded border border-slate-200 bg-white text-slate-700 text-xs font-medium transition flex items-center justify-center btn-tactile ${
-                            prevDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : 'hover:bg-slate-100 cursor-pointer'
-                        }"
+                        class="h-7 px-2 rounded border border-slate-200 bg-white text-slate-700 text-xs font-medium transition flex items-center justify-center btn-tactile ${prevDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : 'hover:bg-slate-100 cursor-pointer'
+        }"
                         title="Previous page">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -1574,9 +1572,8 @@ function renderPaginationControls({
                     <button type="button"
                         onclick="${onPageChangeFnName}(${validCurrentPage + 1})"
                         ${nextDisabled ? 'disabled' : ''}
-                        class="h-7 px-2 rounded border border-slate-200 bg-white text-slate-700 text-xs font-medium transition flex items-center justify-center btn-tactile ${
-                            nextDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : 'hover:bg-slate-100 cursor-pointer'
-                        }"
+                        class="h-7 px-2 rounded border border-slate-200 bg-white text-slate-700 text-xs font-medium transition flex items-center justify-center btn-tactile ${nextDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : 'hover:bg-slate-100 cursor-pointer'
+        }"
                         title="Next page">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -1902,6 +1899,15 @@ function switchStep(step) {
         showToast("Step Locked", `Step ${step} is locked. Please execute earlier steps first.`, "warning");
         return;
     }
+    // Gating check: Cannot proceed past Step 2 if any human-in-the-loop reviews are open in Step 2
+    if (step > 2) {
+        const mappings = (pipelineData && pipelineData.mapping_decisions) ? pipelineData.mapping_decisions : [];
+        const hasPending = mappings.some(m => m.needs_review);
+        if (hasPending) {
+            showToast("Review Required", "Please resolve all highlighted account reviews across all entity tabs before proceeding to Step 3.", "warning");
+            return;
+        }
+    }
     activeStep = Math.min(6, Math.max(1, step));
     renderStepperState();
     renderActiveStepContent();
@@ -1975,8 +1981,8 @@ function renderStep1(el) {
             const displayName = ent.entity_name || (tb && tb.entity_name) || ent.entity_code;
             const currency = ent.currency || (tb && tb.currency) || '—';
             const holdingPct = ent.holding_percentage != null ? `${Math.round(ent.holding_percentage * 100)}%` : (ent.is_parent ? '100%' : '100%');
-            const rolePill = ent.is_parent 
-                ? `<span class="px-1.5 py-0.2 rounded text-[10px] bg-blue-100 text-kpmg-blue font-semibold">PARENT</span>` 
+            const rolePill = ent.is_parent
+                ? `<span class="px-1.5 py-0.2 rounded text-[10px] bg-blue-100 text-kpmg-blue font-semibold">PARENT</span>`
                 : `<span class="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 text-slate-600 font-medium">${holdingPct} OWNED</span>`;
 
             // Detect issues for the row
@@ -2252,15 +2258,15 @@ function renderStep1(el) {
                         </svg>
                     </button>
 
-                    <!-- 4. Run Consolidation Primary Action Button -->
+                    <!-- 4. Consolidate Primary Action Button -->
                     <button id="btn-run-pipeline" onclick="triggerRunPipeline()"
                         class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
-                        title="Run Consolidation">
+                        title="Consolidate">
                         <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span>Run Consolidation</span>
+                        <span>Consolidate</span>
                     </button>
                 </div>
             </div>
@@ -2953,7 +2959,7 @@ function renderPerimeterApprovalModalContent(state) {
                         <div class="overflow-x-auto text-[10px] font-mono border border-slate-200 rounded bg-white max-h-36">
                             <table class="w-full text-left">
                                 <tbody>
-                                    ${sampleRows.slice(0, 8).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
+                                    ${sampleRows.slice(0, 8).map((r, i) => `<tr class="${i === 0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
                                 </tbody>
                             </table>
                         </div>
@@ -3078,7 +3084,7 @@ function renderPerimeterApprovalModalContent(state) {
                         <div class="overflow-x-auto text-[10px] font-mono border border-slate-200 rounded bg-white max-h-36">
                             <table class="w-full text-left">
                                 <tbody>
-                                    ${sampleRows.slice(0, 8).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
+                                    ${sampleRows.slice(0, 8).map((r, i) => `<tr class="${i === 0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
                                 </tbody>
                             </table>
                         </div>
@@ -3206,7 +3212,7 @@ function renderPerimeterApprovalModalContent(state) {
                     <div class="overflow-x-auto text-[10px] font-mono border border-indigo-200 rounded bg-white max-h-36">
                         <table class="w-full text-left">
                             <tbody>
-                                ${fxSampleRows.slice(0, 8).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-indigo-100/60' : 'border-b border-indigo-100/40'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
+                                ${fxSampleRows.slice(0, 8).map((r, i) => `<tr class="${i === 0 ? 'font-bold bg-indigo-100/60' : 'border-b border-indigo-100/40'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -3576,61 +3582,519 @@ async function submitSingleUpload(e) {
     }
 }
 
-// STEP 2: COA MAPPING
+// ============================================================================
+// STEP 2: COA MAPPING WITH DYNAMIC ENTITY TABS & LEVEL 0 DROPDOWNS
+// ============================================================================
+
+let activeStep2Entity = null;
+let step2AccountSearchQuery = '';
+let currentL0PopoverTarget = null;
+
+function getStep2EntityTabs() {
+    const perimeter = (appStatus && appStatus.perimeter_entities && appStatus.perimeter_entities.length > 0)
+        ? appStatus.perimeter_entities
+        : ((pipelineData && pipelineData.perimeter_entities) ? pipelineData.perimeter_entities : []);
+
+    const rawTbs = (pipelineData && pipelineData.raw_tbs) ? pipelineData.raw_tbs : [];
+    const rawTbMap = new Map();
+    rawTbs.forEach(tb => {
+        if (tb.entity_code) rawTbMap.set(tb.entity_code.toUpperCase(), tb);
+    });
+
+    const tabs = [];
+    const seen = new Set();
+
+    if (perimeter.length > 0) {
+        // 1. Parent entity first
+        const parent = perimeter.find(p => p.is_parent) || perimeter[0];
+        if (parent) {
+            const code = parent.entity_code.toUpperCase();
+            seen.add(code);
+            const tb = rawTbMap.get(code);
+            tabs.push({
+                entity_code: parent.entity_code,
+                entity_name: parent.entity_name || (tb && tb.entity_name) || parent.entity_code,
+                currency: parent.currency || parent.input_currency || (tb && tb.currency) || (appStatus && appStatus.reporting_currency) || 'INR',
+                is_parent: true
+            });
+        }
+        // 2. Each subsidiary in order
+        perimeter.forEach(p => {
+            const code = p.entity_code.toUpperCase();
+            if (!seen.has(code)) {
+                seen.add(code);
+                const tb = rawTbMap.get(code);
+                tabs.push({
+                    entity_code: p.entity_code,
+                    entity_name: p.entity_name || (tb && tb.entity_name) || p.entity_code,
+                    currency: p.currency || p.input_currency || (tb && tb.currency) || '—',
+                    is_parent: false
+                });
+            }
+        });
+    } else if (rawTbs.length > 0) {
+        rawTbs.forEach((tb, idx) => {
+            const code = tb.entity_code.toUpperCase();
+            if (!seen.has(code)) {
+                seen.add(code);
+                tabs.push({
+                    entity_code: tb.entity_code,
+                    entity_name: tb.entity_name || tb.entity_code,
+                    currency: tb.currency || '—',
+                    is_parent: idx === 0
+                });
+            }
+        });
+    }
+
+    return tabs;
+}
+
+function switchStep2EntityTab(entityCode) {
+    activeStep2Entity = entityCode;
+    step2AccountSearchQuery = '';
+    const container = document.getElementById("step-content");
+    if (container) renderStep2(container);
+}
+
+function onStep2AccountSearch(query) {
+    step2AccountSearchQuery = (query || '').trim().toLowerCase();
+    const tbody = document.getElementById("step2-table-tbody");
+    if (!tbody) return;
+    renderStep2TableRows(tbody);
+}
+
+async function runCOAMappingNow() {
+    showToast("Mapping Accounts", "Running AI & deterministic COA standardizer...", "info");
+    try {
+        const res = await fetch("/api/pipeline/run-mapping", { method: "POST" });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            await loadPipelineData();
+            showToast("Mapping Complete", `Mapped ${data.total_mapped} accounts (${data.pending_reviews} require review).`, "success");
+            const container = document.getElementById("step-content");
+            if (container) renderStep2(container);
+        } else {
+            showToast("Mapping Error", data.detail || "Failed to execute mapping.", "error");
+        }
+    } catch (err) {
+        showToast("Network Error", "Mapping call failed: " + err, "error");
+    }
+}
+
+function onStep2ConsolidateClick() {
+    const mappings = (pipelineData && pipelineData.mapping_decisions) ? pipelineData.mapping_decisions : [];
+    const pending = mappings.filter(m => m.needs_review);
+    if (pending.length > 0) {
+        showToast("Review Required", `Cannot proceed: ${pending.length} account(s) require review across entity tabs.`, "warning");
+        return;
+    }
+    // Proceed to Step 3 and execute consolidation
+    triggerRunPipeline();
+}
+
 function renderStep2(el) {
-    const mappings = pipelineData.mapping_decisions || [];
-    let rowsHtml = mappings.map(m => `
-        <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
-            <td class="font-mono text-xs text-gray-500 py-2 px-3">${escapeHtml(m.local_code)}</td>
-            <td class="font-medium py-2 px-3 text-xs text-gray-800">${escapeHtml(m.local_description)}</td>
-            <td class="font-mono text-xs font-bold text-kpmg-blue py-2 px-3">${escapeHtml(m.group_code)}</td>
-            <td class="py-2 px-3 text-xs text-gray-800">${escapeHtml(m.group_description)}</td>
-            <td class="py-2 px-3 text-xs"><span class="px-2 py-0.5 rounded text-[10px] font-mono bg-gray-100 text-gray-700">${escapeHtml(m.method)}</span></td>
-            <td class="num-cell py-2 px-3 text-xs font-mono font-bold ${m.confidence >= (appStatus.ai_confidence_threshold || 0.85) ? 'text-emerald-600' : 'text-amber-600'}">${(m.confidence * 100).toFixed(0)}%</td>
-            <td class="text-center py-2 px-3 text-xs">
-                ${m.needs_review ? `
-                    <button onclick="openHITLForCode('${m.local_code}')" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 hover:bg-amber-200 transition">
-                        Review &rarr;
-                    </button>
-                ` : `
-                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">Mapped</span>
-                `}
-            </td>
-        </tr>
-    `).join("");
+    const tabs = getStep2EntityTabs();
+    if (tabs.length === 0) {
+        el.innerHTML = `
+            <div class="p-12 text-center bg-white rounded border border-kpmg-border">
+                <svg class="w-12 h-12 text-kpmg-muted mx-auto mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                <h4 class="font-bold text-sm text-kpmg-navy mb-1">No Trial Balances Ingested</h4>
+                <p class="text-xs text-kpmg-muted max-w-md mx-auto mb-4">Please complete Step 1 Ingestion and approve entity files before proceeding to mapping.</p>
+                <button onclick="switchStep(1)" class="h-8 px-4 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition shadow-xs inline-flex items-center space-x-1.5 cursor-pointer">
+                    <span>Go to Step 1 (Ingestion)</span>
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    if (!activeStep2Entity || !tabs.some(t => t.entity_code === activeStep2Entity)) {
+        activeStep2Entity = tabs[0].entity_code;
+    }
+
+    const currentTab = tabs.find(t => t.entity_code === activeStep2Entity) || tabs[0];
+    const allMappings = pipelineData.mapping_decisions || [];
+
+    // Global review count across ALL entities
+    const totalPendingAllEntities = allMappings.filter(m => m.needs_review).length;
+    const canConsolidate = totalPendingAllEntities === 0 && allMappings.length > 0;
+
+    // Entity tabs HTML
+    const tabsHtml = tabs.map(t => {
+        const isActive = t.entity_code === activeStep2Entity;
+        const entMappings = allMappings.filter(m => !m.entity_code || m.entity_code.toUpperCase() === t.entity_code.toUpperCase());
+        const pendingInTab = entMappings.filter(m => m.needs_review).length;
+        const roleLabel = t.is_parent ? 'Parent' : 'Subsidiary';
+
+        return `
+            <button onclick="switchStep2EntityTab('${escapeHtml(t.entity_code)}')"
+                class="px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-2 transition cursor-pointer select-none shrink-0 ${
+                    isActive
+                        ? 'bg-kpmg-blue text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200/80 hover:text-kpmg-navy'
+                }">
+                <span>${escapeHtml(t.entity_name || t.entity_code)}</span>
+                <span class="text-[10px] font-mono opacity-80">(${roleLabel})</span>
+                ${pendingInTab > 0
+                    ? `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="${pendingInTab} review(s) pending"></span>`
+                    : (entMappings.length > 0 ? `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>` : '')
+                }
+            </button>
+        `;
+    }).join("");
+
+    // Entity details
+    const currentEntityCode = currentTab.entity_code;
+    const currentEntityMappings = allMappings.filter(m => !m.entity_code || m.entity_code.toUpperCase() === currentEntityCode.toUpperCase());
+    const currentEntityPendingCount = currentEntityMappings.filter(m => m.needs_review).length;
+    const currentEntityCurrency = currentTab.currency || 'INR';
 
     el.innerHTML = `
-        <div class="space-y-4">
+        <div class="space-y-3.5 w-full">
+            <!-- 1. Header Toolbar -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-kpmg-border pb-3">
                 <div>
                     <h3 class="font-bold text-base text-kpmg-navy">Chart of Accounts Alignment</h3>
-                    <p class="text-xs text-kpmg-muted">Standardizes local subsidiary accounts to the Group COA import format with 3-tier escalation.</p>
+                    <p class="text-xs text-kpmg-muted">Standardizes parent and subsidiary trial balances to Group COA format with dynamic Level 0 mapping.</p>
                 </div>
-                <div class="flex items-center space-x-3 text-xs">
-                    <span class="text-kpmg-muted">Confidence Threshold: <strong class="text-kpmg-blue font-mono">${((appStatus.ai_confidence_threshold || 0.85) * 100).toFixed(0)}%</strong></span>
-                    <button onclick="toggleHITLDrawer()" class="px-2.5 py-1 rounded bg-amber-50 text-amber-800 font-medium border border-amber-300 hover:bg-amber-100 transition flex items-center space-x-1">
-                        <span>HITL Workbench</span>
+                <div class="flex items-center space-x-2">
+                    <!-- Search Input -->
+                    <div class="relative w-48 sm:w-60">
+                        <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input type="text" id="step2-account-search" placeholder="Search accounts..."
+                            value="${escapeHtml(step2AccountSearchQuery)}"
+                            oninput="onStep2AccountSearch(this.value)"
+                            class="w-full h-7 pl-8 pr-2.5 rounded bg-slate-100 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-kpmg-blue transition font-mono">
+                    </div>
+
+                    <!-- Consolidate Primary Action Button -->
+                    <button id="btn-consolidate-step2" onclick="onStep2ConsolidateClick()"
+                        class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Consolidate" ${canConsolidate ? '' : 'disabled'}>
+                        <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Consolidate</span>
                     </button>
                 </div>
             </div>
-            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-280px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
+
+            <!-- 2. Dynamic Entity Tabs Bar -->
+            <div class="flex items-center space-x-2 border-b border-slate-200 pb-2.5 overflow-x-auto select-none">
+                ${tabsHtml}
+            </div>
+
+            <!-- 3. Concerned Entity Header Banner -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                <div class="flex flex-wrap items-center gap-2 text-slate-700">
+                    <span class="font-bold text-kpmg-navy text-sm">${escapeHtml(currentTab.entity_name || currentTab.entity_code)}</span>
+                    <span class="text-slate-300">•</span>
+                    <span class="font-mono font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">${escapeHtml(currentTab.entity_code)}</span>
+                    <span class="text-slate-300">•</span>
+                    <span class="text-slate-600 font-medium">Currency: <strong class="text-kpmg-blue font-mono font-bold">${escapeHtml(currentEntityCurrency)}</strong></span>
+                    <span class="text-slate-300">•</span>
+                    <span class="text-slate-600 font-medium">${currentEntityMappings.length} Accounts</span>
+                </div>
+                <div class="mt-2 sm:mt-0 flex items-center space-x-2">
+                    ${currentEntityPendingCount > 0
+                        ? `<span class="inline-flex items-center px-2.5 py-1 rounded text-[11px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+                               <svg class="w-3.5 h-3.5 mr-1 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                               ${currentEntityPendingCount} Account(s) Require Review
+                           </span>`
+                        : `<span class="inline-flex items-center px-2.5 py-1 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                               <svg class="w-3.5 h-3.5 mr-1 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                               All Accounts Mapped & Verified
+                           </span>`
+                    }
+                </div>
+            </div>
+
+            <!-- 4. High-Density Financial Ledger Table -->
+            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-320px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
                 <table class="fin-table">
                     <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
                         <tr>
-                            <th>Local Code</th>
-                            <th>Local Description</th>
-                            <th>Group Code</th>
-                            <th>Group Standard Description</th>
-                            <th>Mapping Engine</th>
-                            <th class="num-cell">Confidence</th>
-                            <th class="text-center">Status</th>
+                            <th style="width: 130px;">Account Code</th>
+                            <th>Account Name</th>
+                            <th style="width: 80px; text-align: center;">Currency</th>
+                            <th class="num-cell" style="width: 140px;">Amount</th>
+                            <th style="min-width: 300px;">Level 0 Mapping</th>
+                            <th class="num-cell" style="width: 100px;">Confidence</th>
+                            <th class="text-center" style="width: 120px;">Status</th>
                         </tr>
                     </thead>
-                    <tbody>${rowsHtml || '<tr><td colspan="7" class="p-8 text-center text-kpmg-muted">Run consolidation to compute COA alignments.</td></tr>'}</tbody>
+                    <tbody id="step2-table-tbody">
+                        <!-- Populated by renderStep2TableRows -->
+                    </tbody>
                 </table>
             </div>
         </div>
     `;
+
+    const tbody = document.getElementById("step2-table-tbody");
+    if (tbody) renderStep2TableRows(tbody);
+}
+
+function renderStep2TableRows(tbody) {
+    const tabs = getStep2EntityTabs();
+    const currentTab = tabs.find(t => t.entity_code === activeStep2Entity) || tabs[0];
+    if (!currentTab) return;
+
+    const currentEntityCode = currentTab.entity_code;
+    const allMappings = pipelineData.mapping_decisions || [];
+    let entityMappings = allMappings.filter(m => !m.entity_code || m.entity_code.toUpperCase() === currentEntityCode.toUpperCase());
+
+    // Search filter
+    if (step2AccountSearchQuery) {
+        entityMappings = entityMappings.filter(m =>
+            (m.local_code && m.local_code.toLowerCase().includes(step2AccountSearchQuery)) ||
+            (m.local_description && m.local_description.toLowerCase().includes(step2AccountSearchQuery)) ||
+            (m.group_code && m.group_code.toLowerCase().includes(step2AccountSearchQuery)) ||
+            (m.level_0_name && m.level_0_name.toLowerCase().includes(step2AccountSearchQuery))
+        );
+    }
+
+    if (entityMappings.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="p-8 text-center text-kpmg-muted text-xs">
+                    ${allMappings.length === 0
+                        ? `Accounts not yet standardized for ${escapeHtml(currentTab.entity_name)}. <button onclick="runCOAMappingNow()" class="ml-2 font-bold text-kpmg-blue hover:underline cursor-pointer">Click here to run mapping</button>.`
+                        : `No accounts matching filter "${escapeHtml(step2AccountSearchQuery)}".`
+                    }
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = entityMappings.map((m, idx) => {
+        const rowId = `s2-row-${idx}`;
+        const isYellow = !!m.needs_review;
+        const rowBg = isYellow
+            ? 'bg-amber-50/80 hover:bg-amber-100/70 border-b border-amber-200 text-amber-950 font-medium'
+            : 'hover:bg-slate-50/70 border-b border-slate-100 text-slate-800';
+
+        const confPct = Math.round((m.confidence || 0) * 100);
+        const confColor = isYellow ? 'text-amber-700' : (confPct >= 85 ? 'text-emerald-700' : 'text-amber-700');
+
+        const currentL0Display = m.group_code && m.group_code !== '999999'
+            ? `${m.group_code} - ${m.level_0_name || m.group_description || 'Standard Account'}`
+            : 'Select Level 0 Mapping...';
+
+        const statusBadge = isYellow
+            ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-300">Review Required</span>`
+            : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">Mapped</span>`;
+
+        const currency = m.currency || currentTab.currency || 'INR';
+
+        return `
+            <tr id="${rowId}" class="${rowBg} transition">
+                <!-- 1. Account Code -->
+                <td class="font-mono text-xs font-bold py-2.5 px-3 text-slate-700">${escapeHtml(m.local_code)}</td>
+
+                <!-- 2. Account Name -->
+                <td class="font-medium py-2.5 px-3 text-xs text-slate-900">${escapeHtml(m.local_description)}</td>
+
+                <!-- 3. Currency -->
+                <td class="text-center py-2.5 px-3 text-xs">
+                    <span class="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-slate-100 text-slate-700 border border-slate-200">
+                        ${escapeHtml(currency)}
+                    </span>
+                </td>
+
+                <!-- 4. Amount -->
+                <td class="num-cell py-2.5 px-3 text-xs font-mono font-semibold text-slate-800">
+                    ${formatNum(m.amount)}
+                </td>
+
+                <!-- 5. Level 0 Mapping Searchable Dropdown Button -->
+                <td class="py-2 px-3 text-xs">
+                    <button type="button"
+                        onclick="openL0Dropdown(event, '${escapeHtml(m.entity_code || currentTab.entity_code)}', '${escapeHtml(m.local_code)}')"
+                        class="w-full h-8 px-2.5 py-1 text-left text-xs font-medium rounded border ${
+                            isYellow
+                                ? 'border-amber-400 bg-amber-50 hover:bg-amber-100/90 text-amber-950 focus:ring-2 focus:ring-amber-400'
+                                : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-800 focus:ring-2 focus:ring-kpmg-blue'
+                        } flex items-center justify-between transition cursor-pointer shadow-2xs">
+                        <span class="truncate font-mono font-semibold">${escapeHtml(currentL0Display)}</span>
+                        <svg class="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                </td>
+
+                <!-- 6. Confidence -->
+                <td class="num-cell py-2.5 px-3 text-xs font-mono font-bold ${confColor}">
+                    ${confPct}%
+                </td>
+
+                <!-- 7. Status -->
+                <td class="text-center py-2.5 px-3 text-xs">
+                    ${statusBadge}
+                </td>
+            </tr>
+        `;
+    }).join("");
+}
+
+// Global Level 0 Floating Dropdown Popover
+function openL0Dropdown(event, entityCode, localCode) {
+    event.stopPropagation();
+    const btn = event.currentTarget;
+    const rect = btn.getBoundingClientRect();
+
+    let popover = document.getElementById("step2-l0-popover");
+    if (!popover) {
+        popover = document.createElement("div");
+        popover.id = "step2-l0-popover";
+        popover.className = "fixed z-50 bg-white border border-slate-200 rounded-lg shadow-xl w-80 max-w-[90vw] overflow-hidden text-xs transition-all";
+        document.body.appendChild(popover);
+
+        // Global click listener to close popover
+        document.addEventListener("click", (e) => {
+            const p = document.getElementById("step2-l0-popover");
+            if (p && !p.classList.contains("hidden") && !p.contains(e.target)) {
+                p.classList.add("hidden");
+                currentL0PopoverTarget = null;
+            }
+        });
+    }
+
+    currentL0PopoverTarget = { entityCode, localCode };
+
+    // Position popover right below button, adjusting if near right edge
+    const top = rect.bottom + 4;
+    const left = Math.min(rect.left, window.innerWidth - 330);
+    popover.style.top = `${top}px`;
+    popover.style.left = `${Math.max(10, left)}px`;
+
+    renderL0PopoverContent('', entityCode, localCode);
+    popover.classList.remove("hidden");
+
+    setTimeout(() => {
+        const inp = document.getElementById("l0-popover-search-input");
+        if (inp) inp.focus();
+    }, 50);
+}
+
+function renderL0PopoverContent(query, entityCode, localCode) {
+    const popover = document.getElementById("step2-l0-popover");
+    if (!popover) return;
+
+    // Get all available L0 choices from pipelineData or fallback
+    let choices = (pipelineData && pipelineData.level_0_choices) ? pipelineData.level_0_choices : [];
+    if (!choices || choices.length === 0) {
+        // Fallback: extract from mapping decisions
+        const mapSet = new Map();
+        (pipelineData.mapping_decisions || []).forEach(m => {
+            if (m.group_code && m.group_code !== '999999') {
+                mapSet.set(m.group_code, {
+                    account_code: m.group_code,
+                    account_name: m.group_description || m.group_code,
+                    level_0_account: m.level_0_name || m.group_description || m.group_code
+                });
+            }
+        });
+        choices = Array.from(mapSet.values());
+    }
+
+    const q = (query || '').trim().toLowerCase();
+    const filtered = q
+        ? choices.filter(c =>
+            (c.account_code && c.account_code.toLowerCase().includes(q)) ||
+            (c.account_name && c.account_name.toLowerCase().includes(q)) ||
+            (c.level_0_account && c.level_0_account.toLowerCase().includes(q))
+        )
+        : choices;
+
+    popover.innerHTML = `
+        <div class="p-2 border-b border-slate-100 bg-slate-50">
+            <div class="relative">
+                <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input type="text" id="l0-popover-search-input" value="${escapeHtml(query)}"
+                    placeholder="Search by code or description..."
+                    oninput="renderL0PopoverContent(this.value, '${escapeHtml(entityCode)}', '${escapeHtml(localCode)}')"
+                    class="w-full h-7 pl-8 pr-2 text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-kpmg-blue font-mono">
+            </div>
+        </div>
+        <div class="max-h-56 overflow-y-auto p-1 space-y-0.5">
+            ${filtered.length > 0
+                ? filtered.map(c => `
+                    <div onclick="selectL0Option('${escapeHtml(c.account_code)}', '${escapeHtml(c.level_0_account || c.account_name)}')"
+                        class="px-2.5 py-1.5 rounded hover:bg-kpmg-blue hover:text-white cursor-pointer transition flex items-center justify-between group">
+                        <div class="flex items-center space-x-2 truncate">
+                            <span class="font-mono font-bold text-slate-700 group-hover:text-white">${escapeHtml(c.account_code)}</span>
+                            <span class="truncate text-slate-800 group-hover:text-white">${escapeHtml(c.level_0_account || c.account_name)}</span>
+                        </div>
+                    </div>
+                `).join("")
+                : `<div class="p-4 text-center text-slate-400 text-xs">No Level 0 accounts found matching "${escapeHtml(query)}".</div>`
+            }
+        </div>
+    `;
+}
+
+async function selectL0Option(groupCode, l0Name) {
+    if (!currentL0PopoverTarget) return;
+    const { entityCode, localCode } = currentL0PopoverTarget;
+
+    const popover = document.getElementById("step2-l0-popover");
+    if (popover) popover.classList.add("hidden");
+
+    try {
+        const res = await fetch('/api/hitl/resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                entity_code: entityCode,
+                local_code: localCode,
+                group_code: groupCode,
+                reasoning: "User approved in Level 0 Mapping table"
+            })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            // Update decision locally in pipelineData
+            const d = (pipelineData.mapping_decisions || []).find(m =>
+                (!m.entity_code || m.entity_code.toUpperCase() === entityCode.toUpperCase()) && m.local_code === localCode
+            );
+            if (d) {
+                d.group_code = groupCode;
+                d.group_description = data.resolved_name || l0Name;
+                d.level_0_code = groupCode;
+                d.level_0_name = data.level_0_name || l0Name;
+                d.method = "USER_APPROVED_RULE";
+                d.confidence = 1.0;
+                d.needs_review = false;
+            }
+
+            // Also check hitl_pending_reviews in appStatus
+            if (appStatus && appStatus.hitl_pending_reviews) {
+                appStatus.hitl_pending_reviews = appStatus.hitl_pending_reviews.filter(r =>
+                    r.local_code !== localCode
+                );
+            }
+
+            showToast("Mapping Saved", `Updated ${localCode} &rarr; ${groupCode} (${l0Name})`, "success");
+
+            // Re-render Step 2 table and headers to update counts and Consolidate button
+            const container = document.getElementById("step-content");
+            if (container) renderStep2(container);
+        } else {
+            showToast("Update Failed", data.detail || "Could not save mapping.", "error");
+        }
+    } catch (err) {
+        showToast("Network Error", "Failed to update mapping: " + err, "error");
+    } finally {
+        currentL0PopoverTarget = null;
+    }
 }
 
 // STEP 3: FX TRANSLATION
@@ -3679,9 +4143,22 @@ function renderStep3(el) {
 
     el.innerHTML = `
         <div class="space-y-4">
-            <div class="border-b border-kpmg-border pb-3">
-                <h3 class="font-bold text-base text-kpmg-navy">Foreign Currency Translation (Ind AS 21)</h3>
-                <p class="text-xs text-kpmg-muted">Closing rates for Balance Sheet, Average rates for P&L, Historical for Equity, with automated FCTR plug.</p>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-kpmg-border pb-3">
+                <div>
+                    <h3 class="font-bold text-base text-kpmg-navy">Foreign Currency Translation (Ind AS 21)</h3>
+                    <p class="text-xs text-kpmg-muted">Closing rates for Balance Sheet, Average rates for P&L, Historical for Equity, with automated FCTR plug.</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="triggerRunPipeline()"
+                        class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
+                        title="Consolidate">
+                        <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Consolidate</span>
+                    </button>
+                </div>
             </div>
             ${sections || '<div class="p-8 text-center text-kpmg-muted">Run consolidation to view foreign currency translation.</div>'}
         </div>
@@ -3721,10 +4198,19 @@ function renderStep4(el) {
                     <h3 class="font-bold text-base text-kpmg-navy">Intercompany Elimination Matrix</h3>
                     <p class="text-xs text-kpmg-muted">Dual-tolerance matching (₹${formatNum(appStatus.ic_absolute_tolerance || 10000)} / ${(appStatus.ic_percent_tolerance || 0.01) * 100}%) with entity-specific voucher postings.</p>
                 </div>
-                <div class="flex space-x-2 text-xs">
+                <div class="flex items-center space-x-2 text-xs">
                     <span class="px-2 py-1 rounded bg-emerald-50 text-emerald-700 font-mono font-bold">Matched: ${elim.matched_count}</span>
                     <span class="px-2 py-1 rounded bg-amber-50 text-amber-700 font-mono font-bold">Warnings: ${elim.tolerance_warning_count}</span>
                     <span class="px-2 py-1 rounded bg-red-50 text-red-700 font-mono font-bold">Exceptions: ${elim.exception_count}</span>
+                    <button onclick="triggerRunPipeline()"
+                        class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
+                        title="Consolidate">
+                        <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Consolidate</span>
+                    </button>
                 </div>
             </div>
             <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-280px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
@@ -3806,13 +4292,22 @@ function renderStep5(el) {
                 </div>
                 <div class="flex items-center space-x-2">
                     ${entCodes.length > 4 ? `
-                        <button onclick="toggleEntityCollapse()" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition">
+                        <button onclick="toggleEntityCollapse()" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition cursor-pointer">
                             ${collapseEntityColumns ? 'Expand Entities (' + entCodes.length + ')' : 'Collapse Entities'}
                         </button>
                     ` : ''}
                     <div class="text-xs font-mono px-3 py-1 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
                         Consolidated Sum: ${formatNum(ctb.total_consolidated)} (0.00)
                     </div>
+                    <button onclick="triggerRunPipeline()"
+                        class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
+                        title="Consolidate">
+                        <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Consolidate</span>
+                    </button>
                 </div>
             </div>
             <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-280px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
@@ -3867,7 +4362,7 @@ async function renderStep6(el) {
                 <p class="text-xs text-kpmg-muted max-w-md mx-auto mb-4">${statementsData?.message || 'Please execute the multi-agent consolidation pipeline to generate the IND AS Balance Sheet and Statement of Profit and Loss.'}</p>
                 <button onclick="triggerRunPipeline()" class="h-8 px-4 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition shadow-xs inline-flex items-center space-x-1.5">
                     <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path></svg>
-                    <span>Execute Consolidation</span>
+                    <span>Consolidate</span>
                 </button>
             </div>
         `;
@@ -3964,10 +4459,19 @@ async function renderStep6(el) {
                 </div>
                 <div class="flex items-center space-x-2">
                     ${balancePill}
-                    <a href="/api/export-excel" class="h-8 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-medium transition flex items-center space-x-1.5 shadow-xs">
+                    <a href="/api/export-excel" class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                         <span>Download 100% Formula Excel</span>
                     </a>
+                    <button onclick="triggerRunPipeline()"
+                        class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
+                        title="Consolidate">
+                        <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Consolidate</span>
+                    </button>
                 </div>
             </div>
 
@@ -4182,7 +4686,7 @@ function openHITLMappingModal(pendingReviews) {
         }
 
         const confPct = Math.round((rev.confidence || 0) * 100);
-        const confBadge = confPct >= 85 
+        const confBadge = confPct >= 85
             ? `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">${confPct}%</span>`
             : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">${confPct}% (Review)</span>`;
 
@@ -4645,7 +5149,7 @@ function returnToLauncher() {
     activeRunPeriod = null;
     try {
         fetch("/api/runs/launcher-mode", { method: "POST" });
-    } catch (_) {}
+    } catch (_) { }
     switchNavSection('PIPELINE');
 }
 
