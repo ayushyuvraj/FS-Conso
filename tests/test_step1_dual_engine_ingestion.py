@@ -274,3 +274,129 @@ def test_pipeline_confirmation_api_gating(multi_sheet_workbook_bytes):
     assert data_confirm["success"] is True
     assert 1 in data_confirm["completed_steps"]
     assert data_confirm["current_step"] == 2
+
+
+def test_denomination_detection_and_scale_multiplication():
+    """Tests automatic detection of Lakhs, Crores, Millions, Thousands, and scale multipliers."""
+    # 1. Lakhs detection
+    sample_lakhs = [
+        ["Trial Balance as at 31 March 2024", "", "", ""],
+        ["(All figures in INR Lakhs)", "", "", ""],
+        ["Account Code", "Account Description", "Debit", "Credit"],
+        ["1001", "Cash in Hand", 15.5, 0.0],
+        ["2001", "Trade Payables", 0.0, 15.5]
+    ]
+    denom, mult, instr = FileClassifier._detect_denomination(sample_lakhs, "TB_Lakhs", "TB_Lakhs.xlsx")
+    assert denom == "LAKHS"
+    assert mult == 100000.0
+    assert "₹ Lakhs" in instr
+
+    # 2. Crores detection
+    sample_crores = [
+        ["Company Name Limited"],
+        ["Amounts reported in Crores"],
+        ["Code", "Description", "Debit", "Credit"],
+        ["1001", "Property, Plant & Equipment", 2.5, 0.0]
+    ]
+    denom, mult, instr = FileClassifier._detect_denomination(sample_crores, "TB_Crores", "TB_Crores.xlsx")
+    assert denom == "CRORES"
+    assert mult == 10000000.0
+    assert "₹ Crores" in instr
+
+    # 3. Millions detection
+    sample_millions = [
+        ["Balance Sheet / TB (in Millions)"],
+        ["GL Account", "Description", "Balance"],
+        ["1010", "Bank Balance", 4.2]
+    ]
+    denom, mult, instr = FileClassifier._detect_denomination(sample_millions, "Sheet1", "US_Sub_Millions.xlsx")
+    assert denom == "MILLIONS"
+    assert mult == 1000000.0
+    assert "Millions" in instr
+
+    # 4. FlexibleTBParser parsing with scale_multiplier
+    df_lakhs = pd.DataFrame({
+        "Account Code": ["1001", "2001"],
+        "Description": ["Cash", "Equity"],
+        "Debit": [12.50, 0.0],
+        "Credit": [0.0, 12.50]
+    })
+    tb_scaled = FlexibleTBParser.parse_dataframe(
+        df=df_lakhs,
+        entity_code="Test_Lakhs",
+        period="31-Mar-2024",
+        currency="INR",
+        scale_multiplier=100000.0
+    )
+    # 12.50 * 100,000 = 1,250,000.00
+    assert tb_scaled.rows[0].debit == 1250000.00
+    assert tb_scaled.rows[1].credit == 1250000.00
+
+
+def test_perimeter_approval_state_prefill_and_scale(sample_hierarchy):
+    """Verifies that build_perimeter_approval_state correctly prefills columns, filenames, and scale."""
+    from fs_conso.web.app import build_perimeter_approval_state
+    from fs_conso.models.company import CompanyProfile
+
+    prof = CompanyProfile(
+        company_id="Client_Test",
+        company_name="Client Test Inc.",
+        reporting_currency="INR",
+        current_period="31-Mar-2024",
+        entity_hierarchy=sample_hierarchy
+    )
+
+    classified_files = [
+        ClassifiedFile(
+            filename="Client_P.xlsx",
+            sheet_name="Parent_Sheet",
+            file_type="CURRENT_TB",
+            entity_code="Company_P",
+            confidence=0.92,
+            detected_columns={"account_code": "Account Code", "debit": "Debit Amount", "credit": "Credit Amount"},
+            denomination="LAKHS",
+            scale_multiplier=100000.0,
+            scale_instruction="Reported in ₹ Lakhs — multiplying by 100,000 to normalize to absolute currency"
+        ),
+        ClassifiedFile(
+            filename="FX_Rates.xlsx",
+            sheet_name="Rates",
+            file_type="FX_RATES",
+            confidence=0.98,
+            detected_columns={"closing_rate": "Closing Rate", "average_rate": "Average Rate", "swap_rate": "Swap Rate"}
+        )
+    ]
+    files_map = {
+        "Client_P.xlsx": ["Parent_Sheet", "Audit"],
+        "FX_Rates.xlsx": ["Rates"]
+    }
+
+    state = build_perimeter_approval_state(
+        classified_files=classified_files,
+        files_map=files_map,
+        prof=prof,
+        target_period="31-Mar-2024"
+    )
+
+    # 1. Both keys present for frontend compatibility
+    assert "files_map" in state
+    assert "available_files_and_sheets" in state
+
+    # 2. Parent prefilled
+    p = state["parent"]
+    assert p["filename"] == "Client_P.xlsx"
+    assert p["sheet_name"] == "Parent_Sheet"
+    assert p["detected_columns"]["account_code"] == "Account Code"
+    assert p["detected_columns"]["debit"] == "Debit Amount"
+    assert p["detected_columns"]["credit"] == "Credit Amount"
+    assert p["scale_multiplier"] == 100000.0
+    assert p["denomination"] == "LAKHS"
+
+    # 3. FX rates prefilled
+    fx = state["fx_rates"]
+    assert fx["filename"] == "FX_Rates.xlsx"
+    assert fx["sheet_name"] == "Rates"
+    assert fx["detected_columns"]["closing_rate"] == "Closing Rate"
+    assert fx["detected_columns"]["average_rate"] == "Average Rate"
+    assert fx["detected_columns"]["swap_rate"] == "Swap Rate"
+

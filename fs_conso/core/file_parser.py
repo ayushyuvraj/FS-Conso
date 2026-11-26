@@ -473,7 +473,8 @@ Schema:
         entity_code: str,
         period: str,
         currency: str,
-        duplicate_policy: str
+        duplicate_policy: str,
+        scale_multiplier: float = 1.0
     ) -> RawTrialBalance:
         """Unpivots a wide dimensional matrix (e.g., 75 department/dimension columns) into normalized rows."""
         rows: List[RawTBRow] = []
@@ -489,6 +490,8 @@ Schema:
             for dim_col in numeric_cols:
                 val = cls.clean_number(r[dim_col])
                 if val is not None and abs(val) > 0.0001:
+                    if scale_multiplier != 1.0 and scale_multiplier > 0:
+                        val = round(val * float(scale_multiplier), 2)
                     rows.append(RawTBRow(
                         account_code=code,
                         account_description=desc,
@@ -523,7 +526,8 @@ Schema:
         currency: str = "INR",
         duplicate_policy: str = "keep",
         entity_name: Optional[str] = None,
-        column_overrides: Optional[Dict[str, str]] = None
+        column_overrides: Optional[Dict[str, str]] = None,
+        scale_multiplier: float = 1.0
     ) -> RawTrialBalance:
         df = df.dropna(how="all").copy()
         if df.empty:
@@ -602,7 +606,7 @@ Schema:
         is_wide_matrix = len(numeric_cols) > 5 and not (debit_col and credit_col)
 
         if is_wide_matrix:
-            return cls._unpivot_wide_matrix(df, code_col, desc_col, numeric_cols, entity_code, period, currency, duplicate_policy)
+            return cls._unpivot_wide_matrix(df, code_col, desc_col, numeric_cols, entity_code, period, currency, duplicate_policy, scale_multiplier=scale_multiplier)
 
         rows: List[RawTBRow] = []
 
@@ -628,6 +632,16 @@ Schema:
                     amount_val = -abs(amount_val)
                 elif indicator in ("dr", "debit", "d", "+"):
                     amount_val = abs(amount_val)
+
+            # Apply scale multiplier if specified (e.g. Lakhs, Crores, Thousands, Millions)
+            if scale_multiplier != 1.0 and scale_multiplier > 0:
+                mult = float(scale_multiplier)
+                if debit_val is not None:
+                    debit_val = round(debit_val * mult, 2)
+                if credit_val is not None:
+                    credit_val = round(credit_val * mult, 2)
+                if amount_val is not None:
+                    amount_val = round(amount_val * mult, 2)
 
             # Check if this is a two-column or single-column TB
             if debit_col or credit_col:
@@ -689,7 +703,8 @@ Schema:
         duplicate_policy: str = "keep",
         entity_name: Optional[str] = None,
         column_overrides: Optional[Dict[str, str]] = None,
-        sheet_name: Optional[str] = None
+        sheet_name: Optional[str] = None,
+        scale_multiplier: float = 1.0
     ) -> RawTrialBalance:
         fn_lower = filename.lower()
         if fn_lower.endswith(".csv"):
@@ -743,7 +758,8 @@ Schema:
             currency,
             duplicate_policy=duplicate_policy,
             entity_name=entity_name,
-            column_overrides=column_overrides
+            column_overrides=column_overrides,
+            scale_multiplier=scale_multiplier
         )
         res.source_filename = filename
         return res

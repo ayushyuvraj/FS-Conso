@@ -2271,40 +2271,103 @@ function renderPerimeterApprovalModalContent(state) {
         return;
     }
 
-    const fileMap = state.available_files_and_sheets || {};
+    const fileMap = state.files_map || state.available_files_and_sheets || {};
     const fileList = Object.keys(fileMap);
 
     const genFileOptions = (selectedFile) => {
         let opts = '<option value="">-- Select File --</option>';
+        let matched = false;
         fileList.forEach(f => {
-            const isSel = f === selectedFile ? 'selected' : '';
-            opts += `<option value="${escapeHtml(f)}" ${isSel}>${escapeHtml(f)}</option>`;
+            const isSel = (f === selectedFile);
+            if (isSel) matched = true;
+            opts += `<option value="${escapeHtml(f)}" ${isSel ? 'selected' : ''}>${escapeHtml(f)}</option>`;
         });
+        if (selectedFile && !matched) {
+            opts += `<option value="${escapeHtml(selectedFile)}" selected>${escapeHtml(selectedFile)}</option>`;
+        }
         return opts;
     };
 
     const genSheetOptions = (filename, selectedSheet) => {
         const sheets = fileMap[filename] || [];
-        if (sheets.length === 0) return '<option value="">Default Sheet</option>';
+        if (sheets.length === 0) {
+            if (selectedSheet) {
+                return `<option value="${escapeHtml(selectedSheet)}" selected>${escapeHtml(selectedSheet)}</option>`;
+            }
+            return '<option value="">Default Sheet</option>';
+        }
         let opts = '';
+        let matched = false;
         sheets.forEach(s => {
-            const isSel = s === selectedSheet ? 'selected' : '';
-            opts += `<option value="${escapeHtml(s)}" ${isSel}>${escapeHtml(s)}</option>`;
+            const isSel = (s === selectedSheet);
+            if (isSel) matched = true;
+            opts += `<option value="${escapeHtml(s)}" ${isSel ? 'selected' : ''}>${escapeHtml(s)}</option>`;
         });
+        if (selectedSheet && !matched) {
+            opts += `<option value="${escapeHtml(selectedSheet)}" selected>${escapeHtml(selectedSheet)}</option>`;
+        }
         return opts;
     };
 
     const genColOptions = (sampleRows, selectedCol, defaultLabel) => {
-        if (!sampleRows || sampleRows.length === 0) {
-            return `<option value="">${defaultLabel}</option>`;
+        const colSet = new Set();
+        if (sampleRows && sampleRows.length > 0) {
+            for (let r = 0; r < Math.min(5, sampleRows.length); r++) {
+                const row = sampleRows[r] || [];
+                const stringCount = row.filter(c => c && isNaN(Number(String(c).replace(/[,₹$%()]/g, '')))).length;
+                if (stringCount >= 2) {
+                    row.forEach(c => {
+                        const trimmed = String(c || '').trim();
+                        if (trimmed) colSet.add(trimmed);
+                    });
+                    break;
+                }
+            }
+            if (colSet.size === 0 && sampleRows[0]) {
+                sampleRows[0].forEach(c => {
+                    const trimmed = String(c || '').trim();
+                    if (trimmed) colSet.add(trimmed);
+                });
+            }
         }
-        const headers = sampleRows[0] || [];
+
         let opts = '<option value="">-- Auto / None --</option>';
-        headers.forEach(h => {
-            if (!h) return;
-            const isSel = (h === selectedCol) ? 'selected' : '';
-            opts += `<option value="${escapeHtml(h)}" ${isSel}>${escapeHtml(h)}</option>`;
+        let matched = false;
+        const selClean = String(selectedCol || '').trim().toLowerCase();
+
+        colSet.forEach(h => {
+            const hClean = h.trim().toLowerCase();
+            const isSel = (selectedCol && (h === selectedCol || hClean === selClean));
+            if (isSel) matched = true;
+            opts += `<option value="${escapeHtml(h)}" ${isSel ? 'selected' : ''}>${escapeHtml(h)}</option>`;
         });
+
+        if (selectedCol && !matched) {
+            opts += `<option value="${escapeHtml(selectedCol)}" selected>${escapeHtml(selectedCol)}</option>`;
+        }
+        return opts;
+    };
+
+    const genScaleOptions = (currentMult) => {
+        const scales = [
+            { val: 1, label: "Units / Absolute (×1)" },
+            { val: 100000, label: "₹ Lakhs (×100,000)" },
+            { val: 10000000, label: "₹ Crores (×10,000,000)" },
+            { val: 1000000, label: "Millions (×1,000,000)" },
+            { val: 1000, label: "Thousands (×1,000)" },
+            { val: 100, label: "Hundreds (×100)" }
+        ];
+        let opts = '';
+        let matched = false;
+        const curNum = parseFloat(currentMult) || 1.0;
+        scales.forEach(s => {
+            const isSel = Math.abs(s.val - curNum) < 0.001;
+            if (isSel) matched = true;
+            opts += `<option value="${s.val}" ${isSel ? 'selected' : ''}>${s.label}</option>`;
+        });
+        if (!matched) {
+            opts += `<option value="${curNum}" selected>Custom (×${curNum})</option>`;
+        }
         return opts;
     };
 
@@ -2316,14 +2379,9 @@ function renderPerimeterApprovalModalContent(state) {
         const sampleRows = parent.sample_rows || [];
         const isMapped = !!parent.filename;
         const confPct = Math.round((parent.confidence || 1.0) * 100);
-        const methodBadge = parent.classification_method === 'DETERMINISTIC'
-            ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-100 text-kpmg-blue font-semibold border border-blue-200">Deterministic (${confPct}%)</span>`
-            : (parent.classification_method === 'GEMINI_AI'
-                ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-100 text-purple-700 font-semibold border border-purple-200">AI Agent (${confPct}%)</span>`
-                : `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-100 text-amber-800 font-semibold border border-amber-200">Human Review Needed</span>`);
 
         const dateAlert = parent.date_status === 'MISMATCH'
-            ? `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">⚠️ Date Mismatch: Found ${escapeHtml(parent.detected_period || '')} vs Run ${escapeHtml(state.target_period || '')}</span>`
+            ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">⚠️ Date Mismatch: Found ${escapeHtml(parent.detected_period || '')} vs Run ${escapeHtml(state.target_period || '')}</span>`
             : '';
 
         cardsHtml += `
@@ -2342,22 +2400,38 @@ function renderPerimeterApprovalModalContent(state) {
                     </div>
                     <div class="flex items-center space-x-2">
                         ${dateAlert}
-                        ${methodBadge}
+                        ${sampleRows.length > 0 ? `
+                            <button type="button" onclick="toggleSamplePreview('parent-sample-preview')"
+                                class="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-kpmg-blue flex items-center justify-center transition btn-tactile cursor-pointer"
+                                title="Preview Extracted Data">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                            </button>
+                        ` : ''}
+                        <span class="font-mono text-xs font-bold text-slate-700">${confPct}%</span>
+                        ${!isMapped ? `
+                            <button type="button" onclick="openSingleUploadModal('${escapeHtml(parent.entity_code)}', '${escapeHtml(parent.entity_name)}')"
+                                class="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white font-semibold text-[11px] transition btn-tactile cursor-pointer">
+                                Upload File
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
                     <div>
                         <label class="block font-semibold text-slate-700 mb-1">Assigned File</label>
                         <select onchange="updateEntityFileMapping('${escapeHtml(parent.entity_code)}', this.value)"
-                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-slate-50">
+                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
                             ${genFileOptions(parent.filename)}
                         </select>
                     </div>
                     <div>
                         <label class="block font-semibold text-slate-700 mb-1">Worksheet</label>
                         <select onchange="updateEntitySheetMapping('${escapeHtml(parent.entity_code)}', this.value)"
-                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-slate-50">
+                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
                             ${genSheetOptions(parent.filename, parent.sheet_name)}
                         </select>
                     </div>
@@ -2368,25 +2442,41 @@ function renderPerimeterApprovalModalContent(state) {
                         </select>
                     </div>
                     <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Debit / Net Col</label>
+                        <label class="block font-semibold text-slate-700 mb-1">Debit Col</label>
                         <select id="col-parent-debit" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genColOptions(sampleRows, (parent.detected_columns || {}).debit || (parent.detected_columns || {}).net_amount, 'Debit / Net')}
+                            ${genColOptions(sampleRows, (parent.detected_columns || {}).debit || (parent.detected_columns || {}).amount, 'Debit')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Credit Col</label>
+                        <select id="col-parent-credit" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
+                            ${genColOptions(sampleRows, (parent.detected_columns || {}).credit, 'Credit')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Scale / Denom</label>
+                        <select id="scale-parent" onchange="updateEntityScaleInstruction('${escapeHtml(parent.entity_code)}', this.value)"
+                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
+                            ${genScaleOptions(parent.scale_multiplier)}
                         </select>
                     </div>
                 </div>
 
+                <div id="scale-banner-${escapeHtml(parent.entity_code)}" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 font-medium">
+                    <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                    <span><strong class="font-semibold">Scale Normalization:</strong> <span id="scale-instr-${escapeHtml(parent.entity_code)}">${escapeHtml(parent.scale_instruction || 'Reported in exact absolute currency (multiplier 1.0)')}</span></span>
+                </div>
+
                 ${sampleRows.length > 0 ? `
-                    <div class="pt-1">
-                        <button type="button" onclick="toggleSamplePreview('parent-sample-preview')" class="text-[11px] font-semibold text-kpmg-blue hover:underline flex items-center space-x-1 cursor-pointer">
-                            <span>👁 Preview Extracted Data (${sampleRows.length} sample rows)</span>
-                        </button>
-                        <div id="parent-sample-preview" class="hidden mt-2 p-2 rounded bg-slate-50 border border-slate-200 overflow-x-auto text-[11px] font-mono max-h-36">
-                            <table class="w-full text-left">
-                                <tbody>
-                                    ${sampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
-                                </tbody>
-                            </table>
-                        </div>
+                    <div id="parent-sample-preview" class="hidden mt-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200 overflow-x-auto text-[11px] font-mono max-h-44">
+                        <div class="text-[10px] uppercase font-bold text-slate-500 mb-1 tracking-wider">Top 5 Extracted Sample Rows (Raw):</div>
+                        <table class="w-full text-left">
+                            <tbody>
+                                ${sampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
+                            </tbody>
+                        </table>
                     </div>
                 ` : ''}
             </div>
@@ -2399,14 +2489,9 @@ function renderPerimeterApprovalModalContent(state) {
         const sampleRows = sub.sample_rows || [];
         const isMapped = !!sub.filename;
         const confPct = Math.round((sub.confidence || 1.0) * 100);
-        const methodBadge = isMapped
-            ? (sub.classification_method === 'DETERMINISTIC'
-                ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-100 text-kpmg-blue font-semibold border border-blue-200">Deterministic (${confPct}%)</span>`
-                : `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-100 text-purple-700 font-semibold border border-purple-200">AI Agent (${confPct}%)</span>`)
-            : `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-100 text-amber-800 font-semibold border border-amber-200">Pending File</span>`;
 
         const dateAlert = sub.date_status === 'MISMATCH'
-            ? `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">⚠️ Date Mismatch: ${escapeHtml(sub.detected_period || '')}</span>`
+            ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">⚠️ Date Mismatch: ${escapeHtml(sub.detected_period || '')}</span>`
             : '';
 
         cardsHtml += `
@@ -2417,7 +2502,7 @@ function renderPerimeterApprovalModalContent(state) {
                         <div>
                             <div class="flex items-center space-x-2">
                                 <h4 class="font-bold text-sm text-slate-800">${escapeHtml(sub.entity_name || sub.entity_code)}</h4>
-                                <span class="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 text-slate-600 font-semibold">${sub.holding_percentage != null ? `${Math.round(sub.holding_percentage * 100)}%` : '100%'} OWNED</span>
+                                <span class="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 text-slate-600 font-semibold">${sub.holding_pct != null ? `${sub.holding_pct}%` : (sub.holding_percentage != null ? `${Math.round(sub.holding_percentage * 100)}%` : '100%')} OWNED</span>
                                 <span class="font-mono text-xs text-slate-500 font-semibold">(${escapeHtml(sub.entity_code)})</span>
                             </div>
                             <span class="text-[11px] text-slate-500 font-mono">Currency: <strong class="text-slate-700">${escapeHtml(sub.currency || 'INR')}</strong></span>
@@ -2425,7 +2510,17 @@ function renderPerimeterApprovalModalContent(state) {
                     </div>
                     <div class="flex items-center space-x-2">
                         ${dateAlert}
-                        ${methodBadge}
+                        ${sampleRows.length > 0 ? `
+                            <button type="button" onclick="toggleSamplePreview('sub-${escapeHtml(sub.entity_code)}-preview')"
+                                class="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-kpmg-blue flex items-center justify-center transition btn-tactile cursor-pointer"
+                                title="Preview Extracted Data">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                            </button>
+                        ` : ''}
+                        <span class="font-mono text-xs font-bold text-slate-700">${confPct}%</span>
                         ${!isMapped ? `
                             <button type="button" onclick="openSingleUploadModal('${escapeHtml(sub.entity_code)}', '${escapeHtml(sub.entity_name)}')"
                                 class="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white font-semibold text-[11px] transition btn-tactile cursor-pointer">
@@ -2435,18 +2530,18 @@ function renderPerimeterApprovalModalContent(state) {
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
                     <div>
                         <label class="block font-semibold text-slate-700 mb-1">Assigned File</label>
                         <select onchange="updateEntityFileMapping('${escapeHtml(sub.entity_code)}', this.value)"
-                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-slate-50">
+                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
                             ${genFileOptions(sub.filename)}
                         </select>
                     </div>
                     <div>
                         <label class="block font-semibold text-slate-700 mb-1">Worksheet</label>
                         <select onchange="updateEntitySheetMapping('${escapeHtml(sub.entity_code)}', this.value)"
-                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-slate-50">
+                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
                             ${genSheetOptions(sub.filename, sub.sheet_name)}
                         </select>
                     </div>
@@ -2457,25 +2552,41 @@ function renderPerimeterApprovalModalContent(state) {
                         </select>
                     </div>
                     <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Debit / Net Col</label>
+                        <label class="block font-semibold text-slate-700 mb-1">Debit Col</label>
                         <select id="col-${escapeHtml(sub.entity_code)}-debit" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
-                            ${genColOptions(sampleRows, (sub.detected_columns || {}).debit || (sub.detected_columns || {}).net_amount, 'Debit / Net')}
+                            ${genColOptions(sampleRows, (sub.detected_columns || {}).debit || (sub.detected_columns || {}).amount, 'Debit')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Credit Col</label>
+                        <select id="col-${escapeHtml(sub.entity_code)}-credit" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
+                            ${genColOptions(sampleRows, (sub.detected_columns || {}).credit, 'Credit')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Scale / Denom</label>
+                        <select id="scale-${escapeHtml(sub.entity_code)}" onchange="updateEntityScaleInstruction('${escapeHtml(sub.entity_code)}', this.value)"
+                            class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
+                            ${genScaleOptions(sub.scale_multiplier)}
                         </select>
                     </div>
                 </div>
 
+                <div id="scale-banner-${escapeHtml(sub.entity_code)}" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 font-medium">
+                    <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                    <span><strong class="font-semibold">Scale Normalization:</strong> <span id="scale-instr-${escapeHtml(sub.entity_code)}">${escapeHtml(sub.scale_instruction || 'Reported in exact absolute currency (multiplier 1.0)')}</span></span>
+                </div>
+
                 ${sampleRows.length > 0 ? `
-                    <div class="pt-1">
-                        <button type="button" onclick="toggleSamplePreview('sub-${escapeHtml(sub.entity_code)}-preview')" class="text-[11px] font-semibold text-kpmg-blue hover:underline flex items-center space-x-1 cursor-pointer">
-                            <span>👁 Preview Extracted Data (${sampleRows.length} sample rows)</span>
-                        </button>
-                        <div id="sub-${escapeHtml(sub.entity_code)}-preview" class="hidden mt-2 p-2 rounded bg-slate-50 border border-slate-200 overflow-x-auto text-[11px] font-mono max-h-36">
-                            <table class="w-full text-left">
-                                <tbody>
-                                    ${sampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
-                                </tbody>
-                            </table>
-                        </div>
+                    <div id="sub-${escapeHtml(sub.entity_code)}-preview" class="hidden mt-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200 overflow-x-auto text-[11px] font-mono max-h-44">
+                        <div class="text-[10px] uppercase font-bold text-slate-500 mb-1 tracking-wider">Top 5 Extracted Sample Rows (Raw):</div>
+                        <table class="w-full text-left">
+                            <tbody>
+                                ${sampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
+                            </tbody>
+                        </table>
                     </div>
                 ` : ''}
             </div>
@@ -2486,6 +2597,7 @@ function renderPerimeterApprovalModalContent(state) {
     const fx = state.fx_rates || {};
     const fxSampleRows = fx.sample_rows || [];
     const isFxMapped = !!fx.filename;
+    const fxConfPct = Math.round((fx.confidence || 1.0) * 100);
 
     cardsHtml += `
         <div class="bg-white border-2 border-indigo-200 rounded-xl p-4 shadow-xs space-y-3">
@@ -2501,28 +2613,37 @@ function renderPerimeterApprovalModalContent(state) {
                     </div>
                 </div>
                 <div class="flex items-center space-x-2">
-                    ${isFxMapped ? '<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-100 text-emerald-800 font-semibold border border-emerald-200">Identified</span>' : '<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-100 text-amber-800 font-semibold border border-amber-200">Missing FX Sheet</span>'}
-                    ${!isFxMapped ? `
+                    ${isFxMapped ? `
+                        <button type="button" onclick="toggleSamplePreview('fx-sample-preview')"
+                            class="w-7 h-7 rounded-lg hover:bg-indigo-100 text-indigo-700 flex items-center justify-center transition btn-tactile cursor-pointer"
+                            title="Preview Extracted FX Table">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                        </button>
+                        <span class="font-mono text-xs font-bold text-slate-700">${fxConfPct}%</span>
+                    ` : `
                         <button type="button" onclick="openSingleUploadModal('FX_RATES', 'Foreign Exchange Rates')"
                             class="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-[11px] transition btn-tactile cursor-pointer">
                             Upload FX Rates
                         </button>
-                    ` : ''}
+                    `}
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 text-xs">
                 <div>
                     <label class="block font-semibold text-slate-700 mb-1">Assigned File</label>
                     <select onchange="updateEntityFileMapping('FX_RATES', this.value)"
-                        class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-slate-50">
+                        class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
                         ${genFileOptions(fx.filename)}
                     </select>
                 </div>
                 <div>
                     <label class="block font-semibold text-slate-700 mb-1">Worksheet</label>
                     <select onchange="updateEntitySheetMapping('FX_RATES', this.value)"
-                        class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-slate-50">
+                        class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
                         ${genSheetOptions(fx.filename, fx.sheet_name)}
                     </select>
                 </div>
@@ -2530,6 +2651,12 @@ function renderPerimeterApprovalModalContent(state) {
                     <label class="block font-semibold text-slate-700 mb-1">Closing Rate Col</label>
                     <select id="col-fx-closing" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
                         ${genColOptions(fxSampleRows, (fx.detected_columns || {}).closing_rate, 'Closing Rate')}
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Average Rate Col</label>
+                    <select id="col-fx-average" class="w-full h-8 px-2 rounded border border-slate-200 text-xs font-mono bg-white">
+                        ${genColOptions(fxSampleRows, (fx.detected_columns || {}).average_rate, 'Average Rate')}
                     </select>
                 </div>
                 <div>
@@ -2541,24 +2668,20 @@ function renderPerimeterApprovalModalContent(state) {
             </div>
 
             ${fxSampleRows.length > 0 ? `
-                <div class="pt-1">
-                    <button type="button" onclick="toggleSamplePreview('fx-sample-preview')" class="text-[11px] font-semibold text-indigo-700 hover:underline flex items-center space-x-1 cursor-pointer">
-                        <span>👁 Preview Extracted FX Table (${fxSampleRows.length} sample rows)</span>
-                    </button>
-                    <div id="fx-sample-preview" class="hidden mt-2 p-2 rounded bg-indigo-50/40 border border-indigo-200 overflow-x-auto text-[11px] font-mono max-h-36">
-                        <table class="w-full text-left">
-                            <tbody>
-                                ${fxSampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-indigo-100/60' : 'border-b border-indigo-100/40'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
-                            </tbody>
-                        </table>
-                    </div>
+                <div id="fx-sample-preview" class="hidden mt-2 p-2.5 rounded-lg bg-indigo-50/40 border border-indigo-200 overflow-x-auto text-[11px] font-mono max-h-44">
+                    <div class="text-[10px] uppercase font-bold text-indigo-900 mb-1 tracking-wider">Top 5 Extracted FX Rows (Raw):</div>
+                    <table class="w-full text-left">
+                        <tbody>
+                            ${fxSampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-indigo-100/60' : 'border-b border-indigo-100/40'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
+                        </tbody>
+                    </table>
                 </div>
             ` : ''}
         </div>
     `;
 
     // 4. IGNORED / EXTRA SHEETS TRAY
-    const unassigned = state.unassigned_sheets || [];
+    const unassigned = state.unassigned_sheets || state.unassigned_items || [];
     if (unassigned.length > 0) {
         cardsHtml += `
             <div class="border border-slate-200 rounded-xl overflow-hidden bg-white">
@@ -2599,13 +2722,46 @@ function renderPerimeterApprovalModalContent(state) {
         const totalEntities = (parent ? 1 : 0) + subs.length;
         const mappedEntities = (parent && parent.filename ? 1 : 0) + subs.filter(s => s.filename).length;
         const fxStatusText = isFxMapped ? 'FX Rates Verified' : 'FX Rates Missing';
-        footerStatus.innerHTML = `<span class="font-semibold text-slate-700">${mappedEntities}/${totalEntities} Entities Mapped</span> • <span class="${isFxMapped ? 'text-emerald-700' : 'text-amber-700'}">${fxStatusText}</span>`;
+        footerStatus.innerHTML = `<span class="font-semibold text-slate-700">${mappedEntities}/${totalEntities} Entities Mapped</span> • <span class="${isFxMapped ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}">${fxStatusText}</span>`;
+    }
+}
+
+function updateEntityScaleInstruction(entityCode, scaleValue) {
+    const mult = parseFloat(scaleValue) || 1.0;
+    const instrSpan = document.getElementById(`scale-instr-${entityCode}`);
+    let desc = `Reported in exact absolute currency (multiplier 1.0)`;
+    if (Math.abs(mult - 100000) < 0.1) {
+        desc = `Reported in ₹ Lakhs — multiplying by 100,000 to normalize to absolute currency`;
+    } else if (Math.abs(mult - 10000000) < 0.1) {
+        desc = `Reported in ₹ Crores — multiplying by 10,000,000 to normalize to absolute currency`;
+    } else if (Math.abs(mult - 1000000) < 0.1) {
+        desc = `Reported in Millions — multiplying by 1,000,000 to normalize to absolute currency`;
+    } else if (Math.abs(mult - 1000) < 0.1) {
+        desc = `Reported in Thousands — multiplying by 1,000 to normalize to absolute currency`;
+    } else if (Math.abs(mult - 100) < 0.1) {
+        desc = `Reported in Hundreds — multiplying by 100 to normalize to absolute currency`;
+    } else if (mult !== 1.0) {
+        desc = `Multiplying by ${mult} to normalize to absolute currency`;
+    }
+    if (instrSpan) instrSpan.textContent = desc;
+
+    if (step1ApprovalState) {
+        if (step1ApprovalState.parent && step1ApprovalState.parent.entity_code === entityCode) {
+            step1ApprovalState.parent.scale_multiplier = mult;
+            step1ApprovalState.parent.scale_instruction = desc;
+        } else if (step1ApprovalState.subsidiaries) {
+            const sub = step1ApprovalState.subsidiaries.find(s => s.entity_code === entityCode);
+            if (sub) {
+                sub.scale_multiplier = mult;
+                sub.scale_instruction = desc;
+            }
+        }
     }
 }
 
 function updateEntityFileMapping(entityCode, filename) {
     if (!step1ApprovalState) return;
-    const fileMap = step1ApprovalState.available_files_and_sheets || {};
+    const fileMap = step1ApprovalState.files_map || step1ApprovalState.available_files_and_sheets || {};
     const sheets = fileMap[filename] || [];
     const firstSheet = sheets[0] || '';
 
@@ -2650,7 +2806,7 @@ async function confirmPerimeterApprovalModal() {
     const btn = document.getElementById('btn-confirm-perimeter-modal');
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = `<span>Validating & Parsing Balances...</span>`;
+        btn.innerHTML = `<span>Validating & Normalizing Balances...</span>`;
     }
 
     const payload = {
@@ -2660,15 +2816,21 @@ async function confirmPerimeterApprovalModal() {
     if (step1ApprovalState.parent && step1ApprovalState.parent.filename) {
         const pCodeSel = document.getElementById('col-parent-code');
         const pDebitSel = document.getElementById('col-parent-debit');
+        const pCreditSel = document.getElementById('col-parent-credit');
+        const pScaleSel = document.getElementById('scale-parent');
         const cols = Object.assign({}, step1ApprovalState.parent.detected_columns || {});
         if (pCodeSel && pCodeSel.value) cols.account_code = pCodeSel.value;
         if (pDebitSel && pDebitSel.value) cols.debit = pDebitSel.value;
+        if (pCreditSel && pCreditSel.value) cols.credit = pCreditSel.value;
+
+        const scaleMult = pScaleSel ? (parseFloat(pScaleSel.value) || 1.0) : (step1ApprovalState.parent.scale_multiplier || 1.0);
 
         payload.entities.push({
             entity_code: step1ApprovalState.parent.entity_code,
             filename: step1ApprovalState.parent.filename,
             sheet_name: step1ApprovalState.parent.sheet_name,
-            columns: cols
+            columns: cols,
+            scale_multiplier: scaleMult
         });
     }
 
@@ -2677,15 +2839,21 @@ async function confirmPerimeterApprovalModal() {
             if (s.filename) {
                 const sCodeSel = document.getElementById(`col-${s.entity_code}-code`);
                 const sDebitSel = document.getElementById(`col-${s.entity_code}-debit`);
+                const sCreditSel = document.getElementById(`col-${s.entity_code}-credit`);
+                const sScaleSel = document.getElementById(`scale-${s.entity_code}`);
                 const cols = Object.assign({}, s.detected_columns || {});
                 if (sCodeSel && sCodeSel.value) cols.account_code = sCodeSel.value;
                 if (sDebitSel && sDebitSel.value) cols.debit = sDebitSel.value;
+                if (sCreditSel && sCreditSel.value) cols.credit = sCreditSel.value;
+
+                const scaleMult = sScaleSel ? (parseFloat(sScaleSel.value) || 1.0) : (s.scale_multiplier || 1.0);
 
                 payload.entities.push({
                     entity_code: s.entity_code,
                     filename: s.filename,
                     sheet_name: s.sheet_name,
-                    columns: cols
+                    columns: cols,
+                    scale_multiplier: scaleMult
                 });
             }
         });
@@ -2693,9 +2861,11 @@ async function confirmPerimeterApprovalModal() {
 
     if (step1ApprovalState.fx_rates && step1ApprovalState.fx_rates.filename) {
         const fxClosingSel = document.getElementById('col-fx-closing');
+        const fxAvgSel = document.getElementById('col-fx-average');
         const fxSwapSel = document.getElementById('col-fx-swap');
         const cols = Object.assign({}, step1ApprovalState.fx_rates.detected_columns || {});
         if (fxClosingSel && fxClosingSel.value) cols.closing_rate = fxClosingSel.value;
+        if (fxAvgSel && fxAvgSel.value) cols.average_rate = fxAvgSel.value;
         if (fxSwapSel && fxSwapSel.value) cols.swap_rate = fxSwapSel.value;
 
         payload.fx_rates = {
@@ -2714,7 +2884,7 @@ async function confirmPerimeterApprovalModal() {
         const data = await res.json();
         if (res.ok && data.success) {
             closePerimeterApprovalModal();
-            showToast('Ingestion Approved', 'Step 1 locked with green checkmark. Step 2 (Mapping) is now unlocked.', 'success');
+            showToast('Ingestion Approved', 'Step 1 locked with green checkmark. Balances normalized to absolute currency.', 'success');
             await fetchStatus();
             await loadPipelineData();
             switchStep(1);

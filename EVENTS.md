@@ -371,6 +371,31 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
   - Live server verification on `http://127.0.0.1:8000`: HTTP 200 OK for `/api/companies` and `/api/runs`.
 
+### [2026-11-26] - Milestone: Step 1 Ingestion Mappings Review Polish & Denomination Normalization
+- **Architectural & UI Enhancements**:
+  - **Modal Polish & Anti-Clutter**:
+    - Renamed modal header from "Review Ingestion & Perimeter Mappings" to "Review Ingestion Mappings".
+    - Removed extraneous "Dual-Engine Classification" badge and top parameter alignment blue banner.
+    - Simplified card header: removed "Deterministic" / "AI Agent" boxes; replaced with tactile eye preview button (`👁`) and clean percentage text (e.g. `92%`, `96%`).
+    - FX Rates Table card: removed "Identified" badge; unified with eye preview button and percentage text.
+  - **Comprehensive Dropdown Prefilling**:
+    - `Assigned File`: prefilled with detected workbook/file.
+    - `Worksheet`: prefilled with detected worksheet name.
+    - `Account Code Col`: prefilled with detected account code column name.
+    - `Debit Col` & `Credit Col`: split into separate prefilled dropdowns.
+    - `FX Rates Table`: prefilled with closing rate, average rate, and swap rate columns.
+    - Resilient sample scanning across rows 0-5 to identify true header rows even with preamble banners.
+  - **Denomination & Currency Scale Normalization (Lakhs, Crores, Millions, Thousands)**:
+    - Added `_detect_denomination()` in `FileClassifier`: detects scale from preambles, titles, and headers (Lakhs $\times 10^5$, Crores $\times 10^7$, Millions $\times 10^6$, Thousands $\times 10^3$, Hundreds $\times 10^2$, Units $\times 1$).
+    - Added scale selector (`Units`, `₹ Lakhs`, `₹ Crores`, `Millions`, `Thousands`, `Hundreds`) and dynamic instruction banner (`💡 Scale Normalization: Reported in ₹ Lakhs — multiplying by 100,000 to normalize to absolute currency`) on each entity card.
+    - Updated `FlexibleTBParser` (`parse_dataframe`, `parse_file`, `_unpivot_wide_matrix`): automatically scales all debit, credit, and balance amounts by `scale_multiplier` so that all stored and displayed numbers are in absolute currency.
+- **Verification & Testing**:
+  - `tests/test_step1_dual_engine_ingestion.py`: Added `test_denomination_detection_and_scale_multiplication` and `test_perimeter_approval_state_prefill_and_scale`. All 7/7 tests PASSED.
+  - Full project test suite: 78/78 tests PASSED (100% pass rate).
+  - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Live API verification on `http://127.0.0.1:8000/api/status`: HTTP 200 OK.
+
+
 
 
 

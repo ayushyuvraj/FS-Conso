@@ -744,7 +744,10 @@ def build_perimeter_approval_state(
         "date_status": parent_cf.date_status if parent_cf else "MATCH",
         "detected_period": parent_cf.detected_period if parent_cf else target_period,
         "needs_review": parent_cf.needs_review if parent_cf else True,
-        "reasoning": parent_cf.reasoning if parent_cf else "Trial balance not yet uploaded."
+        "reasoning": parent_cf.reasoning if parent_cf else "Trial balance not yet uploaded.",
+        "denomination": parent_cf.denomination if parent_cf else "UNITS",
+        "scale_multiplier": parent_cf.scale_multiplier if parent_cf else 1.0,
+        "scale_instruction": parent_cf.scale_instruction if parent_cf else "Reported in exact absolute currency (multiplier 1.0)"
     }
 
     # 2. Subsidiaries cards
@@ -771,7 +774,10 @@ def build_perimeter_approval_state(
             "date_status": sub_cf.date_status if sub_cf else "MATCH",
             "detected_period": sub_cf.detected_period if sub_cf else target_period,
             "needs_review": sub_cf.needs_review if sub_cf else True,
-            "reasoning": sub_cf.reasoning if sub_cf else f"Trial balance for '{sub.entity_name}' not yet uploaded."
+            "reasoning": sub_cf.reasoning if sub_cf else f"Trial balance for '{sub.entity_name}' not yet uploaded.",
+            "denomination": sub_cf.denomination if sub_cf else "UNITS",
+            "scale_multiplier": sub_cf.scale_multiplier if sub_cf else 1.0,
+            "scale_instruction": sub_cf.scale_instruction if sub_cf else "Reported in exact absolute currency (multiplier 1.0)"
         })
 
     # 3. FX Rates card
@@ -818,6 +824,7 @@ def build_perimeter_approval_state(
         "unassigned_items": unassigned_items,
         "missing_entities": missing_entities,
         "files_map": files_map,
+        "available_files_and_sheets": files_map,
         "is_ready_to_confirm": all_matched
     }
 
@@ -997,6 +1004,8 @@ class EntityConfirmationItem(BaseModel):
     filename: str
     sheet_name: Optional[str] = None
     columns: Dict[str, str] = Field(default_factory=dict)
+    scale_multiplier: float = 1.0
+    denomination: Optional[str] = "UNITS"
 
 class FXConfirmationItem(BaseModel):
     filename: Optional[str] = None
@@ -1047,7 +1056,8 @@ async def confirm_ingestion(payload: ConfirmIngestionPayload):
                 currency=ent_curr,
                 entity_name=ent_name,
                 column_overrides=ent_item.columns,
-                sheet_name=ent_item.sheet_name
+                sheet_name=ent_item.sheet_name,
+                scale_multiplier=ent_item.scale_multiplier
             )
 
             # Insert or replace in session state

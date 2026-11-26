@@ -47,6 +47,9 @@ class ClassifiedFile(BaseModel):
     detected_period: Optional[str] = None
     is_extra_unassigned: bool = False
     candidates: List[Dict[str, Any]] = Field(default_factory=list)
+    denomination: str = "UNITS"  # UNITS, LAKHS, CRORES, MILLIONS, THOUSANDS, HUNDREDS
+    scale_multiplier: float = 1.0
+    scale_instruction: str = "Reported in exact absolute currency (multiplier 1.0)"
     raw_data: Optional[bytes] = Field(default=None, repr=False)
 
 
@@ -192,6 +195,44 @@ class FileClassifier:
         return "MATCH", expected_period
 
     @classmethod
+    def _detect_denomination(
+        cls,
+        sample_rows: Optional[List[List[str]]] = None,
+        sheet_name: Optional[str] = None,
+        filename: Optional[str] = None
+    ) -> Tuple[str, float, str]:
+        """Detects whether financial amounts are reported in Lakhs, Crores, Millions, Thousands, Hundreds, or Units."""
+        text_corpus = f"{filename or ''} {sheet_name or ''} "
+        if sample_rows:
+            for r in sample_rows[:10]:
+                text_corpus += " ".join(str(c) for c in r if c) + " "
+
+        norm = text_corpus.lower()
+
+        # 1. Crores (10^7 = 10,000,000)
+        if re.search(r"\b(?:in\s+)?(?:rs\.?|inr|₹)?\s*(?:cr(?:ore)?s?)\b|\b(?:in\s+crores?)\b|\bcrores?\b", norm):
+            return "CRORES", 10000000.0, "Reported in ₹ Crores — multiplied by 10,000,000 to normalize to absolute currency"
+
+        # 2. Lakhs (10^5 = 100,000)
+        if re.search(r"\b(?:in\s+)?(?:rs\.?|inr|₹)?\s*(?:lakh?s?|lacs?)\b|\b(?:in\s+lakh?s?)\b|\blakh?s?\b|\blacs?\b", norm):
+            return "LAKHS", 100000.0, "Reported in ₹ Lakhs — multiplied by 100,000 to normalize to absolute currency"
+
+        # 3. Millions (10^6 = 1,000,000)
+        if re.search(r"\b(?:in\s+)?(?:usd|\$|eur|€|inr|₹)?\s*(?:millions?|mn)\b|\b(?:in\s+millions?)\b|\bmillions?\b", norm):
+            return "MILLIONS", 1000000.0, "Reported in Millions — multiplied by 1,000,000 to normalize to absolute currency"
+
+        # 4. Thousands (10^3 = 1,000)
+        if re.search(r"\b(?:in\s+)?(?:usd|\$|eur|€|inr|₹)?\s*(?:thousands?|'000|000s?)\b|\b(?:in\s+'000)\b|\bthousands?\b", norm):
+            return "THOUSANDS", 1000.0, "Reported in Thousands — multiplied by 1,000 to normalize to absolute currency"
+
+        # 5. Hundreds (10^2 = 100)
+        if re.search(r"\b(?:in\s+)?(?:hundreds?|'00)\b|\bhundreds?\b", norm):
+            return "HUNDREDS", 100.0, "Reported in Hundreds — multiplied by 100 to normalize to absolute currency"
+
+        # Default: Units / Absolute (1.0)
+        return "UNITS", 1.0, "Reported in exact absolute currency (multiplier 1.0)"
+
+    @classmethod
     def _extract_roster(cls, target_entities: Any) -> List[Dict[str, Any]]:
         """Normalizes entities from EntityHierarchy, dicts, or lists into a roster."""
         roster: List[Dict[str, Any]] = []
@@ -256,6 +297,7 @@ class FileClassifier:
 
         flat_text = f"{fname_lower} {sname_lower} " + " ".join(" ".join(str(c) for c in r) for r in rows).lower()
         date_status, detected_date = cls._evaluate_date_discrepancy(flat_text, expected_period)
+        det_denom, det_multiplier, det_instruction = cls._detect_denomination(rows, sheet_name, filename)
 
         # -------------------------------------------------------------
         # Tier 1: Deterministic Heuristics (if enabled)
@@ -425,6 +467,9 @@ class FileClassifier:
                     date_status=date_status,
                     detected_period=detected_date,
                     candidates=roster,
+                    denomination=det_denom,
+                    scale_multiplier=det_multiplier,
+                    scale_instruction=det_instruction,
                     raw_data=file_bytes
                 )
 
@@ -493,6 +538,9 @@ class FileClassifier:
             detected_period=detected_date,
             is_extra_unassigned=is_extra,
             candidates=roster,
+            denomination=det_denom,
+            scale_multiplier=det_multiplier,
+            scale_instruction=det_instruction,
             raw_data=file_bytes
         )
 
@@ -540,7 +588,10 @@ Respond STRICTLY in JSON format matching this schema:
   "period": "31-Mar-2024",
   "currency": "INR",
   "confidence": 0.95,
-  "reasoning": "Reasoning based on file headers, currency columns, and entity profile."
+  "denomination": "LAKHS | CRORES | MILLIONS | THOUSANDS | HUNDREDS | UNITS",
+  "scale_multiplier": 100000.0,
+  "scale_instruction": "Explanation of financial scale detected",
+  "reasoning": "Reasoning based on file headers, currency columns, scale, and entity profile."
 }}
 """
             response = client.models.generate_content(
@@ -566,6 +617,19 @@ Respond STRICTLY in JSON format matching this schema:
             ftype = data.get("file_type", "CURRENT_TB")
             is_extra = ftype == "UNKNOWN"
 
+            # Denomination detection with fallback
+            det_denom, det_mult, det_inst = cls._detect_denomination(
+                preview.get("sample_rows"),
+                preview.get("sheet_name"),
+                preview["filename"]
+            )
+            final_denom = data.get("denomination") or det_denom
+            try:
+                final_mult = float(data.get("scale_multiplier") or det_mult)
+            except (ValueError, TypeError):
+                final_mult = det_mult
+            final_inst = data.get("scale_instruction") or det_inst
+
             return ClassifiedFile(
                 filename=preview["filename"],
                 sheet_name=preview.get("sheet_name"),
@@ -580,7 +644,10 @@ Respond STRICTLY in JSON format matching this schema:
                 needs_review=(conf < threshold or (ent_code is None and ftype == "CURRENT_TB")),
                 sheet_names=preview.get("sheets", []),
                 is_extra_unassigned=is_extra,
-                candidates=roster or []
+                candidates=roster or [],
+                denomination=final_denom,
+                scale_multiplier=final_mult,
+                scale_instruction=final_inst
             )
         except Exception:
             return None
