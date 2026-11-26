@@ -6,6 +6,32 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-26 14:50] UX Alignment: Restoration of Institutional Step 1 Look & Feel & Dedicated Perimeter Approval Dialog
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Strict Look & Feel Restoration**:
+     - Restored the exact original high-finance institutional design of the Step 1 view (`renderStep1`).
+     - Action button quad restored in the top-right header:
+       - **Upload Icon Button** (`openBatchUploadModal()`)
+       - **Refresh Icon Button** (`refreshCurrentStep()`)
+       - **Reset Icon Button** (`triggerResetBaseline()`)
+       - **Run Consolidation Primary Button** (`triggerRunPipeline()`)
+     - Perimeter readiness strip (green for complete, amber for incomplete) preserved in its sleek, full-width position.
+     - Restored the pristine financial table (`fin-table`) with tabular figures (`font-variant-numeric: tabular-nums; font-family: monospace`), sticky headers, zebra striping, and status indicators (`Tallied (0.00)` vs `Pending Upload`), plus Foreign Exchange Rates verification row.
+     - Removed all clutter, embedded dropzones, and large cards from the Step 1 canvas.
+  2. **Dedicated Perimeter Approval Dialog**:
+     - Added `#modal-perimeter-approval` (`max-w-4xl`), which is displayed cleanly *on top of the page* immediately after the user uploads files via `#modal-batch-upload`.
+     - In this dialog:
+       - Parent Company review card (file, sheet, detected columns, 5-row preview, confidence badge, date mismatch alert).
+       - Subsidiary review cards (file, sheet, detected columns, 5-row preview, confidence badge, fallback single upload button).
+       - Mandatory FX Rates review card (closing, average, historical, swap rate mappings, currency pairs preview).
+       - Collapsible Ignored / Extra Sheets drawer.
+       - "Cancel" and "Approve & Confirm Ingestion" buttons.
+  3. **Verification**:
+     - Node.js syntax check: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+     - Full regression test suite: 76/76 PASSED in 29.04s.
+     - Live server: HTTP 200 OK on port 8000.
+
 ### [2026-11-26 14:35] Milestone: Step 1 Dual-Engine Ingestion, Multi-Sheet Parsing & Perimeter Approval
 - **Branch**: `feature/profile-v2`
 - **Core Requirements Implemented**:
