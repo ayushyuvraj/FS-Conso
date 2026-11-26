@@ -1063,9 +1063,15 @@ function renderHITLBadge() {
     const countBadge = document.getElementById("badge-hitl-count");
     if (!btn || !countBadge) return;
 
-    const items = appStatus.hitl_pending_reviews || [];
-    if (items.length > 0) {
-        countBadge.textContent = items.length;
+    let pendingCount = 0;
+    if (pipelineData && pipelineData.mapping_decisions && pipelineData.mapping_decisions.length > 0) {
+        pendingCount = pipelineData.mapping_decisions.filter(m => m.needs_review).length;
+    } else if (appStatus && appStatus.hitl_pending_reviews) {
+        pendingCount = appStatus.hitl_pending_reviews.length;
+    }
+
+    if (pendingCount > 0) {
+        countBadge.textContent = pendingCount;
         btn.classList.remove("hidden");
         btn.classList.add("flex");
     } else {
@@ -3641,6 +3647,87 @@ async function submitSingleUpload(e) {
 let activeStep2Entity = null;
 let step2AccountSearchQuery = '';
 let currentL0PopoverTarget = null;
+let step2SortColumn = 'account_code';
+let step2SortDirection = 'asc';
+
+function toggleStep2Sort(columnKey) {
+    if (step2SortColumn === columnKey) {
+        step2SortDirection = (step2SortDirection === 'asc') ? 'desc' : 'asc';
+    } else {
+        step2SortColumn = columnKey;
+        // Default to asc; for status, asc groups accounts needing review at the top
+        step2SortDirection = 'asc';
+    }
+    const tbody = document.getElementById("step2-table-tbody");
+    if (tbody) {
+        const container = document.getElementById("step2-table-container");
+        const savedScroll = container ? container.scrollTop : 0;
+        renderStep2TableRows(tbody);
+        updateStep2HeaderSortIndicators();
+        if (container) container.scrollTop = savedScroll;
+    }
+}
+
+function updateStep2HeaderSortIndicators() {
+    const cols = ['account_code', 'account_name', 'currency', 'amount', 'level_0_mapping', 'confidence', 'status'];
+    cols.forEach(col => {
+        const icon = document.getElementById(`sort-icon-${col}`);
+        if (!icon) return;
+        if (step2SortColumn === col) {
+            icon.textContent = step2SortDirection === 'asc' ? '▲' : '▼';
+            icon.className = 'text-[10px] text-kpmg-blue font-bold font-mono';
+        } else {
+            icon.textContent = '▲▼';
+            icon.className = 'text-[10px] text-slate-300 opacity-60 font-mono';
+        }
+    });
+}
+
+function sortStep2Mappings(mappings, col, dir) {
+    const mult = (dir === 'desc') ? -1 : 1;
+    return [...mappings].sort((a, b) => {
+        if (col === 'status') {
+            const aReview = a.needs_review ? 1 : 0;
+            const bReview = b.needs_review ? 1 : 0;
+            if (aReview !== bReview) {
+                // In asc (mult=1): needs_review (1) comes before mapped (0)
+                return (bReview - aReview) * mult;
+            }
+            return String(a.local_code || '').localeCompare(String(b.local_code || ''), undefined, { numeric: true });
+        }
+        if (col === 'account_code') {
+            const aCode = String(a.local_code || '');
+            const bCode = String(b.local_code || '');
+            return aCode.localeCompare(bCode, undefined, { numeric: true }) * mult;
+        }
+        if (col === 'account_name') {
+            const aName = String(a.local_description || '');
+            const bName = String(b.local_description || '');
+            return aName.localeCompare(bName, undefined, { sensitivity: 'base' }) * mult;
+        }
+        if (col === 'currency') {
+            const aCur = String(a.currency || '');
+            const bCur = String(b.currency || '');
+            return aCur.localeCompare(bCur) * mult;
+        }
+        if (col === 'amount') {
+            const aAmt = (typeof a.amount === 'number') ? a.amount : 0;
+            const bAmt = (typeof b.amount === 'number') ? b.amount : 0;
+            return (aAmt - bAmt) * mult;
+        }
+        if (col === 'level_0_mapping') {
+            const aL0 = String(a.level_0_name || a.group_code || '');
+            const bL0 = String(b.level_0_name || b.group_code || '');
+            return aL0.localeCompare(bL0, undefined, { sensitivity: 'base' }) * mult;
+        }
+        if (col === 'confidence') {
+            const aConf = (typeof a.confidence === 'number') ? a.confidence : 0;
+            const bConf = (typeof b.confidence === 'number') ? b.confidence : 0;
+            return (aConf - bConf) * mult;
+        }
+        return 0;
+    });
+}
 
 function getStep2EntityTabs() {
     const perimeter = (appStatus && appStatus.perimeter_entities && appStatus.perimeter_entities.length > 0)
@@ -3783,7 +3870,62 @@ function getMappingsForEntity(entityCode) {
             }
         });
     }
+
     return matches;
+}
+
+function refreshHITLCounters() {
+    const tabs = getStep2EntityTabs();
+    let totalPendingAllEntities = 0;
+    let totalMappedAccounts = 0;
+
+    tabs.forEach(t => {
+        const ms = getMappingsForEntity(t.entity_code);
+        totalMappedAccounts += ms.length;
+        const tabPending = ms.filter(m => m.needs_review).length;
+        totalPendingAllEntities += tabPending;
+
+        // Update tab dot directly in DOM
+        const tabDot = document.getElementById(`step2-tab-dot-${t.entity_code}`);
+        if (tabDot) {
+            if (tabPending > 0) {
+                tabDot.className = "w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-1";
+                tabDot.title = `${tabPending} review(s) pending`;
+            } else if (ms.length > 0) {
+                tabDot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1";
+                tabDot.title = "All accounts mapped";
+            } else {
+                tabDot.className = "hidden";
+            }
+        }
+    });
+
+    // Update top header HITL button & badge
+    const hitlBtn = document.getElementById("btn-hitl-trigger");
+    const hitlCountBadge = document.getElementById("badge-hitl-count");
+    if (hitlBtn && hitlCountBadge) {
+        if (totalPendingAllEntities > 0) {
+            hitlCountBadge.textContent = totalPendingAllEntities;
+            hitlBtn.classList.remove("hidden");
+            hitlBtn.classList.add("flex");
+        } else {
+            hitlCountBadge.textContent = "0";
+            hitlBtn.classList.add("hidden");
+            hitlBtn.classList.remove("flex");
+        }
+    }
+
+    // Update Consolidate button state
+    const consBtn = document.getElementById("btn-consolidate-step2");
+    if (consBtn) {
+        const canConsolidate = totalPendingAllEntities === 0 && totalMappedAccounts > 0;
+        consBtn.disabled = !canConsolidate;
+    }
+
+    // Synchronize Stepper state
+    if (typeof renderStepperState === 'function') {
+        renderStepperState();
+    }
 }
 
 function onStep2ConsolidateClick() {
@@ -3821,8 +3963,6 @@ function renderStep2(el) {
         activeStep2Entity = tabs[0].entity_code;
     }
 
-    const currentTab = tabs.find(t => t.entity_code === activeStep2Entity) || tabs[0];
-
     // Global review count across ALL entities
     let totalPendingAllEntities = 0;
     let totalMappedAccounts = 0;
@@ -3833,7 +3973,7 @@ function renderStep2(el) {
     });
     const canConsolidate = totalPendingAllEntities === 0 && totalMappedAccounts > 0;
 
-    // Entity tabs HTML
+    // Entity tabs HTML with persistent unique IDs for live dot updates
     const tabsHtml = tabs.map(t => {
         const isActive = t.entity_code === activeStep2Entity;
         const entMappings = getMappingsForEntity(t.entity_code);
@@ -3849,10 +3989,11 @@ function renderStep2(el) {
                 }">
                 <span>${escapeHtml(t.entity_name || t.entity_code)}</span>
                 <span class="text-[10px] font-mono opacity-80">(${roleLabel})</span>
-                ${pendingInTab > 0
-                    ? `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-1" title="${pendingInTab} review(s) pending"></span>`
-                    : (entMappings.length > 0 ? `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1"></span>` : '')
-                }
+                <span id="step2-tab-dot-${escapeHtml(t.entity_code)}" class="${
+                    pendingInTab > 0
+                        ? 'w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-1'
+                        : (entMappings.length > 0 ? 'w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1' : 'hidden')
+                }" title="${pendingInTab > 0 ? `${pendingInTab} review(s) pending` : 'All accounts mapped'}"></span>
             </button>
         `;
     }).join("");
@@ -3895,18 +4036,53 @@ function renderStep2(el) {
                 ${tabsHtml}
             </div>
 
-            <!-- 3. High-Density Financial Ledger Table -->
-            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-270px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
+            <!-- 3. High-Density Financial Ledger Table with Clickable Column Sorting -->
+            <div id="step2-table-container" class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-270px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
                 <table class="fin-table">
                     <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
                         <tr>
-                            <th style="width: 130px;">Account Code</th>
-                            <th>Account Name</th>
-                            <th style="width: 80px; text-align: center;">Currency</th>
-                            <th class="num-cell" style="width: 140px;">Amount</th>
-                            <th style="min-width: 300px;">Level 0 Mapping</th>
-                            <th class="num-cell" style="width: 100px;">Confidence</th>
-                            <th class="text-center" style="width: 120px;">Status</th>
+                            <th onclick="toggleStep2Sort('account_code')" class="cursor-pointer hover:bg-slate-200/80 transition select-none" style="width: 130px;" title="Click to sort by Account Code">
+                                <div class="flex items-center space-x-1.5">
+                                    <span>Account Code</span>
+                                    <span id="sort-icon-account_code" class="text-[10px] text-slate-300 opacity-60 font-mono">▲▼</span>
+                                </div>
+                            </th>
+                            <th onclick="toggleStep2Sort('account_name')" class="cursor-pointer hover:bg-slate-200/80 transition select-none" title="Click to sort alphabetically by Account Name">
+                                <div class="flex items-center space-x-1.5">
+                                    <span>Account Name</span>
+                                    <span id="sort-icon-account_name" class="text-[10px] text-slate-300 opacity-60 font-mono">▲▼</span>
+                                </div>
+                            </th>
+                            <th onclick="toggleStep2Sort('currency')" class="text-center cursor-pointer hover:bg-slate-200/80 transition select-none" style="width: 90px;" title="Click to sort by Currency">
+                                <div class="flex items-center justify-center space-x-1.5">
+                                    <span>Currency</span>
+                                    <span id="sort-icon-currency" class="text-[10px] text-slate-300 opacity-60 font-mono">▲▼</span>
+                                </div>
+                            </th>
+                            <th onclick="toggleStep2Sort('amount')" class="num-cell cursor-pointer hover:bg-slate-200/80 transition select-none" style="width: 140px;" title="Click to sort by Amount">
+                                <div class="flex items-center justify-end space-x-1.5">
+                                    <span>Amount</span>
+                                    <span id="sort-icon-amount" class="text-[10px] text-slate-300 opacity-60 font-mono">▲▼</span>
+                                </div>
+                            </th>
+                            <th onclick="toggleStep2Sort('level_0_mapping')" class="cursor-pointer hover:bg-slate-200/80 transition select-none" style="min-width: 300px;" title="Click to sort by Level 0 Mapping">
+                                <div class="flex items-center space-x-1.5">
+                                    <span>Level 0 Mapping</span>
+                                    <span id="sort-icon-level_0_mapping" class="text-[10px] text-slate-300 opacity-60 font-mono">▲▼</span>
+                                </div>
+                            </th>
+                            <th onclick="toggleStep2Sort('confidence')" class="num-cell cursor-pointer hover:bg-slate-200/80 transition select-none" style="width: 110px;" title="Click to sort by Confidence">
+                                <div class="flex items-center justify-end space-x-1.5">
+                                    <span>Confidence</span>
+                                    <span id="sort-icon-confidence" class="text-[10px] text-slate-300 opacity-60 font-mono">▲▼</span>
+                                </div>
+                            </th>
+                            <th onclick="toggleStep2Sort('status')" class="text-center cursor-pointer hover:bg-slate-200/80 transition select-none" style="width: 140px;" title="Click to group items requiring attention at the top">
+                                <div class="flex items-center justify-center space-x-1.5">
+                                    <span>Status</span>
+                                    <span id="sort-icon-status" class="text-[10px] text-slate-300 opacity-60 font-mono">▲▼</span>
+                                </div>
+                            </th>
                         </tr>
                     </thead>
                     <tbody id="step2-table-tbody">
@@ -3918,7 +4094,10 @@ function renderStep2(el) {
     `;
 
     const tbody = document.getElementById("step2-table-tbody");
-    if (tbody) renderStep2TableRows(tbody);
+    if (tbody) {
+        renderStep2TableRows(tbody);
+        updateStep2HeaderSortIndicators();
+    }
 }
 
 function renderStep2TableRows(tbody) {
@@ -3943,7 +4122,7 @@ function renderStep2TableRows(tbody) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="7" class="p-8 text-center text-kpmg-muted text-xs">
-                    ${allMappings.length === 0
+                    ${getMappingsForEntity(currentEntityCode).length === 0
                         ? `Accounts not yet standardized for ${escapeHtml(currentTab.entity_name)}. <button onclick="runCOAMappingNow()" class="ml-2 font-bold text-kpmg-blue hover:underline cursor-pointer">Click here to run mapping</button>.`
                         : `No accounts matching filter "${escapeHtml(step2AccountSearchQuery)}".`
                     }
@@ -3953,8 +4132,10 @@ function renderStep2TableRows(tbody) {
         return;
     }
 
-    tbody.innerHTML = entityMappings.map((m, idx) => {
-        const rowId = `s2-row-${idx}`;
+    // Apply column sorting
+    entityMappings = sortStep2Mappings(entityMappings, step2SortColumn, step2SortDirection);
+
+    tbody.innerHTML = entityMappings.map(m => {
         const isYellow = !!m.needs_review;
         const rowBg = isYellow
             ? 'bg-amber-50/80 hover:bg-amber-100/70 border-b border-amber-200 text-amber-950 font-medium'
@@ -3967,14 +4148,14 @@ function renderStep2TableRows(tbody) {
             ? `${m.group_code} - ${m.level_0_name || m.group_description || 'Standard Account'}`
             : 'Select Level 0 Mapping...';
 
-        const statusBadge = isYellow
-            ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-300">Review Required</span>`
-            : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">Mapped</span>`;
-
         const currency = m.currency || currentTab.currency || 'INR';
+        const entCode = m.entity_code || currentTab.entity_code;
 
         return `
-            <tr id="${rowId}" class="${rowBg} transition">
+            <tr id="step2-row-${escapeHtml(entCode)}-${escapeHtml(m.local_code)}"
+                data-entity="${escapeHtml(entCode)}"
+                data-code="${escapeHtml(m.local_code)}"
+                class="${rowBg} transition duration-150">
                 <!-- 1. Account Code -->
                 <td class="font-mono text-xs font-bold py-2.5 px-3 text-slate-700">${escapeHtml(m.local_code)}</td>
 
@@ -3996,13 +4177,13 @@ function renderStep2TableRows(tbody) {
                 <!-- 5. Level 0 Mapping Searchable Dropdown Button -->
                 <td class="py-2 px-3 text-xs">
                     <button type="button"
-                        onclick="openL0Dropdown(event, '${escapeHtml(m.entity_code || currentTab.entity_code)}', '${escapeHtml(m.local_code)}')"
-                        class="w-full h-8 px-2.5 py-1 text-left text-xs font-medium rounded border ${
+                        onclick="openL0Dropdown(event, '${escapeHtml(entCode)}', '${escapeHtml(m.local_code)}')"
+                        class="step2-l0-btn w-full h-8 px-2.5 py-1 text-left text-xs font-medium rounded border ${
                             isYellow
                                 ? 'border-amber-400 bg-amber-50 hover:bg-amber-100/90 text-amber-950 focus:ring-2 focus:ring-amber-400'
                                 : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-800 focus:ring-2 focus:ring-kpmg-blue'
                         } flex items-center justify-between transition cursor-pointer shadow-2xs">
-                        <span class="truncate font-mono font-semibold">${escapeHtml(currentL0Display)}</span>
+                        <span class="step2-l0-label truncate font-mono font-semibold">${escapeHtml(currentL0Display)}</span>
                         <svg class="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                         </svg>
@@ -4012,32 +4193,45 @@ function renderStep2TableRows(tbody) {
                 <!-- 6. Confidence -->
                 <td class="num-cell py-2.5 px-3 text-xs">
                     <div class="inline-flex items-center justify-end space-x-1.5">
-                        <span class="font-mono font-bold ${confColor}">${confPct}%</span>
-                        ${m.candidates && m.candidates.length > 0
-                            ? `<button type="button"
-                                  onclick="openCandidatePopover(event, '${escapeHtml(m.entity_code || currentTab.entity_code)}', '${escapeHtml(m.local_code)}')"
-                                  class="w-4 h-4 rounded-full bg-slate-100 hover:bg-kpmg-blue hover:text-white text-slate-500 text-[10px] font-bold inline-flex items-center justify-center transition shadow-2xs cursor-pointer select-none"
-                                  title="View top AI options and percentages">
-                                  i
-                               </button>`
-                            : ''
-                        }
+                        <span class="step2-conf-pct font-mono font-bold ${confColor}">${confPct}%</span>
+                        <button type="button"
+                            onclick="openCandidatePopover(event, '${escapeHtml(entCode)}', '${escapeHtml(m.local_code)}')"
+                            class="w-4 h-4 rounded-full bg-slate-100 hover:bg-kpmg-blue hover:text-white text-slate-500 text-[10px] font-bold inline-flex items-center justify-center transition shadow-2xs cursor-pointer select-none"
+                            title="View mapping method and transparency details">
+                            i
+                        </button>
                     </div>
                 </td>
 
-                <!-- 7. Status -->
+                <!-- 7. Status Column: Clean Green Checkmark Tick when mapped, Alert Badge + Accept button when review required -->
                 <td class="text-center py-2.5 px-3 text-xs">
-                    <div class="inline-flex items-center justify-center space-x-1.5">
-                        ${statusBadge}
-                        ${isYellow && m.group_code && m.group_code !== '999999'
-                            ? `<button type="button"
-                                  onclick="acceptTopCandidate('${escapeHtml(m.entity_code || currentTab.entity_code)}', '${escapeHtml(m.local_code)}')"
-                                  class="h-6 px-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold inline-flex items-center space-x-1 transition shadow-xs cursor-pointer btn-tactile"
-                                  title="Accept default top AI match (${escapeHtml(m.group_code)})">
-                                  <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-                                  <span>Accept</span>
-                               </button>`
-                            : ''
+                    <div class="step2-status-container inline-flex items-center justify-center space-x-1.5">
+                        ${isYellow
+                            ? `
+                                <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                    <svg class="w-3 h-3 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                    <span>Review Required</span>
+                                </span>
+                                ${m.group_code && m.group_code !== '999999'
+                                    ? `<button type="button"
+                                          onclick="acceptTopCandidate('${escapeHtml(entCode)}', '${escapeHtml(m.local_code)}')"
+                                          class="h-6 px-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold inline-flex items-center space-x-1 transition shadow-xs cursor-pointer btn-tactile"
+                                          title="Accept default top match (${escapeHtml(m.group_code)})">
+                                          <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                                          <span>Accept</span>
+                                       </button>`
+                                    : ''
+                                }
+                            `
+                            : `
+                                <div class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200 shadow-2xs" title="Mapped & Approved">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                            `
                         }
                     </div>
                 </td>
@@ -4047,7 +4241,120 @@ function renderStep2TableRows(tbody) {
 }
 
 // -------------------------------------------------------------
-// Step 2 AI Candidate Inspection Popover & 1-Click Accept
+// Step 2 Unified In-Place Approval & Scroll Position Retention
+// -------------------------------------------------------------
+
+async function approveMappingItem(entityCode, localCode, groupCode, l0Name, reasoning) {
+    if (!groupCode || groupCode === '999999') {
+        showToast("Cannot Accept", "No candidate option selected to approve.", "warning");
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/hitl/resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                entity_code: entityCode,
+                local_code: localCode,
+                group_code: groupCode,
+                reasoning: reasoning || "Auditor approved Level 0 mapping"
+            })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            // Update decision locally in pipelineData.mapping_decisions
+            if (!pipelineData.mapping_decisions) pipelineData.mapping_decisions = [];
+            const codeUpper = String(entityCode).trim().toUpperCase();
+            let d = pipelineData.mapping_decisions.find(item =>
+                item.entity_code && String(item.entity_code).trim().toUpperCase() === codeUpper && String(item.local_code).trim() === String(localCode).trim()
+            );
+            if (!d) {
+                const ms = getMappingsForEntity(entityCode);
+                const source = ms.find(m => String(m.local_code).trim() === String(localCode).trim());
+                d = {
+                    entity_code: entityCode,
+                    local_code: localCode,
+                    local_description: source ? source.local_description : localCode,
+                    currency: source ? source.currency : 'INR',
+                    amount: source ? source.amount : 0.0
+                };
+                pipelineData.mapping_decisions.push(d);
+            }
+            d.group_code = groupCode;
+            d.group_description = data.resolved_name || l0Name;
+            d.level_0_code = groupCode;
+            d.level_0_name = data.level_0_name || l0Name;
+            d.method = "USER_APPROVED_RULE";
+            d.confidence = 1.0;
+            d.needs_review = false;
+            d.is_ambiguous = false;
+            d.reasoning = reasoning;
+
+            if (appStatus && appStatus.hitl_pending_reviews) {
+                appStatus.hitl_pending_reviews = appStatus.hitl_pending_reviews.filter(r =>
+                    !(String(r.local_code).trim() === String(localCode).trim() && (!r.entity_code || String(r.entity_code).trim().toUpperCase() === codeUpper))
+                );
+            }
+
+            // In-place DOM update of the table row to guarantee ZERO scrolling or jumping
+            const tr = document.querySelector(`tr[data-entity="${entityCode}"][data-code="${localCode}"]`);
+            if (tr) {
+                // Update row styling: remove amber background, restore standard row styling
+                tr.className = "hover:bg-slate-50/70 border-b border-slate-100 text-slate-800 transition duration-150";
+
+                // Update Level 0 button inside row
+                const l0Btn = tr.querySelector(".step2-l0-btn");
+                if (l0Btn) {
+                    l0Btn.className = "step2-l0-btn w-full h-8 px-2.5 py-1 text-left text-xs font-medium rounded border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 focus:ring-2 focus:ring-kpmg-blue flex items-center justify-between transition cursor-pointer shadow-2xs";
+                    const l0Label = l0Btn.querySelector(".step2-l0-label");
+                    if (l0Label) l0Label.textContent = `${groupCode} - ${d.level_0_name}`;
+                }
+
+                // Update Confidence percentage
+                const confPctEl = tr.querySelector(".step2-conf-pct");
+                if (confPctEl) {
+                    confPctEl.className = "step2-conf-pct font-mono font-bold text-emerald-700";
+                    confPctEl.textContent = "100%";
+                }
+
+                // Update Status container to clean green checkmark tick icon
+                const statusContainer = tr.querySelector(".step2-status-container");
+                if (statusContainer) {
+                    statusContainer.innerHTML = `
+                        <div class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200 shadow-2xs" title="Mapped & Approved">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+                    `;
+                }
+            }
+
+            // Refresh HITL badges, tab dots, and Consolidate button state dynamically
+            refreshHITLCounters();
+
+            showToast("Mapping Approved", `Approved ${localCode} &rarr; ${groupCode} (${d.level_0_name})`, "success");
+        } else {
+            showToast("Approval Failed", data.detail || "Could not save approval.", "error");
+        }
+    } catch (err) {
+        showToast("Network Error", "Approval failed: " + err, "error");
+    }
+}
+
+async function acceptTopCandidate(entityCode, localCode) {
+    const mappings = getMappingsForEntity(entityCode);
+    const m = mappings.find(item => String(item.local_code).trim() === String(localCode).trim());
+    if (!m || !m.group_code || m.group_code === '999999') {
+        showToast("Cannot Accept", "No candidate option selected to approve.", "warning");
+        return;
+    }
+    await approveMappingItem(entityCode, localCode, m.group_code, m.level_0_name || m.group_description, "Auditor accepted default top candidate");
+}
+
+// -------------------------------------------------------------
+// Step 2 Mapping Transparency & Provenance Popover ((i) Button)
 // -------------------------------------------------------------
 
 let candidatePopoverTimer = null;
@@ -4077,7 +4384,7 @@ function openCandidatePopover(event, entityCode, localCode) {
         // Click outside listener
         document.addEventListener("click", (e) => {
             const p = document.getElementById("step2-candidate-popover");
-            if (p && !p.classList.contains("hidden") && !p.contains(e.target) && !e.target.closest("button[title*='View top AI options']")) {
+            if (p && !p.classList.contains("hidden") && !p.contains(e.target) && !e.target.closest("button[title*='View mapping method']")) {
                 p.classList.add("hidden");
             }
         });
@@ -4087,22 +4394,120 @@ function openCandidatePopover(event, entityCode, localCode) {
     const m = mappings.find(item => String(item.local_code).trim() === String(localCode).trim());
     if (!m) return;
 
+    const threshold = Math.round((appStatus && appStatus.ai_confidence_threshold ? appStatus.ai_confidence_threshold : 0.85) * 100);
+    const method = m.method || (m.needs_review ? 'UNMAPPED_EXCEPTION' : 'DIRECT_CODE_MATCH');
+    const isGemini = method === 'GEMINI_AI';
+    const confPct = Math.round((m.confidence || 0) * 100);
+
+    let methodBadgeHtml = '';
+    let methodExplainHtml = '';
+
+    if (isGemini) {
+        methodBadgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">Gemini LLM Judge</span>`;
+        methodExplainHtml = `
+            <div class="p-2.5 rounded-lg bg-purple-50/70 border border-purple-200/60 mb-2">
+                <div class="flex items-center space-x-1.5 text-purple-900 font-semibold mb-1">
+                    <svg class="w-3.5 h-3.5 text-purple-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    <span>LLM Multi-Candidate Reasoning</span>
+                </div>
+                <p class="text-[11px] text-purple-800 leading-relaxed">
+                    This account could not be classified deterministically by direct GL code or accounting rules. It was routed to the Gemini AI Agentic Brain to evaluate against the Group Master Chart of Accounts.
+                </p>
+            </div>
+        `;
+    } else if (method === 'DIRECT_CODE_MATCH') {
+        methodBadgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Deterministic Match</span>`;
+        methodExplainHtml = `
+            <div class="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200/60 mb-2">
+                <div class="flex items-center space-x-1.5 text-emerald-900 font-semibold mb-1">
+                    <svg class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>Deterministic: Direct GL Code Match</span>
+                </div>
+                <p class="text-[11px] text-emerald-800 leading-relaxed">
+                    Local GL Account Code matches an existing standard account in the Group COA directly (Confidence: 100%, above threshold). <strong>Not routed to LLM.</strong>
+                </p>
+            </div>
+        `;
+    } else if (method === 'HEURISTIC_EXACT') {
+        methodBadgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Deterministic Match</span>`;
+        methodExplainHtml = `
+            <div class="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200/60 mb-2">
+                <div class="flex items-center space-x-1.5 text-emerald-900 font-semibold mb-1">
+                    <svg class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>Deterministic: Exact Description Match</span>
+                </div>
+                <p class="text-[11px] text-emerald-800 leading-relaxed">
+                    Account description matched standard Group COA title (Confidence: ${confPct}%, above threshold). <strong>Not routed to LLM.</strong>
+                </p>
+            </div>
+        `;
+    } else if (method === 'ACCOUNTING_SYNONYM') {
+        methodBadgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">Deterministic Rule</span>`;
+        methodExplainHtml = `
+            <div class="p-2.5 rounded-lg bg-blue-50/70 border border-blue-200/60 mb-2">
+                <div class="flex items-center space-x-1.5 text-blue-900 font-semibold mb-1">
+                    <svg class="w-3.5 h-3.5 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>Deterministic: Accounting Synonym Rule</span>
+                </div>
+                <p class="text-[11px] text-blue-800 leading-relaxed">
+                    Matched deterministically via canonical IND AS / IFRS accounting synonym rules (Confidence: ${confPct}%, above threshold). <strong>Not routed to LLM.</strong>
+                </p>
+            </div>
+        `;
+    } else if (method === 'HISTORICAL_RULE' || method === 'USER_APPROVED_RULE') {
+        methodBadgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">Auditor Verified Rule</span>`;
+        methodExplainHtml = `
+            <div class="p-2.5 rounded-lg bg-indigo-50/70 border border-indigo-200/60 mb-2">
+                <div class="flex items-center space-x-1.5 text-indigo-900 font-semibold mb-1">
+                    <svg class="w-3.5 h-3.5 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    <span>Auditor Approved in Learning Memory</span>
+                </div>
+                <p class="text-[11px] text-indigo-800 leading-relaxed">
+                    Retrieved from verified historical mapping memory (Confidence: 100%). <strong>Not routed to LLM.</strong>
+                </p>
+            </div>
+        `;
+    } else {
+        methodBadgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">Review Required</span>`;
+        methodExplainHtml = `
+            <div class="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200/60 mb-2">
+                <div class="flex items-center space-x-1.5 text-amber-900 font-semibold mb-1">
+                    <svg class="w-3.5 h-3.5 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <span>Manual Mapping Required</span>
+                </div>
+                <p class="text-[11px] text-amber-800 leading-relaxed">
+                    Account confidence (${confPct}%) is below the configured threshold (${threshold}%). Please select or confirm an appropriate Level 0 account.
+                </p>
+            </div>
+        `;
+    }
+
+    // Render candidate options or primary match
     const candidates = m.candidates || [];
     let optionsHtml = '';
     if (candidates.length === 0) {
         optionsHtml = `
-            <div class="p-4 text-center text-slate-500 text-xs">
-                No secondary options available. Single match inferred via ${escapeHtml(m.method || 'Deterministic Rule')}.
+            <div class="p-3 rounded-lg border border-slate-100 bg-white">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-mono font-bold text-slate-800 text-xs">${escapeHtml(m.group_code || 'Unmapped')}</span>
+                    <span class="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded border ${confPct >= threshold ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-amber-100 text-amber-800 border-amber-200'}">
+                        ${confPct}%
+                    </span>
+                </div>
+                <div class="font-medium text-slate-900 text-xs mb-1 truncate">
+                    ${escapeHtml(m.level_0_name || m.group_description || 'Standard Account')}
+                </div>
+                <p class="text-[11px] text-slate-500 italic">${escapeHtml(m.reasoning || 'Standard classification')}</p>
             </div>
         `;
     } else {
         optionsHtml = candidates.map((c, i) => {
             const cPct = Math.round((c.confidence || 0) * 100);
             const isSelected = String(c.group_account_code) === String(m.group_code);
-            const confBadgeColor = cPct >= 85 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-amber-100 text-amber-800 border-amber-200';
+            const confBadgeColor = cPct >= threshold ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-amber-100 text-amber-800 border-amber-200';
 
             return `
-                <div onclick="selectL0Option('${escapeHtml(c.group_account_code)}', '${escapeHtml(c.level_0_account || c.group_account_name)}')"
+                <div onclick="approveMappingItem('${escapeHtml(entityCode)}', '${escapeHtml(localCode)}', '${escapeHtml(c.group_account_code)}', '${escapeHtml(c.level_0_account || c.group_account_name)}', 'Auditor selected candidate option ${i + 1}'); document.getElementById('step2-candidate-popover').classList.add('hidden');"
                     class="p-2.5 rounded-lg border transition cursor-pointer select-none ${
                         isSelected
                             ? 'bg-blue-50/70 border-kpmg-blue/40 shadow-xs'
@@ -4112,7 +4517,7 @@ function openCandidatePopover(event, entityCode, localCode) {
                         <div class="flex items-center space-x-1.5 truncate">
                             <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Option ${i + 1}</span>
                             <span class="font-mono font-bold text-slate-800 text-xs">${escapeHtml(c.group_account_code)}</span>
-                            ${isSelected ? '<span class="text-[10px] font-bold text-kpmg-blue px-1.5 py-0.2 bg-blue-100 rounded">Selected</span>' : ''}
+                            ${isSelected ? '<span class="text-[10px] font-bold text-kpmg-blue px-1.5 py-0.2 bg-blue-100 rounded">Current</span>' : ''}
                         </div>
                         <span class="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded border ${confBadgeColor}">
                             ${cPct}%
@@ -4133,99 +4538,43 @@ function openCandidatePopover(event, entityCode, localCode) {
     popover.innerHTML = `
         <div class="p-3 bg-slate-50/90 border-b border-slate-200 flex items-center justify-between">
             <div class="truncate pr-2">
-                <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">LLM as a Judge Evaluation</div>
+                <div class="flex items-center space-x-2 mb-0.5">
+                    ${methodBadgeHtml}
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Account Provenance</span>
+                </div>
                 <div class="font-bold text-xs text-kpmg-navy truncate">${escapeHtml(m.local_code)} - ${escapeHtml(m.local_description)}</div>
             </div>
-            <button onclick="document.getElementById('step2-candidate-popover').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 p-1">
+            <button onclick="document.getElementById('step2-candidate-popover').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
         </div>
-        <div class="p-2 space-y-2 max-h-72 overflow-y-auto">
-            ${optionsHtml}
+        <div class="p-3 max-h-80 overflow-y-auto">
+            ${methodExplainHtml}
+            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                ${isGemini ? 'Ranked AI Candidates' : 'Assigned Mapping'}
+            </div>
+            <div class="space-y-1.5">
+                ${optionsHtml}
+            </div>
         </div>
         <div class="p-2 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 flex items-center justify-between">
-            <span>Click any option to select and confirm</span>
-            <span class="font-mono">Threshold: ${Math.round((appStatus && appStatus.ai_confidence_threshold ? appStatus.ai_confidence_threshold : 0.85) * 100)}%</span>
+            <span>${isGemini ? 'Click any candidate option to select & approve' : 'Account mapped & verified'}</span>
+            <span class="font-mono">Threshold: ${threshold}%</span>
         </div>
     `;
 
-    // Position popover intelligently
+    // Position popover
     popover.classList.remove("hidden");
     const popWidth = 384;
     let left = rect.right - popWidth;
     if (left < 10) left = 10;
     if (left + popWidth > window.innerWidth - 10) left = window.innerWidth - popWidth - 10;
     let top = rect.bottom + 6;
-    if (top + 280 > window.innerHeight) {
-        top = Math.max(10, rect.top - 280);
+    if (top + 320 > window.innerHeight) {
+        top = Math.max(10, rect.top - 320);
     }
     popover.style.top = `${top}px`;
     popover.style.left = `${left}px`;
-}
-
-async function acceptTopCandidate(entityCode, localCode) {
-    const mappings = getMappingsForEntity(entityCode);
-    const m = mappings.find(item => String(item.local_code).trim() === String(localCode).trim());
-    if (!m || !m.group_code || m.group_code === '999999') {
-        showToast("Cannot Accept", "No candidate option selected to approve.", "warning");
-        return;
-    }
-
-    try {
-        const res = await fetch('/api/hitl/resolve', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                entity_code: entityCode,
-                local_code: localCode,
-                group_code: m.group_code,
-                reasoning: "Auditor approved default top AI match"
-            })
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-            // Update decision locally
-            if (!pipelineData.mapping_decisions) pipelineData.mapping_decisions = [];
-            const codeUpper = String(entityCode).trim().toUpperCase();
-            let d = pipelineData.mapping_decisions.find(item =>
-                item.entity_code && String(item.entity_code).trim().toUpperCase() === codeUpper && String(item.local_code).trim() === String(localCode).trim()
-            );
-            if (!d) {
-                d = {
-                    entity_code: entityCode,
-                    local_code: localCode,
-                    local_description: m.local_description,
-                    currency: m.currency,
-                    amount: m.amount
-                };
-                pipelineData.mapping_decisions.push(d);
-            }
-            d.group_code = m.group_code;
-            d.group_description = data.resolved_name || m.group_description;
-            d.level_0_code = m.group_code;
-            d.level_0_name = data.level_0_name || m.level_0_name;
-            d.method = "USER_APPROVED_RULE";
-            d.confidence = 1.0;
-            d.needs_review = false;
-            d.is_ambiguous = false;
-
-            if (appStatus && appStatus.hitl_pending_reviews) {
-                appStatus.hitl_pending_reviews = appStatus.hitl_pending_reviews.filter(r =>
-                    !(String(r.local_code).trim() === String(localCode).trim() && (!r.entity_code || String(r.entity_code).trim().toUpperCase() === codeUpper))
-                );
-            }
-
-            showToast("Mapping Approved", `Approved ${localCode} &rarr; ${m.group_code} (${d.level_0_name})`, "success");
-
-            // Re-render Step 2
-            const container = document.getElementById("step-content");
-            if (container) renderStep2(container);
-        } else {
-            showToast("Approval Failed", data.detail || "Could not save approval.", "error");
-        }
-    } catch (err) {
-        showToast("Network Error", "Approval failed: " + err, "error");
-    }
 }
 
 // Global Level 0 Floating Dropdown Popover
@@ -4334,66 +4683,8 @@ async function selectL0Option(groupCode, l0Name) {
     const popover = document.getElementById("step2-l0-popover");
     if (popover) popover.classList.add("hidden");
 
-    try {
-        const res = await fetch('/api/hitl/resolve', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                entity_code: entityCode,
-                local_code: localCode,
-                group_code: groupCode,
-                reasoning: "User approved in Level 0 Mapping table"
-            })
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-            // Update decision locally in pipelineData
-            if (!pipelineData.mapping_decisions) pipelineData.mapping_decisions = [];
-            const codeUpper = String(entityCode).trim().toUpperCase();
-            let d = pipelineData.mapping_decisions.find(m =>
-                m.entity_code && String(m.entity_code).trim().toUpperCase() === codeUpper && String(m.local_code).trim() === String(localCode).trim()
-            );
-            if (!d) {
-                // If not found in mapping_decisions, construct from raw TB rows
-                const ms = getMappingsForEntity(entityCode);
-                const source = ms.find(m => String(m.local_code).trim() === String(localCode).trim());
-                d = {
-                    entity_code: entityCode,
-                    local_code: localCode,
-                    local_description: source ? source.local_description : localCode,
-                    currency: source ? source.currency : 'INR',
-                    amount: source ? source.amount : 0.0
-                };
-                pipelineData.mapping_decisions.push(d);
-            }
-            d.group_code = groupCode;
-            d.group_description = data.resolved_name || l0Name;
-            d.level_0_code = groupCode;
-            d.level_0_name = data.level_0_name || l0Name;
-            d.method = "USER_APPROVED_RULE";
-            d.confidence = 1.0;
-            d.needs_review = false;
-
-            // Also check hitl_pending_reviews in appStatus
-            if (appStatus && appStatus.hitl_pending_reviews) {
-                appStatus.hitl_pending_reviews = appStatus.hitl_pending_reviews.filter(r =>
-                    !(String(r.local_code).trim() === String(localCode).trim() && (!r.entity_code || String(r.entity_code).trim().toUpperCase() === codeUpper))
-                );
-            }
-
-            showToast("Mapping Saved", `Updated ${localCode} &rarr; ${groupCode} (${l0Name})`, "success");
-
-            // Re-render Step 2 table and headers to update counts and Consolidate button
-            const container = document.getElementById("step-content");
-            if (container) renderStep2(container);
-        } else {
-            showToast("Update Failed", data.detail || "Could not save mapping.", "error");
-        }
-    } catch (err) {
-        showToast("Network Error", "Failed to update mapping: " + err, "error");
-    } finally {
-        currentL0PopoverTarget = null;
-    }
+    await approveMappingItem(entityCode, localCode, groupCode, l0Name, "Auditor selected Level 0 account");
+    currentL0PopoverTarget = null;
 }
 
 // STEP 3: FX TRANSLATION

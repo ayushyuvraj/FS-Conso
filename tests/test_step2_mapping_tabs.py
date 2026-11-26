@@ -296,3 +296,100 @@ def test_pipeline_data_auto_heals_missing_mapping_metadata(test_client):
     healed = next(m for m in mappings if m.get("local_code") == "1002")
     assert healed.get("entity_code") == "C2"
     assert healed.get("amount") is not None and healed.get("amount") > 0
+
+
+def test_deterministic_vs_llm_provenance_tagging(sample_coa):
+    """Verifies that deterministic rules are tagged accurately and not routed to LLM."""
+    raw_tb = RawTrialBalance(
+        entity_code="Test_Ent",
+        period="31-03-2025",
+        currency="INR",
+        rows=[
+            # 1. Direct code match in sample_coa (120400)
+            RawTBRow(account_code="120400", account_description="Different Name", debit=100.0, credit=0.0),
+            # 2. Exact name match in sample_coa (Trade Payables -> 320300)
+            RawTBRow(account_code="9001", account_description="Trade Payables", debit=0.0, credit=100.0),
+            # 3. Standard accounting synonym (Trade Debtors -> 120300 or similar)
+            RawTBRow(account_code="9002", account_description="Trade Debtors IC", debit=200.0, credit=0.0),
+        ]
+    )
+
+    mapper = COAMappingEngine(sample_coa)
+    _, decisions = mapper.standardize_trial_balance(raw_tb, use_ai=False)
+
+    d_direct = next(d for d in decisions if d.local_code == "120400")
+    assert d_direct.method == "DIRECT_CODE_MATCH"
+    assert d_direct.confidence == 1.0
+    assert not d_direct.needs_review
+    assert len(d_direct.candidates) == 1
+
+    d_name = next(d for d in decisions if d.local_code == "9001")
+    assert d_name.method == "HEURISTIC_EXACT"
+    assert d_name.confidence >= 0.95
+    assert not d_name.needs_review
+    assert len(d_name.candidates) == 1
+
+
+def test_hitl_resolve_decrements_to_zero_and_unblocks(test_client):
+    """Verifies that /api/hitl/resolve decrements pending reviews down to 0 and unblocks the pipeline."""
+    session.initialize_company("c2", load_samples=False)
+
+    # Set 2 pending items
+    session.state.mapping_decisions = [
+        MappingDecision(
+            local_code="REV_1",
+            local_description="Account Pending 1",
+            group_code="120400",
+            group_description="Cash & Equivalents",
+            method="GEMINI_AI",
+            confidence=0.75,
+            needs_review=True,
+            entity_code="C2",
+            amount=1000.0,
+            level_0_name="Cash & Bank"
+        ),
+        MappingDecision(
+            local_code="REV_2",
+            local_description="Account Pending 2",
+            group_code="320300",
+            group_description="Trade Payables",
+            method="GEMINI_AI",
+            confidence=0.70,
+            needs_review=True,
+            entity_code="C2",
+            amount=2000.0,
+            level_0_name="Trade Payables"
+        )
+    ]
+    session.state.hitl_pending_reviews = [
+        {"entity_code": "C2", "local_code": "REV_1"},
+        {"entity_code": "C2", "local_code": "REV_2"}
+    ]
+    session.state.is_blocked = True
+    session.state.completed_steps = [1]
+    session.state.current_step = 2
+
+    # Resolve first item -> pending should decrement to 1
+    res1 = test_client.post("/api/hitl/resolve", json={
+        "entity_code": "C2",
+        "local_code": "REV_1",
+        "group_code": "120400",
+        "reasoning": "Approved first item"
+    })
+    assert res1.status_code == 200
+    assert len(session.state.hitl_pending_reviews) == 1
+    assert session.state.is_blocked is True
+
+    # Resolve second item -> pending decrements to 0, pipeline unblocks!
+    res2 = test_client.post("/api/hitl/resolve", json={
+        "entity_code": "C2",
+        "local_code": "REV_2",
+        "group_code": "320300",
+        "reasoning": "Approved second item"
+    })
+    assert res2.status_code == 200
+    assert len(session.state.hitl_pending_reviews) == 0
+    assert session.state.is_blocked is False
+    assert 2 in session.state.completed_steps
+    assert session.state.current_step >= 3
+

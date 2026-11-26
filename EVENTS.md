@@ -6,6 +6,40 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-27 00:20] Milestone: Step 2 Interactive Column Sorting, Scroll Position Retention, Dynamic HITL Counter, Status Tick Iconography & LLM Provenance Popovers
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Column Sorting Across All Headers (Requirement 1)**:
+     - Implemented dynamic, bidirectional sorting on all 7 financial ledger columns in Step 2: `Account Code`, `Account Name`, `Currency`, `Amount`, `Level 0 Mapping`, `Confidence`, and `Status`.
+     - Sorting by `Status`: Clicking the header in ascending mode groups all accounts requiring auditor attention (`Review Required`) at the top of the table, allowing auditors to focus on actionable exceptions in one consolidated view. Secondary tie-breaking preserves numeric account code order.
+     - Interactive headers feature visual indicators (`▲`, `▼`, and subtle `▲▼` inactive indicators) styled in KPMG Royal Blue and slate.
+  2. **Scroll Position Retention on "Accept" & L0 Selection (Requirement 2)**:
+     - Eliminated entire-table re-rendering on single-account approvals.
+     - Implemented in-place DOM row updating via unified `approveMappingItem()` helper: targets the specific table row (`tr[data-entity][data-code]`), removes the amber highlight, updates the Level 0 button text, sets Confidence to 100%, and transforms the Status cell into a clean green checkmark tick.
+     - Retains the exact scroll position in `#step2-table-container` (`scrollTop` untouched). Auditors can continuously scroll downward and click "Accept" without jumping to the top of the table.
+  3. **LLM Routing Transparency & Scoping in (i) Popover (Requirement 3)**:
+     - Addressed user feedback regarding transparency of LLM vs deterministic matching.
+     - Enhanced `openCandidatePopover`:
+       - `GEMINI_AI`: Displays purple badge `[ Gemini LLM Judge ]`, notes that the account had no exact deterministic rule match and was routed to the Gemini AI Agentic Brain, and displays ranked candidate options with confidence percentages and reasoning.
+       - Deterministic matches (`DIRECT_CODE_MATCH`, `HEURISTIC_EXACT`, `ACCOUNTING_SYNONYM`, `HISTORICAL_RULE` / `USER_APPROVED_RULE`): Displays emerald/blue/indigo badges, clearly explains the matching rule, and explicitly notes: *"Confidence: XX% (Deterministic). Not routed to LLM."*
+       - Transparently reveals that deterministic accounts are not sent to the LLM.
+  4. **Dynamic HITL Counter Decrement (Requirement 4)**:
+     - Implemented `refreshHITLCounters()` helper:
+       - Recalculates total pending reviews across all entity tabs whenever an approval occurs.
+       - Decrements the top header badge (`#badge-hitl-count`) live from 46 down to 45, 44... 1, and hides the badge completely once all items are approved.
+       - Dynamically updates individual entity tab dots (`#step2-tab-dot-${entityCode}`), transitioning pulsing amber dots to solid emerald when all items in a tab are approved.
+       - Automatically unlocks the primary action button (`#btn-consolidate-step2`) once all accounts across all entities are approved.
+  5. **Status Column Iconography (Requirement 5)**:
+     - Replaced the green text badge `"Mapped"` with a clean green checkmark circle icon (`bg-emerald-100 text-emerald-600 border border-emerald-200`) with checkmark SVG.
+     - For items requiring review: Displays alert triangle icon + `"Review Required"` badge and tactile green `"Accept"` button.
+     - Approving an item immediately transforms the cell in-place into the green checkmark icon.
+  6. **Automated Verification & Hardening**:
+     - Added new tests in `tests/test_step2_mapping_tabs.py` (`test_deterministic_vs_llm_provenance_tagging`, `test_hitl_resolve_decrements_to_zero_and_unblocks`).
+     - JavaScript syntax verification: `node -c fs_conso/web/static/js/app.js` (0 errors).
+     - Full Regression Suite: **95/95 PASSED (100%)** in 27.82s (`python -m pytest tests/`).
+     - Verified live server responds with HTTP 200 OK on port 8000.
+     - Atomic Git commit and push to remote branch `feature/profile-v2`.
+
 ### [2026-11-26 23:50] Milestone: Stepper Header Border Unification & Generic Step Completion Gating Enforcement
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:
