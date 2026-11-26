@@ -40,6 +40,10 @@
     --font-mono: 'JetBrains Mono', Menlo, monospace;
 }
 
+#toast-container {
+    display: none !important;
+}
+
 body {
     background-color: #FFFFFF;
     color: #0F172A;

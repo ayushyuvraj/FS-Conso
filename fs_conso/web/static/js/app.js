@@ -6445,48 +6445,10 @@ async function triggerResetBaseline() {
     }
 }
 
-// TOAST NOTIFICATIONS (Emil Kowalski Spring Physics)
+// TOAST NOTIFICATIONS (Disabled per user request)
 function showToast(title, message, type = "info") {
-    const container = document.getElementById("toast-container");
-    if (!container) return;
-
-    const toast = document.createElement("div");
-    toast.className = `pointer-events-auto p-4 rounded-lg shadow-xl border text-xs transition-all duration-300 transform translate-y-2 opacity-0 flex items-start space-x-3`;
-
-    let iconSvg = "";
-    if (type === "success") {
-        toast.className += " bg-emerald-900/90 text-white border-emerald-500/50";
-        iconSvg = `<svg class="w-4 h-4 text-emerald-300 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
-    } else if (type === "error") {
-        toast.className += " bg-rose-900/95 text-white border-rose-500/50";
-        iconSvg = `<svg class="w-4 h-4 text-rose-300 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
-    } else if (type === "warning") {
-        toast.className += " bg-amber-900/95 text-white border-amber-500/50";
-        iconSvg = `<svg class="w-4 h-4 text-amber-300 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
-    } else {
-        toast.className += " formula-popover-glass text-white border border-[#0091DA]/40 shadow-xl";
-        iconSvg = `<svg class="w-4 h-4 text-[#0091DA] shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
-    }
-
-    toast.innerHTML = `
-        ${iconSvg}
-        <div class="flex-1">
-            <h5 class="font-bold text-xs leading-tight">${escapeHtml(title)}</h5>
-            <p class="text-[11px] opacity-90 mt-0.5 leading-snug">${escapeHtml(message)}</p>
-        </div>
-        <button onclick="this.parentElement.remove()" class="text-white/60 hover:text-white font-bold">&times;</button>
-    `;
-
-    container.appendChild(toast);
-    requestAnimationFrame(() => {
-        toast.classList.remove("translate-y-2", "opacity-0");
-        toast.classList.add("translate-y-0", "opacity-100");
-    });
-
-    setTimeout(() => {
-        toast.classList.add("opacity-0", "translate-y-2");
-        setTimeout(() => toast.remove(), 300);
-    }, 5000);
+    // Pop-up notifications in bottom-right removed per user request
+    return;
 }
 
 // SETTINGS DRAWER FUNCTIONS

@@ -660,6 +660,15 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
   - Live server verification on `http://127.0.0.1:8000`: HTTP 200 OK for `/api/companies` and `/api/runs`.
 
+### [2026-11-27] - Milestone: Remove Bottom-Right Pop-up Notifications
+- **UI & UX Refinement**:
+  - Removed bottom-right toast pop-up container (`#toast-container`) from `index.html`.
+  - Added `#toast-container { display: none !important; }` in `style.css`.
+  - Disabled `showToast()` in `app.js` into a clean no-op so no pop-up notifications appear in the bottom right, while allowing callers to execute harmlessly without errors.
+- **Verification & Testing**:
+  - Full test suite: **98/98 tests PASSED** in 20.17s.
+  - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+
 ### [2026-11-27] - Milestone: Step 3 Dynamic Entity Tabs, 5-Category Ind AS 21 FX Translation Engine & Stepper Polish
 - **Architectural & UI Enhancements**:
   - **Stepper Visual Washout Restoration**:
