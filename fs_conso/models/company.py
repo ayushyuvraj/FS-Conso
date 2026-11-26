@@ -66,21 +66,31 @@ class CompanyProfile(BaseModel):
         self.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def get_mappings_dict(self) -> Dict[Tuple[str, str], str]:
-        """Returns in-memory dictionary lookup for mapper engine: (entity, local_code) -> group_code."""
+        """Returns in-memory dictionary lookup for mapper engine: (entity, local_code) -> group_code.
+        Strictly excludes any higher-level rollup headers to enforce universal Level 0 compliance.
+        """
         result: Dict[Tuple[str, str], str] = {}
         for m in self.historical_mappings:
             ent = m.get("entity", "").strip()
             loc = m.get("local_code", "").strip()
             grp = m.get("group_code", "").strip()
             if ent and loc and grp:
+                if self.group_coa:
+                    it = self.group_coa.get_item(grp)
+                    if it and not it.is_level_0:
+                        continue
                 result[(ent, loc)] = grp
         return result
 
     def add_mapping(self, entity_code: str, local_code: str, group_code: str) -> None:
-        """Adds or updates a mapping in the learning memory store."""
+        """Adds or updates a mapping in the learning memory store, requiring Level 0 accounts."""
         ent = entity_code.strip()
         loc = local_code.strip()
         grp = group_code.strip()
+        if self.group_coa:
+            it = self.group_coa.get_item(grp)
+            if it and not it.is_level_0:
+                raise ValueError(f"Cannot add mapping to '{grp}': only Level 0 leaf accounts are permitted.")
         
         # Remove existing if present
         self.historical_mappings = [
@@ -96,10 +106,15 @@ class CompanyProfile(BaseModel):
         self.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def get_mapping(self, entity_code: str, local_code: str) -> Optional[str]:
-        """Looks up a specific approved mapping for an entity code and local GL code."""
+        """Looks up a specific approved mapping for an entity code and local GL code (Level 0 only)."""
         ent = entity_code.strip()
         loc = local_code.strip()
         for m in self.historical_mappings:
             if m.get("entity") == ent and m.get("local_code") == loc:
-                return m.get("group_code")
+                grp = m.get("group_code")
+                if self.group_coa and grp:
+                    it = self.group_coa.get_item(grp)
+                    if it and not it.is_level_0:
+                        return None
+                return grp
         return None

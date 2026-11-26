@@ -1,7 +1,7 @@
 """Chart of Accounts (COA) domain models."""
 
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 from pydantic import BaseModel, Field
 
 class AccountClassification(str, Enum):
@@ -29,6 +29,18 @@ class COAItem(BaseModel):
     fs_line: Optional[str] = None
 
     @property
+    def is_level_0(self) -> bool:
+        """Returns True only if this account is a leaf Level 0 account, not a Level 1/2/3 rollup header."""
+        # If this row is explicitly designated as a higher-level rollup, it is not Level 0
+        if bool(self.level_1 or self.level_2 or self.level_3):
+            if self.level_0_account and str(self.level_0_account).strip():
+                higher_names = {str(h).strip().lower() for h in (self.level_1, self.level_2, self.level_3) if h}
+                if str(self.level_0_account).strip().lower() not in higher_names:
+                    return True
+            return False
+        return bool(self.level_0_account and str(self.level_0_account).strip()) or bool(self.account_code)
+
+    @property
     def is_debit_natural(self) -> bool:
         """Assets and Expenses are debit-natural (positive in standardized import)."""
         return self.account_type in (AccountClassification.ASSET, AccountClassification.EXPENSE)
@@ -47,6 +59,15 @@ class ChartOfAccounts(BaseModel):
 
     def get_item(self, code: str) -> Optional[COAItem]:
         return self.items.get(code)
+
+    def get_level_0_items(self) -> List[COAItem]:
+        """Returns only leaf Level 0 accounts eligible for mapping for this company."""
+        l0_list = [item for item in self.items.values() if item.is_level_0]
+        return l0_list if l0_list else list(self.items.values())
+
+    def get_level_0_codes(self) -> Set[str]:
+        """Set of valid Level 0 account codes."""
+        return {item.account_code for item in self.get_level_0_items()}
 
     def find_by_name(self, name: str) -> Optional[COAItem]:
         normalized = name.strip().lower()

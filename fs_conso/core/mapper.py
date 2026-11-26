@@ -34,17 +34,18 @@ class MappingDecision(BaseModel):
     is_ambiguous: bool = False
 
 
-# Canonical accounting synonym heuristics mapping normalized patterns to Group COA codes
+# Canonical accounting synonym heuristics mapping normalized patterns to Group COA codes (strictly Level 0 leaf accounts)
 ACCOUNTING_SYNONYMS = [
     # Equity
     (re.compile(r"equity\s*(share)?\s*capital|common\s*stock|share\s*capital", re.IGNORECASE), "E210101", 0.98, "Matched standard Equity Share Capital line item."),
-    (re.compile(r"retained\s*earnings|accumulated\s*profit", re.IGNORECASE), "210200", 0.98, "Matched standard Retained Earnings line item."),
+    (re.compile(r"retained\s*earnings|accumulated\s*profit", re.IGNORECASE), "E210201", 0.98, "Matched standard Opening Retained Earnings line item."),
     # Cash & Bank
-    (re.compile(r"cash\s*(and|&)?\s*bank|bank\s*and\s*cash|cash\s*at\s*bank|bank\s*cash|cash\s*and\s*cash\s*equivalents|cash\s*on\s*hand", re.IGNORECASE), "120400", 0.98, "Matched Cash & Cash Equivalents standard Group COA."),
+    (re.compile(r"cash\s*(and|&)?\s*bank|bank\s*and\s*cash|cash\s*at\s*bank|bank\s*cash|cash\s*and\s*cash\s*equivalents", re.IGNORECASE), "A120402", 0.98, "Matched Bank Balances standard Group COA."),
+    (re.compile(r"cash\s*on\s*hand", re.IGNORECASE), "A120401", 0.98, "Matched Cash on Hand standard Group COA."),
     (re.compile(r"fixed\s*deposits?|term\s*deposits?|fd\b", re.IGNORECASE), "A120403", 0.95, "Matched Bank Deposits standard Group COA."),
     # Trade Receivables / Payables
     (re.compile(r"trade\s*receivables|debtors|customer\s*balances", re.IGNORECASE), "A120301", 0.95, "Matched Trade Receivables asset line."),
-    (re.compile(r"trade\s*payables|trade\s*creditors|vendor\s*balances", re.IGNORECASE), "320300", 0.95, "Matched Trade Payables liability line."),
+    (re.compile(r"trade\s*payables|trade\s*creditors|vendor\s*balances", re.IGNORECASE), "L320302", 0.95, "Matched Trade Creditors liability line."),
     # Intercompany Receivables / Payables / Loans
     (re.compile(r"intercompany\s*receivable|ic\s*rec|inter-company\s*receivable", re.IGNORECASE), "A120302", 0.95, "Matched Related Party / Intercompany Trade Receivable."),
     (re.compile(r"intercompany\s*payable|ic\s*pay|inter-company\s*payable", re.IGNORECASE), "L320401", 0.95, "Matched Related Party / Intercompany Trade Payable."),
@@ -53,7 +54,7 @@ ACCOUNTING_SYNONYMS = [
     (re.compile(r"patient\s*healthcare\s*revenue|hospital\s*services|healthcare\s*revenue|hospital\s*revenue", re.IGNORECASE), "I410101", 0.95, "Matched Hospital / Healthcare Services operating revenue."),
     (re.compile(r"diagnostic\s*scan\s*revenue|diagnostic\s*revenue|scan\s*revenue", re.IGNORECASE), "I410101", 0.95, "Matched Diagnostic Healthcare Services revenue."),
     (re.compile(r"pharmacy\s*(drug)?\s*sales|drug\s*sales|pharmacy\s*revenue", re.IGNORECASE), "I410102", 0.95, "Matched Pharmacy Sales revenue line."),
-    (re.compile(r"revenue\s*from\s*(operating\s*)?management|management\s*fee\s*revenue", re.IGNORECASE), "410100", 0.95, "Matched Revenue from Operations."),
+    (re.compile(r"revenue\s*from\s*(operating\s*)?management|management\s*fee\s*revenue|revenue\s*from\s*operations", re.IGNORECASE), "I410103", 0.95, "Matched Other Operating Revenue."),
     # Inventories & Purchases
     (re.compile(r"pharmaceutical\s*inventories|drug\s*inventory|inventories|inventory", re.IGNORECASE), "A120101", 0.95, "Matched Inventories - Raw Materials / Traded Goods."),
     (re.compile(r"drug\s*purchases|purchase\s*of\s*stock|purchases", re.IGNORECASE), "X520101", 0.95, "Matched Purchase of Stock-in-Trade expense."),
@@ -61,6 +62,11 @@ ACCOUNTING_SYNONYMS = [
     # Fixed Assets & Depreciation
     (re.compile(r"medical\s*equipment|equipment|plant\s*&\s*machinery", re.IGNORECASE), "A110103", 0.95, "Matched Plant & Machinery / Medical Equipment asset."),
     (re.compile(r"equipment\s*depreciation|depreciation\s*on\s*plant|depreciation", re.IGNORECASE), "A110111", 0.95, "Matched Depreciation - Plant & Machinery asset contra."),
+    (re.compile(r"\bcwip\b|capital\s*work\s*in\s*progress", re.IGNORECASE), "A110109", 0.95, "Matched Capital Work-in-Progress asset line."),
+    # Personnel, Financing & Operating Sundries
+    (re.compile(r"employee\s*benefits?|salaries(\s*and\s*wages)?|wages\s*and\s*salaries", re.IGNORECASE), "X540101", 0.95, "Matched Salaries, Wages and Bonus expense line."),
+    (re.compile(r"finance\s*costs?|borrowing\s*costs?", re.IGNORECASE), "X560101", 0.95, "Matched Finance Costs / Interest expense line."),
+    (re.compile(r"export\s*incentive|duty\s*drawback|freight.*recovery", re.IGNORECASE), "I410103", 0.95, "Matched Other Operating Revenue line item."),
 ]
 
 
@@ -87,7 +93,7 @@ class COAMappingEngine:
             return None
 
     def _format_complete_coa_candidates(self) -> str:
-        """Categorizes all available Chart of Accounts into a structured reference prompt."""
+        """Categorizes all available leaf Level 0 Chart of Accounts into a structured reference prompt."""
         categories = {
             "ASSET": [],
             "LIABILITY": [],
@@ -95,22 +101,23 @@ class COAMappingEngine:
             "INCOME": [],
             "EXPENSE": []
         }
-        for item in self.coa.items.values():
+        for item in self.coa.get_level_0_items():
             cat = item.account_type.value.upper()
             if cat in categories:
-                categories[cat].append(f"{item.account_code}: {item.account_name}")
+                l0_desc = item.level_0_account or item.account_name
+                categories[cat].append(f"{item.account_code}: {item.account_name} (Level 0: {l0_desc})")
 
         sections = []
         for cat_name, items in categories.items():
             if items:
-                sections.append(f"### {cat_name} ACCOUNTS:\n" + "\n".join(items))
+                sections.append(f"### {cat_name} LEVEL 0 ACCOUNTS:\n" + "\n".join(items))
         return "\n\n".join(sections)
 
     def _fallback_semantic_ranking(
         self,
         unmapped_rows: List[Tuple[str, str, str]]
     ) -> Dict[str, Dict[str, Any]]:
-        """Intelligent semantic candidate ranker: evaluates Group COA candidates using accounting terminology & heuristics.
+        """Intelligent semantic candidate ranker: evaluates leaf Level 0 Group COA candidates using accounting terminology & heuristics.
         Returns top 1-3 candidate options with confidence scores and accounting rationales.
         """
         results: Dict[str, Dict[str, Any]] = {}
@@ -119,7 +126,7 @@ class COAMappingEngine:
             desc_tokens = set(desc_norm.split())
 
             candidates_scored = []
-            for item in self.coa.items.values():
+            for item in self.coa.get_level_0_items():
                 name_norm = re.sub(r"[^a-zA-Z0-9\s]", " ", item.account_name.lower()).strip()
                 name_tokens = set(name_norm.split())
                 l0_norm = re.sub(r"[^a-zA-Z0-9\s]", " ", (item.level_0_account or "").lower()).strip()
@@ -155,7 +162,7 @@ class COAMappingEngine:
                         "group_account_name": item.account_name,
                         "level_0_account": item.level_0_account or item.account_name,
                         "confidence": conf,
-                        "reasoning": f"Semantic alignment with Group COA item '{item.account_name}' ({int(conf*100)}% match)."
+                        "reasoning": f"Semantic alignment with Level 0 Group COA item '{item.account_name}' ({int(conf*100)}% match)."
                     })
                     if len(top_candidates) >= 3:
                         break
@@ -212,11 +219,12 @@ Your role is to act as an expert accounting judge to standardize subsidiary and 
 
 === AUDIT INSTRUCTIONS ===
 1. Examine each account's nature (Asset, Liability, Equity, Revenue, Expense) from its local code and description.
-2. Select the top matching Group Account Code from the Group Chart of Accounts above.
-3. Identify if there are secondary or tertiary probable matches in the Group COA (e.g. if an item could plausibly be classified under two distinct Group COA accounts, such as Trade Receivables vs Other Financial Assets, or Operating Revenue vs Other Income).
-4. Assign an exact confidence score (between 0.00 and 1.00) to each candidate option representing the probabilistic fit.
-5. Provide a concise accounting justification for each option citing relevant financial statement principles.
-6. Return ONLY a valid JSON array of objects matching this exact schema:
+2. Select the top matching leaf Level 0 Group Account Code from the Level 0 Group Chart of Accounts above.
+3. CRITICAL REQUIREMENT: You MUST map ONLY to the leaf Level 0 accounts listed above. NEVER select higher-level rollups, sub-headers, or summary groups (e.g., do not select parent rollup codes).
+4. Identify if there are secondary or tertiary probable Level 0 matches in the Group COA.
+5. Assign an exact confidence score (between 0.00 and 1.00) to each candidate option representing the probabilistic fit.
+6. Provide a concise accounting justification for each option citing relevant financial statement principles.
+7. Return ONLY a valid JSON array of objects matching this exact schema:
 
 [
   {{
@@ -271,21 +279,25 @@ Your role is to act as an expert accounting judge to standardize subsidiary and 
                         "reasoning": item.get("reasoning", "")
                     }]
                 if l_code and matches:
-                    top = matches[0]
+                    valid_l0_matches = []
                     for m in matches:
-                        coa_it = self.coa.get_item(m.get("group_account_code", ""))
-                        if coa_it:
-                            if not m.get("group_account_name"):
-                                m["group_account_name"] = coa_it.account_name
-                            if not m.get("level_0_account"):
-                                m["level_0_account"] = coa_it.level_0_account or coa_it.account_name
+                        g_code = str(m.get("group_account_code", "")).strip()
+                        coa_it = self.coa.get_item(g_code)
+                        # STRICT LEVEL 0 CHECK: Only accept matches that are true Level 0 accounts
+                        if coa_it and coa_it.is_level_0:
+                            m["group_account_code"] = coa_it.account_code
+                            m["group_account_name"] = coa_it.account_name
+                            m["level_0_account"] = coa_it.level_0_account or coa_it.account_name
+                            valid_l0_matches.append(m)
 
-                    results[l_code] = {
-                        "group_code": top.get("group_account_code"),
-                        "confidence": float(top.get("confidence", 0.90)),
-                        "reasoning": top.get("reasoning", "Inferred via Gemini LLM judge."),
-                        "candidates": matches
-                    }
+                    if valid_l0_matches:
+                        top = valid_l0_matches[0]
+                        results[l_code] = {
+                            "group_code": top.get("group_account_code"),
+                            "confidence": float(top.get("confidence", 0.90)),
+                            "reasoning": top.get("reasoning", "Inferred via Gemini LLM judge."),
+                            "candidates": valid_l0_matches
+                        }
         except Exception as exc:
             logger.warning(f"Gemini LLM mapping batch call failed, using intelligent semantic fallback: {exc}")
             fallback_res = self._fallback_semantic_ranking(unmapped_rows)
@@ -298,8 +310,16 @@ Your role is to act as an expert accounting judge to standardize subsidiary and 
 
         return results
 
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Clears the global decision cache across all entities."""
+        cls._global_decision_cache.clear()
+
     def add_user_mapping(self, entity_code: str, local_code: str, group_code: str, reasoning: str = "User approved in HITL workbench") -> None:
         """Stores user approved mapping into learning memory cache and historical rules."""
+        target_item = self.coa.get_item(group_code)
+        if target_item and not target_item.is_level_0:
+            raise ValueError(f"Cannot map to '{group_code}' because it is a higher-level rollup header. Universal consolidation requires Level 0 leaf accounts only.")
         self.historical_mappings[(entity_code, local_code)] = group_code
         self._global_decision_cache[(entity_code, local_code)] = (group_code, 1.0, "USER_APPROVED_RULE", reasoning)
 
@@ -336,35 +356,41 @@ Your role is to act as an expert accounting judge to standardize subsidiary and 
             if cache_key in self._global_decision_cache:
                 t_code, conf, meth, reas = self._global_decision_cache[cache_key]
                 target_item = self.coa.get_item(t_code)
-                pending_rows.append((idx, local_code, local_desc, signed_amount, target_item, meth, conf, reas))
-                continue
+                if target_item and target_item.is_level_0:
+                    pending_rows.append((idx, local_code, local_desc, signed_amount, target_item, meth, conf, reas))
+                    continue
+                else:
+                    # Stale or non-Level 0 entry, evict from cache
+                    self._global_decision_cache.pop(cache_key, None)
 
-            # 1. Historical mappings
+            # 1. Historical mappings (Level 0 only)
             hist_key = (raw_tb.entity_code, local_code)
             if hist_key in self.historical_mappings:
                 target_code = self.historical_mappings[hist_key]
                 target_item = self.coa.get_item(target_code)
-                pending_rows.append((idx, local_code, local_desc, signed_amount, target_item, "HISTORICAL_RULE", 1.0, "Matched via prior approved mapping table."))
-                continue
+                if target_item and target_item.is_level_0:
+                    pending_rows.append((idx, local_code, local_desc, signed_amount, target_item, "HISTORICAL_RULE", 1.0, "Matched via prior approved mapping table."))
+                    continue
 
-            # 2. Direct code match in COA
+            # 2. Direct code match in COA (Level 0 only)
             if local_code in self.coa.items:
                 target_item = self.coa.get_item(local_code)
-                pending_rows.append((idx, local_code, local_desc, signed_amount, target_item, "DIRECT_CODE_MATCH", 1.0, "Local GL code directly matches Group COA code."))
-                continue
+                if target_item and target_item.is_level_0:
+                    pending_rows.append((idx, local_code, local_desc, signed_amount, target_item, "DIRECT_CODE_MATCH", 1.0, "Local GL code directly matches Group COA code."))
+                    continue
 
-            # 3. Exact or fuzzy description match in COA
+            # 3. Exact or fuzzy description match in COA (Level 0 only)
             found = self.coa.find_by_name(local_desc)
-            if found:
+            if found and found.is_level_0:
                 pending_rows.append((idx, local_code, local_desc, signed_amount, found, "HEURISTIC_EXACT", 0.95, f"Account description matched '{found.account_name}'."))
                 continue
 
-            # 4. Standard accounting synonym heuristics
+            # 4. Standard accounting synonym heuristics (Level 0 only)
             synonym_matched = False
             for pattern, syn_code, syn_conf, syn_reas in ACCOUNTING_SYNONYMS:
                 if pattern.search(local_desc) or pattern.search(local_code):
                     target_item = self.coa.get_item(syn_code)
-                    if target_item:
+                    if target_item and target_item.is_level_0:
                         pending_rows.append((idx, local_code, local_desc, signed_amount, target_item, "ACCOUNTING_SYNONYM", syn_conf, syn_reas))
                         synonym_matched = True
                         break
@@ -393,20 +419,32 @@ Your role is to act as an expert accounting judge to standardize subsidiary and 
                         ai_code = ai_entry.get("group_code")
                         ai_conf = float(ai_entry.get("confidence", 0.0))
                         ai_reas = ai_entry.get("reasoning", "")
-                        candidates = ai_entry.get("candidates", [])
+                        raw_cands = ai_entry.get("candidates", [])
                     elif isinstance(ai_entry, (tuple, list)):
                         ai_code = ai_entry[0]
                         ai_conf = float(ai_entry[1]) if len(ai_entry) > 1 else 0.0
                         ai_reas = str(ai_entry[2]) if len(ai_entry) > 2 else ""
-                        candidates = []
+                        raw_cands = []
                     else:
                         ai_code, ai_conf, ai_reas = None, 0.0, ""
 
-                    if ai_code and self.coa.get_item(ai_code):
+                    # Filter candidates strictly to Level 0 leaf accounts
+                    candidates = [
+                        c for c in raw_cands
+                        if self.coa.get_item(c.get("group_account_code", "")) and self.coa.get_item(c.get("group_account_code", "")).is_level_0
+                    ]
+
+                    if ai_code and self.coa.get_item(ai_code) and self.coa.get_item(ai_code).is_level_0:
                         target_item = self.coa.get_item(ai_code)
                         method = "GEMINI_AI"
                         confidence = ai_conf
                         reasoning = ai_reas
+                    elif candidates:
+                        top_cand = candidates[0]
+                        target_item = self.coa.get_item(top_cand["group_account_code"])
+                        method = "GEMINI_AI"
+                        confidence = float(top_cand.get("confidence", 0.90))
+                        reasoning = top_cand.get("reasoning", "Inferred via Gemini LLM judge.")
             elif target_item is not None:
                 # Deterministic match: populate a single candidate option
                 candidates = [{
@@ -459,8 +497,9 @@ Your role is to act as an expert accounting judge to standardize subsidiary and 
                 else:
                     needs_rev = confidence < threshold
 
-                # Cache successful decision
-                self._global_decision_cache[(raw_tb.entity_code, local_code)] = (target_code, confidence, method, reasoning)
+                # Cache successful decision (strictly Level 0 leaf accounts)
+                if target_item and target_item.is_level_0:
+                    self._global_decision_cache[(raw_tb.entity_code, local_code)] = (target_code, confidence, method, reasoning)
 
             decision = MappingDecision(
                 local_code=local_code,

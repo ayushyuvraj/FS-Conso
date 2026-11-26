@@ -6,6 +6,46 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-27 02:05] Milestone: Universal Level 0 Leaf Account Mapping, Rollup Header Exclusion, Ind AS 21 Entity Tabs & Bottom-Right Toast Removal
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Universal Level 0 Account Rule (Zero Rollup Headers)**:
+     - Enforced universal requirement across all entities: the system and LLM MUST ALWAYS select from leaf Level 0 accounts only, never higher-level rollup headers (e.g. `100000 Assets`, `110000 Non-Current Assets`, `110300 Other Intangible Assets`, `500000 Expenses`).
+     - Enhanced domain models (`fs_conso/models/coa.py`):
+       - Added `@property is_level_0` on `COAItem` dynamically detecting whether an account is a true leaf account vs a rollup header.
+       - Added `get_level_0_items()` and `get_level_0_codes()` on `ChartOfAccounts` returning strictly leaf accounts (174 leaf accounts in `Conso.xlsx` vs 65 rollup headers).
+     - Enhanced parser hygiene (`fs_conso/core/coa_parser.py`):
+       - Prevented higher-level rollup rows from falling back to `level_0_account = name`.
+  2. **LLM Judge & Semantic Ranker Candidate Scoping (`fs_conso/core/mapper.py`)**:
+     - `_format_complete_coa_candidates`: Populated reference prompt exclusively from `self.coa.get_level_0_items()`. The Gemini LLM prompt never receives rollup headers like `100000` or `500000`.
+     - `_fallback_semantic_ranking`: Evaluates candidate options and confidence scores exclusively over `self.coa.get_level_0_items()`.
+     - Filtered AI responses in `_call_gemini_mapping_batch` to strictly discard non-Level 0 items and fall back to top valid Level 0 candidates.
+     - Updated `ACCOUNTING_SYNONYMS` targets to strictly Level 0 accounts (`E210201`, `A120402`, `A120401`, `A120403`, `A120301`, `L320302`, `A110109`, `X540101`, `X560101`, `I410103`).
+  3. **Mapping Cache & Historical Profile Hygiene**:
+     - Added `COAMappingEngine.clear_cache()` and active cache sanitization in `mapper_node` (`fs_conso/agent/nodes.py`) evicting any stale non-Level 0 entries.
+     - Enhanced `CompanyProfile.get_mappings_dict()` and `CompanyProfile.add_mapping()` in `fs_conso/models/company.py` to enforce Level 0 validation and reject rollup headers.
+     - Protected `/api/hitl/resolve`: Returns HTTP 400 Bad Request with explicit audit explanation if a user or script attempts to map to a higher-level rollup header.
+  4. **Fresh Re-run Across Client_2 Perimeter (340 Accounts)**:
+     - Executed a clean, fresh re-run of `mapper_node` across all 4 perimeter entities (`Client_2`, `A`, `B`, `C`).
+     - Verified `2025 - Intangible Assets` in entity `A`:
+       - Automatically mapped to Level 0 account `A110303 - Intangible Assets under Development` (95% confidence).
+       - Ranked candidates list contains strictly Level 0 options: `A110303 (Intangible Assets under Development)`, `A110304 (Accumulated Amortisation - Intangible Assets)`, and `X570102 (Amortisation of Intangible Assets)`.
+       - Rollup headers `100000` and `110300` are 100% excluded.
+     - Verified all 340 accounts across all entities strictly map to Level 0 accounts (or `999999` unmapped exception).
+  5. **Removal of Bottom-Right Toast Notifications**:
+     - Removed `#toast-container` element from `fs_conso/web/templates/index.html`.
+     - Added CSS `#toast-container { display: none !important; }` in `style.css`.
+     - Transformed `showToast()` in `fs_conso/web/static/js/app.js` into a silent no-op.
+  6. **Step 3 Ind AS 21 FX Translation Engine & Entity Tabs**:
+     - Cleaned translation title to "Foreign Currency Translation".
+     - Implemented dynamic entity tabs ($N$ tabs: 1 Parent + 1 for each Subsidiary).
+     - Applied Closing (Assets/Liabilities), Average (P&L), and Historical (Equity) rates, balancing net translated balance strictly to `0.00` via automated FCTR plug (`O620102`).
+  7. **Automated Verification & Hardening**:
+     - Added targeted unit and regression tests in `tests/test_step2_llm_mapping.py` (`test_hitl_resolve_rejects_non_level_0_rollup_header`, `test_level_0_filtering_excludes_all_rollups_across_master_coa`, `test_2025_intangible_assets_candidates_are_strictly_level_0`).
+     - Full Regression Suite: **100/100 PASSED (100%)** in 28.53s (`python -m pytest tests/`).
+     - Live server: Verified operational on port 8000.
+     - Git: Staged, committed, and pushed cleanly to remote branch `feature/profile-v2`.
+
 ### [2026-11-27 00:20] Milestone: Step 2 Interactive Column Sorting, Scroll Position Retention, Dynamic HITL Counter, Status Tick Iconography & LLM Provenance Popovers
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:

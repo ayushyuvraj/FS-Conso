@@ -173,6 +173,11 @@ def mapper_node(state: ConsolidationState) -> ConsolidationState:
 
     coa = load_coa_for_company(state.company_id)
     hist_mappings = load_mappings_for_company(state.company_id)
+    # Purge any non-Level 0 items from global cache to ensure universal Level 0 compliance
+    COAMappingEngine._global_decision_cache = {
+        k: v for k, v in COAMappingEngine._global_decision_cache.items()
+        if coa.get_item(v[0]) and coa.get_item(v[0]).is_level_0
+    }
     mapper = COAMappingEngine(coa, hist_mappings)
 
     std_tbs = []

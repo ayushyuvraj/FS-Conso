@@ -1265,6 +1265,13 @@ async def get_hitl_pending():
 async def resolve_hitl_item(req: HITLResolveRequest):
     """Applies human review decision and commits it into Learning Memory."""
     prof = company_manager.get_company(session.active_company_id)
+    resolved_item = prof.group_coa.get_item(req.group_code) if (prof and prof.group_coa) else None
+    if resolved_item and not resolved_item.is_level_0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot map to '{req.group_code}' ({resolved_item.account_name}) because it is a higher-level rollup header. Universal consolidation rules require selecting Level 0 leaf accounts only."
+        )
+
     if prof:
         prof.add_mapping(req.entity_code, req.local_code, req.group_code)
         company_manager.save_company(prof)
@@ -1274,8 +1281,6 @@ async def resolve_hitl_item(req: HITLResolveRequest):
     COAMappingEngine._global_decision_cache[(req.entity_code, req.local_code)] = (
         req.group_code, 1.0, "USER_APPROVED_RULE", req.reasoning
     )
-
-    resolved_item = prof.group_coa.get_item(req.group_code) if (prof and prof.group_coa) else None
 
     async with pipeline_lock:
         if session.state:
@@ -1577,7 +1582,7 @@ async def get_pipeline_data():
 
     level_0_choices = []
     if prof and prof.group_coa and prof.group_coa.items:
-        for it in sorted(prof.group_coa.items.values(), key=lambda x: str(x.account_code)):
+        for it in sorted(prof.group_coa.get_level_0_items(), key=lambda x: str(x.account_code)):
             l0_name = it.level_0_account or it.account_name
             level_0_choices.append({
                 "account_code": it.account_code,

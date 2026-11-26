@@ -81,6 +81,7 @@ def multi_sheet_workbook_bytes():
     ws_fx.append(["As of Date", "From Currency", "To Currency", "Closing Rate", "Average Rate", "Historical Rate", "Swap Rate"])
     ws_fx.append(["31-Mar-2024", "USD", "INR", 83.50, 83.00, 80.00, 0.25])
     ws_fx.append(["31-Mar-2024", "SGD", "INR", 62.00, 61.50, 60.00, 0.15])
+    ws_fx.append(["31-Mar-2024", "EUR", "INR", 90.00, 89.50, 88.00, 0.20])
 
     # Sheet 5: Unassigned Notes
     ws_notes = wb.create_sheet(title="Audit_Notes")
@@ -219,11 +220,7 @@ def test_pipeline_confirmation_api_gating(multi_sheet_workbook_bytes):
     client = TestClient(app)
 
     # 1. Switch to active company
-    companies = company_manager.list_companies()
-    if not companies:
-        pytest.skip("No company workspace available for API test.")
-    cid = companies[0]["company_id"]
-    client.post("/api/companies/switch", json={"company_id": cid})
+    client.post("/api/companies/switch", json={"company_id": "company-p"})
 
     # 2. Upload multi-sheet batch
     res_upload = client.post(
@@ -270,7 +267,7 @@ def test_pipeline_confirmation_api_gating(multi_sheet_workbook_bytes):
             "fx_rates": {"filename": "Client_All.xlsx", "sheet_name": "FX_Rates"}
         }
     )
-    assert res_confirm.status_code == 200
+    assert res_confirm.status_code == 200, res_confirm.json()
     data_confirm = res_confirm.json()
     assert data_confirm["success"] is True
     assert 1 in data_confirm["completed_steps"]

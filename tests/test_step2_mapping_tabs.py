@@ -129,17 +129,17 @@ def test_hitl_resolve_updates_mapping_and_clears_review(test_client):
         "entity_code": "Company_S1",
         "local_code": "UNMAPPED_99",
         "local_description": "Mystery Account",
-        "suggested_group_code": "120400",
+        "suggested_group_code": "A120402",
         "confidence": 0.0,
         "reasoning": "Needs resolution"
     })
 
-    # Call HITL resolve
+    # Call HITL resolve with valid Level 0 account
     res = test_client.post("/api/hitl/resolve", json={
         "entity_code": "Company_S1",
         "local_code": "UNMAPPED_99",
-        "group_code": "120400",
-        "reasoning": "Mapped to Cash by Auditor"
+        "group_code": "A120402",
+        "reasoning": "Mapped to Bank Balances by Auditor"
     })
     assert res.status_code == 200
     data = res.json()
@@ -147,7 +147,7 @@ def test_hitl_resolve_updates_mapping_and_clears_review(test_client):
 
     # Verify decision is now mapped with 100% confidence and needs_review=False
     updated = next(d for d in session.state.mapping_decisions if d.local_code == "UNMAPPED_99" and d.entity_code == "Company_S1")
-    assert updated.group_code == "120400"
+    assert updated.group_code == "A120402"
     assert updated.confidence == 1.0
     assert updated.needs_review is False
     assert updated.method == "USER_APPROVED_RULE"
@@ -369,22 +369,22 @@ def test_hitl_resolve_decrements_to_zero_and_unblocks(test_client):
     session.state.completed_steps = [1]
     session.state.current_step = 2
 
-    # Resolve first item -> pending should decrement to 1
+    # Resolve first item -> pending should decrement to 1 (using Level 0 account)
     res1 = test_client.post("/api/hitl/resolve", json={
         "entity_code": "C2",
         "local_code": "REV_1",
-        "group_code": "120400",
+        "group_code": "A120402",
         "reasoning": "Approved first item"
     })
     assert res1.status_code == 200
     assert len(session.state.hitl_pending_reviews) == 1
     assert session.state.is_blocked is True
 
-    # Resolve second item -> pending decrements to 0, pipeline unblocks!
+    # Resolve second item -> pending decrements to 0, pipeline unblocks! (using Level 0 account)
     res2 = test_client.post("/api/hitl/resolve", json={
         "entity_code": "C2",
         "local_code": "REV_2",
-        "group_code": "320300",
+        "group_code": "L320302",
         "reasoning": "Approved second item"
     })
     assert res2.status_code == 200

@@ -237,7 +237,7 @@ class COAParser:
                     level_3=l3,
                     level_2=l2,
                     level_1=l1,
-                    level_0_account=l0 or name,
+                    level_0_account=l0 if l0 else (None if (l1 or l2 or l3) else name),
                     account_type=acc_type,
                     rollup_operator=rollup,
                     fs_statement=stmt,
