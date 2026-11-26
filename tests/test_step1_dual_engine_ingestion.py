@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+from fs_conso.config import config
 from fs_conso.core.file_classifier import FileClassifier, ClassifiedFile
 from fs_conso.core.file_parser import FlexibleTBParser
 from fs_conso.models.entity import EntityHierarchy, LegalEntity
@@ -402,7 +403,7 @@ def test_perimeter_approval_state_prefill_and_scale(sample_hierarchy):
 
 
 def test_annual_column_detection_and_debit_credit_population():
-    """Verifies that multi-year / annual columns like 'FY 2024-25 (Lakhs)' are automatically detected,
+    """Verifies that multi-year / annual columns like 'FY 2024-25 (Lakhs)' are automatically detected for the matching fiscal year,
     and single-column TBs split into populated positive Debits and positive Credits without remaining 0.00."""
     sample_annual = [
         ["Account Code", "Account Name", "Currency", "FY 2024-25 (Lakhs)", "FY 2025-26 (Lakhs)"],
@@ -411,14 +412,19 @@ def test_annual_column_detection_and_debit_credit_population():
         ["1028", "Trade Payables External", "INR", "-7000", "-7500"],
         ["Check", "Profit FY24-25", "INR", "13000", ""]
     ]
-    det_cols = FileClassifier._detect_columns_from_sample(sample_annual, is_fx=False, expected_period="31-03-2024")
-    assert det_cols.get("account_code") == "Account Code"
-    assert det_cols.get("amount") == "FY 2024-25 (Lakhs)"
-    assert det_cols.get("debit") == "FY 2024-25 (Lakhs)"
+    # FY 2024-25 ends in 2025
+    det_cols_2025 = FileClassifier._detect_columns_from_sample(sample_annual, is_fx=False, expected_period="31-03-2025")
+    assert det_cols_2025.get("account_code") == "Account Code"
+    assert det_cols_2025.get("amount") == "FY 2024-25 (Lakhs)"
+    assert det_cols_2025.get("debit") == "FY 2024-25 (Lakhs)"
 
-    # Test parser
+    # FY 2025-26 ends in 2026
+    det_cols_2026 = FileClassifier._detect_columns_from_sample(sample_annual, is_fx=False, expected_period="31-03-2026")
+    assert det_cols_2026.get("amount") == "FY 2025-26 (Lakhs)"
+
+    # Test parser with FY 2024-25
     df = pd.DataFrame(sample_annual[1:], columns=sample_annual[0])
-    tb = FlexibleTBParser.parse_dataframe(df, "Company_P", period="31-03-2024", scale_multiplier=100000.0)
+    tb = FlexibleTBParser.parse_dataframe(df, "Company_P", period="31-03-2025", scale_multiplier=100000.0)
     # Check row filtered out
     assert len(tb.rows) == 3
     # Debits: 15000*100000 + 5000*100000 = 2,000,000,000.00
@@ -430,5 +436,50 @@ def test_annual_column_detection_and_debit_credit_population():
     # Both are non-zero!
     assert tb.total_debit > 0
     assert tb.total_credit > 0
+
+
+def test_client2_date_mismatch_and_entity_mapping():
+    """Verifies that an uploaded workbook with FY 2024-25 and FY 2025-26 data is flagged as a MISMATCH
+    when run date is 31-03-2024, and that multi-sheet workbooks map each sheet to its specific entity."""
+    from fs_conso.core.company_manager import company_manager
+    prof = company_manager.get_company("client_2")
+    if not prof:
+        pytest.skip("client_2 profile not found")
+    hierarchy = prof.entity_hierarchy
+
+    upload_file = config.project_root / "inputs" / "uploads" / "c2_Two_Year_Consolidation_TBs_complete.xlsx"
+    if not upload_file.exists():
+        pytest.skip("c2_Two_Year_Consolidation_TBs_complete.xlsx not present")
+
+    b = upload_file.read_bytes()
+    classified = FileClassifier.classify_batch(
+        files=[("c2_Two_Year_Consolidation_TBs_complete.xlsx", b)],
+        expected_period="31-03-2024",
+        known_entities=hierarchy,
+        use_deterministic=True,
+        use_ai=False
+    )
+
+    # 1. Check entity mapping
+    by_ent = {c.entity_code: c for c in classified if c.entity_code}
+    assert "C2" in by_ent
+    assert "A" in by_ent
+    assert "B" in by_ent
+    assert "C" in by_ent
+
+    # 2. Check date status on TB items - MUST be flagged as MISMATCH for 31-03-2024
+    assert by_ent["C2"].date_status == "MISMATCH"
+    assert by_ent["C2"].needs_review is True
+    assert by_ent["A"].date_status == "MISMATCH"
+
+    # 3. Check extra sheet
+    acq = next((c for c in classified if c.sheet_name == "Acquisition"), None)
+    assert acq is not None
+    assert acq.file_type == "UNKNOWN"
+
+    # 4. Check FX sheet
+    fx = next((c for c in classified if c.sheet_name == "Exchange Rate"), None)
+    assert fx is not None
+    assert fx.file_type == "FX_RATES"
 
 

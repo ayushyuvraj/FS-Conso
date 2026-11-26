@@ -6,6 +6,25 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-26 16:20] Milestone: Strict Fiscal Year Date Discrepancy Gate, Multi-Sheet Precedence & Review Mappings Action
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Fiscal Year Date Discrepancy Gate**:
+     - Upgraded `_evaluate_date_discrepancy` with accounting financial year logic: `FY 2024-25` corresponds to period ending 31-Mar-2025; `FY 2025-26` to 31-Mar-2026; `FY 2023-24` to 31-Mar-2024.
+     - When consolidation run cutoff date is `31-03-2024` and the uploaded file only contains data for 2025 / 2026, the engine flags a strict **`date_status = "MISMATCH"`**, reduces confidence to 0.40, and sets `needs_review = True`.
+     - In `confirm_ingestion` (`app.py`), added backend validation rejecting column overrides covering an incompatible fiscal year with HTTP 400.
+     - In `confirmPerimeterApprovalModal` (`app.js`), blocked confirmation when date mismatches exist, displaying an error toast and card alert banner.
+  2. **Multi-Sheet Entity Matching Precedence**:
+     - Prioritized sheet-level matching (`sname_lower`) over filename matching (`fname_lower`) in multi-sheet workbooks.
+     - Automatically routes `Parent TB` $\rightarrow$ `C2`, `Sub A TB` $\rightarrow$ `A`, `Sub B TB` $\rightarrow$ `B`, `Sub C TB` $\rightarrow$ `C`, `Exchange Rate` $\rightarrow$ `FX_RATES`, and `Acquisition` $\rightarrow$ `UNKNOWN` (unassigned extra).
+  3. **Dedicated "Review Mappings" Action Button**:
+     - Added a tactile **"Review Mappings"** button in the Step 1 top action toolbar.
+     - Allows users to re-open the Ingestion Review / Perimeter Mappings dialog at any time to inspect sheet assignments, sample rows, detected columns, and scale multipliers.
+  4. **Verification & Hardening**:
+     - Test Suite: **80/80 PASSED (100%)** (including new `test_client2_date_mismatch_and_entity_mapping`).
+     - JavaScript syntax: `node -c "fs_conso/web/static/js/app.js"` exited 0.
+     - Live server operational on port 8000.
+
 ### [2026-11-26 15:50] UI Polish & Population: Row-Level Status Ticks, Banner Elimination & Debit/Credit Parsing
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:

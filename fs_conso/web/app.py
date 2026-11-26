@@ -1044,6 +1044,21 @@ async def confirm_ingestion(payload: ConfirmIngestionPayload):
             if not file_bytes:
                 raise HTTPException(status_code=400, detail=f"Source file '{ent_item.filename}' for entity '{ent_item.entity_code}' not found.")
 
+            # Strict Period Validation: verify that mapped columns do not cover a different financial year
+            if target_period:
+                exp_yr_m = re.search(r"20\d{2}", target_period)
+                if exp_yr_m:
+                    exp_yr = int(exp_yr_m.group(0))
+                    mapped_cols_str = " ".join(ent_item.columns.values())
+                    fy_matches = re.findall(r"(?:fy|fiscal|financial\s*year)?\s*(20\d{2})[-/](\d{2,4})", mapped_cols_str, re.IGNORECASE)
+                    for s_yr, e_yr in fy_matches:
+                        c_closing_yr = int(s_yr[:2] + e_yr) if len(e_yr) == 2 else int(e_yr)
+                        if c_closing_yr != exp_yr:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Cannot ingest entity '{ent_item.entity_code}': The mapped column '{mapped_cols_str}' covers FY {s_yr}-{e_yr} (ending 31-Mar-{c_closing_yr}), but the active consolidation run cutoff is {target_period}. Data belongs to a different reporting period."
+                            )
+
             legal_ent = hierarchy.get_entity(ent_item.entity_code)
             ent_name = legal_ent.entity_name if legal_ent else ent_item.entity_code
             ent_curr = legal_ent.input_currency if legal_ent else prof.reporting_currency

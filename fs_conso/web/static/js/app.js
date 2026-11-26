@@ -2225,6 +2225,16 @@ function renderStep1(el) {
                     <p class="text-xs text-kpmg-muted">Deterministic & Gemini Agentic Brain pipeline with dynamic currency parsing and perimeter verification.</p>
                 </div>
                 <div class="flex items-center space-x-1.5">
+                    <!-- Review Ingestion Mappings & Summary Action Button -->
+                    <button id="btn-review-mappings" onclick="openIngestionSummaryModal()"
+                        class="h-7 px-2.5 rounded bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 hover:text-kpmg-blue hover:border-kpmg-blue text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-2xs btn-tactile cursor-pointer"
+                        title="Review Ingestion Mappings & Summary">
+                        <svg class="w-3.5 h-3.5 text-kpmg-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                        </svg>
+                        <span>Review Mappings</span>
+                    </button>
+
                     <!-- 1. Ghost Upload Icon Button -->
                     <button onclick="openBatchUploadModal()"
                         class="w-8 h-8 rounded text-slate-500 hover:text-kpmg-blue hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none"
@@ -2299,6 +2309,29 @@ function openPerimeterApprovalModal(approvalState) {
 
     renderPerimeterApprovalModalContent(step1ApprovalState);
     modal.classList.remove('hidden');
+}
+
+async function openIngestionSummaryModal() {
+    if (step1ApprovalState && step1ApprovalState.parent) {
+        openPerimeterApprovalModal(step1ApprovalState);
+        return;
+    }
+    try {
+        const res = await fetch('/api/pipeline/ingestion-approval-state');
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.detail || 'Failed to retrieve ingestion summary', 'error');
+            return;
+        }
+        const data = await res.json();
+        if (data.approval_state) {
+            openPerimeterApprovalModal(data.approval_state);
+        } else {
+            showToast('No ingestion summary available. Please upload files first.', 'info');
+        }
+    } catch (e) {
+        showToast('Error opening ingestion summary: ' + e.message, 'error');
+    }
 }
 
 function closePerimeterApprovalModal() {
@@ -2433,6 +2466,13 @@ function renderPerimeterApprovalModalContent(state) {
             ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">⚠️ Date Mismatch: Found ${escapeHtml(parent.detected_period || '')} vs Run ${escapeHtml(state.target_period || '')}</span>`
             : '';
 
+        const dateMismatchBanner = parent.date_status === 'MISMATCH'
+            ? `<div class="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center space-x-2">
+                   <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                   <span><strong>Period Discrepancy:</strong> File contains data for <strong>${escapeHtml(parent.detected_period || '')}</strong>, but active consolidation run cutoff is <strong>${escapeHtml(state.target_period || '31-03-2024')}</strong>. This data belongs to a different reporting period.</span>
+               </div>`
+            : '';
+
         cardsHtml += `
             <div class="bg-white border-2 border-kpmg-blue/30 rounded-xl p-4 shadow-xs space-y-3">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
@@ -2468,6 +2508,8 @@ function renderPerimeterApprovalModalContent(state) {
                         ` : ''}
                     </div>
                 </div>
+
+                ${dateMismatchBanner}
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
                     <div>
@@ -2543,6 +2585,13 @@ function renderPerimeterApprovalModalContent(state) {
             ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">⚠️ Date Mismatch: ${escapeHtml(sub.detected_period || '')}</span>`
             : '';
 
+        const dateMismatchBanner = sub.date_status === 'MISMATCH'
+            ? `<div class="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center space-x-2">
+                   <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                   <span><strong>Period Discrepancy:</strong> File contains data for <strong>${escapeHtml(sub.detected_period || '')}</strong>, but active consolidation run cutoff is <strong>${escapeHtml(state.target_period || '31-03-2024')}</strong>. This data belongs to a different reporting period.</span>
+               </div>`
+            : '';
+
         cardsHtml += `
             <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
@@ -2578,6 +2627,8 @@ function renderPerimeterApprovalModalContent(state) {
                         ` : ''}
                     </div>
                 </div>
+
+                ${dateMismatchBanner}
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
                     <div>
@@ -2853,6 +2904,27 @@ async function confirmPerimeterApprovalModal() {
     if (!step1ApprovalState) return;
 
     const btn = document.getElementById('btn-confirm-perimeter-modal');
+
+    // Strict Period Discrepancy Guard: check if any perimeter entity has unresolved date mismatch
+    const mismatches = [];
+    if (step1ApprovalState.parent && step1ApprovalState.parent.date_status === 'MISMATCH') {
+        mismatches.push(`${step1ApprovalState.parent.entity_name || step1ApprovalState.parent.entity_code} (${step1ApprovalState.parent.detected_period || 'Different Period'})`);
+    }
+    (step1ApprovalState.subsidiaries || []).forEach(s => {
+        if (s.date_status === 'MISMATCH') {
+            mismatches.push(`${s.entity_name || s.entity_code} (${s.detected_period || 'Different Period'})`);
+        }
+    });
+
+    if (mismatches.length > 0) {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg><span>Approve & Confirm Ingestion</span>`;
+        }
+        showToast(`Cannot Confirm Ingestion: Period Discrepancy detected for ${mismatches.join(', ')}. The uploaded file contains data for a different reporting period than the active run date (${step1ApprovalState.target_period}).`, 'error');
+        return;
+    }
+
     if (btn) {
         btn.disabled = true;
         btn.innerHTML = `<span>Validating & Normalizing Balances...</span>`;

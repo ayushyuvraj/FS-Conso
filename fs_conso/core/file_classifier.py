@@ -159,16 +159,26 @@ class FileClassifier:
                 # Period / Fiscal year based amount column detection
                 if not (debit_col and credit_col) and not amount_col:
                     candidates = [c for c in row_vals if c not in (code_col, desc_col, ind_col) and c.lower() not in ("currency", "curr")]
-                    target_digits = re.findall(r"\d{4}", expected_period) or re.findall(r"\b\d{2}\b", expected_period) if expected_period else []
+                    exp_year_m = re.search(r"20\d{2}", expected_period) if expected_period else None
+                    exp_year = int(exp_year_m.group(0)) if exp_year_m else None
                     best_cand = None
                     best_score = -1
                     for c_idx, c in enumerate(candidates):
                         score = 0
                         c_lower = c.lower()
-                        if target_digits and any(td in c_lower for td in target_digits):
+                        # Check fiscal year pattern e.g. FY 2024-25 (closing year is 2025)
+                        fy_m = re.search(r"(?:fy|fiscal|financial\s*year)?\s*(20\d{2})[-/](\d{2,4})", c_lower)
+                        if fy_m:
+                            s_yr, e_yr = fy_m.groups()
+                            c_closing_yr = int(s_yr[:2] + e_yr) if len(e_yr) == 2 else int(e_yr)
+                            if exp_year and c_closing_yr == exp_year:
+                                score += 30
+                            else:
+                                score -= 30  # Penalize columns belonging to different fiscal years
+                        elif exp_year and (str(exp_year) in c_lower or str(exp_year)[2:] in c_lower):
                             score += 20
-                        if re.search(r"(?:fy|fiscal|yr|year|cy|py)?\s*(?:20\d\d|\d\d)", c_lower):
-                            score += 10
+                        elif re.search(r"(?:fy|fiscal|yr|year|cy|py)?\s*(?:20\d\d|\d\d)", c_lower):
+                            score += 5
                         if any(w in c_lower for w in ["lakh", "crore", "million", "thousand", "bal", "amt", "amount"]):
                             score += 5
                         # Check sample rows under this column for numbers
@@ -217,21 +227,43 @@ class FileClassifier:
         if not expected_period:
             return "MATCH", None
 
-        p_norm = re.sub(r"[^a-z0-9]", "", expected_period.lower())
-        exp_year = re.search(r"20\d{2}", expected_period)
-        exp_year_str = exp_year.group(0) if exp_year else ""
+        exp_year_m = re.search(r"20\d{2}", expected_period)
+        exp_year = int(exp_year_m.group(0)) if exp_year_m else None
 
-        # Find years in corpus (handle underscores, hyphens, and whitespace)
-        years = set(re.findall(r"(?<!\d)(20\d{2})(?!\d)", text_corpus))
+        # 1. Check Fiscal Year patterns: FY 2024-25, FY 24-25, 2024-25, 2024-2025
+        fy_matches = re.findall(
+            r"(?:fy|fiscal|financial\s*year)?\s*(20\d{2})[-/](\d{2,4})",
+            text_corpus,
+            re.IGNORECASE
+        )
+        fy_closing_years = set()
+        for s_yr, e_yr in fy_matches:
+            if len(e_yr) == 2:
+                fy_closing_years.add(int(s_yr[:2] + e_yr))
+            else:
+                fy_closing_years.add(int(e_yr))
+
+        if fy_closing_years:
+            if exp_year and exp_year in fy_closing_years:
+                if len(fy_closing_years) > 1:
+                    return "MULTI_PERIOD", expected_period
+                return "MATCH", expected_period
+            else:
+                detected_fys = ", ".join([f"FY {y-1}-{str(y)[2:]}" for y in sorted(fy_closing_years)])
+                return "MISMATCH", f"{detected_fys} (ending 31-Mar-{max(fy_closing_years)})"
+
+        # 2. Check explicit full date strings: 31-03-2024, 31-Mar-2025
         dates = re.findall(r"(\d{1,2}[-_/][a-zA-Z]{3,}[-_/]\d{2,4})", text_corpus)
+        years = set(re.findall(r"(?<!\d)(20\d{2})(?!\d)", text_corpus))
 
-        if len(years) > 1:
-            return "MULTI_PERIOD", expected_period
-
-        if years:
-            found_year = next(iter(years))
-            if exp_year_str and found_year != exp_year_str:
-                detected_date = dates[0] if dates else found_year
+        if exp_year and years:
+            int_years = {int(y) for y in years}
+            if exp_year in int_years:
+                if len(int_years) > 1:
+                    return "MULTI_PERIOD", expected_period
+                return "MATCH", expected_period
+            else:
+                detected_date = dates[0] if dates else ", ".join(sorted(years))
                 return "MISMATCH", detected_date
 
         return "MATCH", expected_period
@@ -433,49 +465,96 @@ class FileClassifier:
             matched_ent = None
             matched_conf = 0.0
 
-            # Pass 1: Exact entity code match with word boundary
-            for ent in roster:
-                code = ent["code"].lower().strip()
-                if not code:
-                    continue
-                code_pattern = rf"(^|[_\-\s\(\)\.\[\]]){re.escape(code)}([_\-\s\(\)\.\[\]]|\.|$)"
-                if re.search(code_pattern, sname_lower) or re.search(code_pattern, fname_lower):
-                    matched_ent = ent
-                    matched_conf = 0.96
-                    break
+            # Pass 1: Sheet-level matching (highest priority for multi-sheet workbooks)
+            if sheet_name:
+                # 1a. Exact entity code match with word boundary in sheet name (e.g. Company_P, Company_S1, C2, A)
+                for ent in roster:
+                    code = ent["code"].lower().strip()
+                    if not code:
+                        continue
+                    code_pattern = rf"(^|[_\-\s\(\)\.\[\]]){re.escape(code)}([_\-\s\(\)\.\[\]]|\.|$)"
+                    if re.search(code_pattern, sname_lower):
+                        matched_ent = ent
+                        matched_conf = 0.96
+                        break
 
-            # Pass 2: Common parent / sub abbreviations (Parent or Sub 1, Sub 2, S1, S2)
-            if not matched_ent:
-                m_sub = re.search(r"(?:subsidiary|sub|s)[_\s-]?(\d+)", sname_lower) or re.search(r"(?:subsidiary|sub|s)[_\s-]?(\d+)", fname_lower)
-                if m_sub:
-                    sub_num = m_sub.group(1)
+                # 1b. Check parent keyword in sheet name
+                if not matched_ent:
+                    if any(w in sname_norm.split() for w in ["parent", "holding", "parent company"]) or \
+                       ("parent" in sname_lower and "sub" not in sname_norm.split()):
+                        parent_ent = next((e for e in roster if e.get("holding", 1.0) == 1.0), roster[0] if roster else None)
+                        if parent_ent:
+                            matched_ent = parent_ent
+                            matched_conf = 0.96
+
+                # 1c. Check subsidiary tokens in sheet name (e.g. Sub A, Sub B, Sub C, S1, S2, Subsidiary 1, Sub 2)
+                if not matched_ent:
+                    m_sub = re.search(r"(?:subsidiary|sub|s)[_\s-]*([a-z0-9]+)", sname_lower)
+                    if m_sub:
+                        tok = m_sub.group(1).lower()
+                        for ent in roster:
+                            ent_c = ent["code"].lower()
+                            ent_n = ent["name"].lower()
+                            if ent_c.endswith(tok) or f"_{tok}" in ent_c or ent_c == tok or f"s{tok}" in ent_c or ent_n == tok:
+                                matched_ent = ent
+                                matched_conf = 0.96
+                                break
+
+                # 1d. Exact entity name in sheet name
+                if not matched_ent:
                     for ent in roster:
-                        ent_c = ent["code"].lower()
-                        if ent_c.endswith(sub_num) or f"s{sub_num}" in ent_c or f"sub{sub_num}" in ent_c or sub_num in ent["name"].lower():
+                        name_clean = re.sub(r"[^a-z0-9]", "", ent["name"].lower())
+                        sname_clean = re.sub(r"[^a-z0-9]", "", sname_lower)
+                        if len(name_clean) >= 2 and (name_clean == sname_clean or name_clean in sname_clean.split()):
                             matched_ent = ent
                             matched_conf = 0.94
                             break
 
-                if not matched_ent:
+            # Pass 2: File-level matching (only if sheet-level did not match)
+            if not matched_ent:
+                # 2a. Exact code match in filename
+                for ent in roster:
+                    code = ent["code"].lower().strip()
+                    if not code:
+                        continue
+                    code_pattern = rf"(^|[_\-\s\(\)\.\[\]]){re.escape(code)}([_\-\s\(\)\.\[\]]|\.|$)"
+                    if re.search(code_pattern, fname_lower):
+                        matched_ent = ent
+                        matched_conf = 0.92
+                        break
+
+            # 2b. Check subsidiary token in filename e.g. Sub_1, Sub 1, S1
+            if not matched_ent:
+                m_sub_f = re.search(r"(?:subsidiary|sub|s)[_\s-]*([a-z0-9]+)", fname_lower)
+                if m_sub_f:
+                    tok_f = m_sub_f.group(1).lower()
                     for ent in roster:
-                        if ent.get("holding", 1.0) == 1.0 and ("parent" in sname_lower or "parent" in fname_lower or "_p_" in fname_lower or fname_lower.endswith("_p")):
+                        ent_c = ent["code"].lower()
+                        ent_n = ent["name"].lower()
+                        if ent_c.endswith(tok_f) or f"_{tok_f}" in ent_c or ent_c == tok_f or f"s{tok_f}" in ent_c or ent_n == tok_f or f"sub_{tok_f}" in ent_c:
                             matched_ent = ent
-                            matched_conf = 0.92
+                            matched_conf = 0.90
                             break
 
-            # Pass 3: Exact or distinctive slug entity name match
+            if not matched_ent:
+                for ent in roster:
+                    if ent.get("holding", 1.0) == 1.0 and ("parent" in fname_lower or "_p_" in fname_lower or fname_lower.endswith("_p")):
+                        matched_ent = ent
+                        matched_conf = 0.90
+                        break
+
+            # Pass 3: Exact or distinctive slug entity name match in filename
             GENERIC_TOKENS = {"subsidiary", "sub", "company", "corp", "corporation", "inc", "ltd", "limited", "pvt", "private", "llc", "group"}
             if not matched_ent:
                 for ent in roster:
                     name_clean = re.sub(r"[^a-z0-9]", "", ent["name"].lower())
-                    sname_clean = re.sub(r"[^a-z0-9]", "", sname_lower)
                     fname_clean = re.sub(r"[^a-z0-9]", "", fname_lower)
-                    if len(name_clean) >= 3 and (name_clean in sname_clean or name_clean in fname_clean):
+                    if len(name_clean) >= 3 and name_clean in fname_clean:
                         matched_ent = ent
                         matched_conf = 0.93
                         break
                     distinct_tokens = [t for t in re.split(r"[_\-\s]+", ent["name"].lower()) if len(t) > 2 and t not in GENERIC_TOKENS]
-                    if distinct_tokens and (all(t in sname_lower for t in distinct_tokens) or all(t in fname_lower for t in distinct_tokens)):
+                    if distinct_tokens and all(t in fname_lower for t in distinct_tokens):
                         matched_ent = ent
                         matched_conf = 0.90
                         break
@@ -483,37 +562,60 @@ class FileClassifier:
             is_prior = "prior" in sname_lower or "prior" in fname_lower or "opening" in sname_lower or "py" in fname_lower
             ftype = "PRIOR_TB" if is_prior else "CURRENT_TB"
 
-            if matched_ent and matched_conf >= threshold:
+            if matched_ent:
                 det_cols = cls._detect_columns_from_sample(rows, is_fx=False, expected_period=expected_period)
+                has_acct_code = bool(det_cols.get("account_code"))
+                has_amount = bool(det_cols.get("debit") or det_cols.get("credit") or det_cols.get("amount"))
+
+                # If sheet has no account codes or amounts (e.g. notes, acquisition schedule), mark as UNKNOWN / extra
+                if rows and not has_acct_code:
+                    return ClassifiedFile(
+                        filename=filename,
+                        sheet_name=sheet_name,
+                        file_type="UNKNOWN",
+                        confidence=0.40,
+                        classification_method="DETERMINISTIC",
+                        reasoning=f"Sheet '{sheet_name}' contains supplementary data without account codes. Categorized as unassigned / extra.",
+                        needs_review=True,
+                        sheet_names=sheets_list,
+                        sample_rows=rows[:5],
+                        is_extra_unassigned=True,
+                        candidates=roster,
+                        raw_data=file_bytes
+                    )
+
                 reason = f"Deterministically matched legal entity '{matched_ent['name']}' ({matched_ent['code']})."
                 needs_rev = False
-                if date_status == "MISMATCH":
-                    needs_rev = True
-                    reason += f" [Period Mismatch: Found {detected_date} vs Run Date {expected_period}]"
 
-                return ClassifiedFile(
-                    filename=filename,
-                    sheet_name=sheet_name,
-                    file_type=ftype,
-                    entity_code=matched_ent["code"],
-                    entity_name=matched_ent["name"],
-                    period=expected_period,
-                    currency=matched_ent["currency"],
-                    confidence=matched_conf,
-                    classification_method="DETERMINISTIC",
-                    reasoning=reason,
-                    needs_review=needs_rev,
-                    sheet_names=sheets_list,
-                    detected_columns=det_cols,
-                    sample_rows=rows[:5],
-                    date_status=date_status,
-                    detected_period=detected_date,
-                    candidates=roster,
-                    denomination=det_denom,
-                    scale_multiplier=det_multiplier,
-                    scale_instruction=det_instruction,
-                    raw_data=file_bytes
-                )
+                if date_status == "MISMATCH" and not is_prior:
+                    matched_conf = 0.40  # Force below threshold for CURRENT_TB date mismatch
+                    needs_rev = True
+                    reason = f"Period Discrepancy: Uploaded sheet pertains to {detected_date}, but selected consolidation run date is {expected_period}."
+
+                if matched_conf >= threshold and not needs_rev:
+                    return ClassifiedFile(
+                        filename=filename,
+                        sheet_name=sheet_name,
+                        file_type=ftype,
+                        entity_code=matched_ent["code"],
+                        entity_name=matched_ent["name"],
+                        period=expected_period,
+                        currency=matched_ent["currency"],
+                        confidence=matched_conf,
+                        classification_method="DETERMINISTIC",
+                        reasoning=reason,
+                        needs_review=needs_rev,
+                        sheet_names=sheets_list,
+                        detected_columns=det_cols,
+                        sample_rows=rows[:5],
+                        date_status=date_status,
+                        detected_period=detected_date,
+                        candidates=roster,
+                        denomination=det_denom,
+                        scale_multiplier=det_multiplier,
+                        scale_instruction=det_instruction,
+                        raw_data=file_bytes
+                    )
 
         # -------------------------------------------------------------
         # Tier 2: Agentic Brain (Gemini Flash) - if AI enabled
@@ -564,7 +666,7 @@ class FileClassifier:
         return ClassifiedFile(
             filename=filename,
             sheet_name=sheet_name,
-            file_type="CURRENT_TB" if best_code else "UNKNOWN",
+            file_type=ftype if best_code else "UNKNOWN",
             entity_code=best_code,
             entity_name=best_name,
             period=expected_period,

@@ -594,16 +594,26 @@ Schema:
         # Smart period / annual column detection if neither debit nor credit nor amount was found
         if not (debit_col and credit_col) and not amount_col:
             candidates = [c for c in cols if c not in (code_col, desc_col, dr_cr_col) and c.lower() not in ("currency", "curr")]
-            target_digits = re.findall(r"\d{4}", period) or re.findall(r"\b\d{2}\b", period) if period else []
+            exp_year_m = re.search(r"20\d{2}", period) if period else None
+            exp_year = int(exp_year_m.group(0)) if exp_year_m else None
             best_cand = None
             best_score = -1
             for c in candidates:
                 score = 0
                 c_lower = c.lower()
-                if target_digits and any(td in c_lower for td in target_digits):
+                # Check fiscal year pattern e.g. FY 2024-25 (closing year is 2025)
+                fy_m = re.search(r"(?:fy|fiscal|financial\s*year)?\s*(20\d{2})[-/](\d{2,4})", c_lower)
+                if fy_m:
+                    s_yr, e_yr = fy_m.groups()
+                    c_closing_yr = int(s_yr[:2] + e_yr) if len(e_yr) == 2 else int(e_yr)
+                    if exp_year and c_closing_yr == exp_year:
+                        score += 40
+                    else:
+                        score -= 30  # Penalize columns belonging to different fiscal years
+                elif exp_year and (str(exp_year) in c_lower or str(exp_year)[2:] in c_lower):
                     score += 20
-                if re.search(r"(?:fy|fiscal|yr|year|cy|py)?\s*(?:20\d\d|\d\d)", c_lower):
-                    score += 10
+                elif re.search(r"(?:fy|fiscal|yr|year|cy|py)?\s*(?:20\d\d|\d\d)", c_lower):
+                    score += 5
                 if any(w in c_lower for w in ["lakh", "crore", "million", "thousand", "bal", "amt", "amount"]):
                     score += 5
                 # Check numeric presence
