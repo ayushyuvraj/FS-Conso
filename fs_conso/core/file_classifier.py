@@ -95,16 +95,17 @@ class FileClassifier:
         return preview
 
     @staticmethod
-    def _inspect_sheet_preview(wb: openpyxl.Workbook, sheet_name: str) -> List[List[str]]:
-        """Extracts sample rows from a specific sheet in an open workbook."""
+    def _inspect_sheet_preview(wb: openpyxl.Workbook, sheet_name: str, max_rows: int = 50) -> List[List[str]]:
+        """Extracts sample rows from a specific sheet in an open workbook.
+        Supports adaptive sampling up to 50 rows (user approved upper ceiling)."""
         rows = []
         try:
             ws = wb[sheet_name]
             for r in ws.iter_rows(values_only=True):
                 if any(c is not None for c in r):
-                    clean_row = [str(c).strip() if c is not None else "" for c in r][:15]
+                    clean_row = [str(c).strip() if c is not None else "" for c in r][:20]
                     rows.append(clean_row)
-                    if len(rows) >= 10:
+                    if len(rows) >= max_rows:
                         break
         except Exception:
             pass
@@ -122,7 +123,7 @@ class FileClassifier:
             return {}
 
         best_mapping: Dict[str, str] = {}
-        max_scan = min(5, len(sample_rows))
+        max_scan = min(20, len(sample_rows))
 
         for r_idx in range(max_scan):
             row_vals = [c.strip() for c in sample_rows[r_idx] if c and c.strip()]
@@ -207,6 +208,8 @@ class FileClassifier:
                     mapping["amount"] = amount_col
                     if not debit_col:
                         mapping["debit"] = amount_col
+                    if not credit_col:
+                        mapping["credit"] = amount_col
                     mapping["net_amount"] = amount_col
                 if ind_col: mapping["indicator"] = ind_col
 

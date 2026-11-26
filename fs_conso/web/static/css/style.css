@@ -141,6 +141,17 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+/* Ingestion Review 3-View Segmented Panes & Transitions */
+.approval-view-pane {
+    transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.approval-view-pane.view-hidden {
+    display: none !important;
+    opacity: 0;
+    transform: translateY(4px);
+}
+
 .fin-table th {
     background-color: #F8FAFC;
     color: #475569;

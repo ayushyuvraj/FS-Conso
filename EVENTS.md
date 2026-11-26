@@ -6,6 +6,37 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-26 18:05] Milestone: Ingestion Review V3 (3-View Architecture, Adaptive 50-Row Sampling & Viewport-Anchored Tooltips)
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **3-View Segmented Architecture**:
+     - Completely replaced the cluttered mixed-table and top strip layout with a 3-tab segmented architecture in `#modal-perimeter-approval`:
+       • **🏢 Perimeter Entities View**: Dedicated high-density table for Parent and Subsidiaries with ~36px row height and tabular numeric formatting.
+       • **💱 Foreign Exchange View**: Dedicated FX rates table with closing, average, and swap rate mappings.
+       • **📄 Ignored Extra Sheets View**: Full-width dedicated table displaying all non-perimeter sheets with their exclusion context.
+     - Smooth Emil Kowalski tab transition physics with real-time status counters on each tab pill.
+  2. **Viewport-Anchored Tooltip Geometry**:
+     - Solved the CSS containing-block transform bug by anchoring `#approval-floating-tooltip` directly to `document.body` instead of inside `.modal-dialog-card`.
+     - Computed dynamic viewport coordinates (`rect.right + 10`, `rect.top - 8`) with bottom-screen boundary flipping, ensuring diagnostic cards appear right adjacent to the hovered status icon without clipping or drift.
+  3. **Standardized Rightmost Action Column Sequence**:
+     - Moved inline upload icon away from `Assigned File` to the far right.
+     - Enforced strict sequence: `[Confidence %]` → `[View (👁)]` → `[Upload (Ghost)]`.
+  4. **Column Terminology & Dual-Column Auto-Fill**:
+     - Renamed table headers to clean standard **`Debit`** and **`Credit`**.
+     - In `file_classifier.py` and `app.js`, single-column net amount sheets automatically populate both `debit` and `credit` columns with the detected amount column.
+     - If either remains unselected, both are highlighted with red outlines.
+  5. **Authentic KPMG Brand Button & Tactile Field Shake**:
+     - Restored solid KPMG Royal Blue (`#00338D` / `bg-kpmg-blue hover:bg-kpmg-navy text-white`) for the `Approve & Confirm Ingestion` button without washed-out `opacity-60`.
+     - Clicking with unfilled required fields fires a tactile CSS shake animation on all red unfilled cells and shows an informative toast alert without freezing or disabling the button.
+  6. **Adaptive Sampling Privilege (50-Row Ceiling)**:
+     - Expanded `_inspect_sheet_preview` and `_detect_columns_from_sample` in `file_classifier.py` to scan up to 20 rows for deep header detection with a user-authorized upper limit of 50 rows for ambiguous/complex sheets.
+  7. **Verification & Hardening**:
+     - Test Suite: **80/80 PASSED (100%)** in 19.59s.
+     - JavaScript syntax: `node -c "fs_conso/web/static/js/app.js"` exited with 0 errors.
+     - Git: Staged and pushed to remote branch `feature/profile-v2`.
+
+
+
 ### [2026-11-26 17:20] Milestone: Red Cell Highlighting, Shake Animation, Inline Row Upload & Overflow-Proof Tooltips
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:

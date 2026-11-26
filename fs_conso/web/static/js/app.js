@@ -2339,12 +2339,39 @@ function closePerimeterApprovalModal() {
     if (modal) modal.classList.add('hidden');
 }
 
+let activeApprovalTab = 'ENTITIES'; // 'ENTITIES' | 'FX' | 'IGNORED'
 let approvalActiveFilter = 'ALL';
 let approvalSearchQuery = '';
 
-function toggleExtraSheetsTrayTop() {
-    const el = document.getElementById('unassigned-sheets-tray-top');
-    if (el) el.classList.toggle('hidden');
+function switchApprovalTab(tabName) {
+    activeApprovalTab = tabName;
+    const tabs = ['ENTITIES', 'FX', 'IGNORED'];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`tab-approval-view-${t.toLowerCase()}`);
+        const pane = document.getElementById(`pane-approval-${t.toLowerCase()}`);
+        if (btn) {
+            if (t === activeApprovalTab) {
+                btn.className = 'px-3 py-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 bg-kpmg-navy text-white shadow-xs transition cursor-pointer';
+            } else {
+                btn.className = 'px-3 py-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 text-slate-700 hover:text-slate-900 transition cursor-pointer';
+            }
+        }
+        if (pane) {
+            if (t === activeApprovalTab) {
+                pane.classList.remove('view-hidden');
+            } else {
+                pane.classList.add('view-hidden');
+            }
+        }
+    });
+
+    const entControls = document.getElementById('entities-quick-controls');
+    if (entControls) {
+        if (activeApprovalTab === 'ENTITIES') entControls.classList.remove('hidden');
+        else entControls.classList.add('hidden');
+    }
+
+    validateApprovalFields(false);
 }
 
 function triggerRowFileUpload(entityCode) {
@@ -2452,7 +2479,7 @@ function showApprovalTooltip(event, entityCode, statusType) {
         bullets.push(`<li class="text-indigo-300">• Scale: ${escapeHtml(target.scale_instruction || 'Reported in exact absolute currency')}</li>`);
 
         const cols = target.detected_columns || {};
-        bullets.push(`<li class="text-slate-300">• Mapped: Code: ${escapeHtml(cols.account_code || 'None')}, Debit/Net: ${escapeHtml(cols.debit || cols.amount || 'None')}, Credit: ${escapeHtml(cols.credit || 'None')}</li>`);
+        bullets.push(`<li class="text-slate-300">• Mapped: Code: ${escapeHtml(cols.account_code || 'None')}, Debit: ${escapeHtml(cols.debit || cols.amount || 'None')}, Credit: ${escapeHtml(cols.credit || cols.amount || 'None')}</li>`);
         bullets.push(`<li class="text-slate-400">• Method: ${confPct}% Confidence (${escapeHtml(target.method || 'Deterministic')})</li>`);
     }
 
@@ -2471,16 +2498,18 @@ function showApprovalTooltip(event, entityCode, statusType) {
 
     const rect = event.currentTarget.getBoundingClientRect();
     const tooltipWidth = 320;
-    const tooltipHeight = tooltip.offsetHeight || 160;
+    const tooltipHeight = tooltip.offsetHeight || 170;
 
-    let left = rect.right + 12;
+    // Viewport-anchored coordinates directly beside the hovered icon
+    let left = rect.right + 10;
     if (left + tooltipWidth > window.innerWidth - 10) {
-        left = rect.left - tooltipWidth - 12;
+        left = rect.left - tooltipWidth - 10;
     }
 
-    let top = rect.top - 10;
+    let top = rect.top - 8;
+    // Guard against bottom cutoff by flipping upwards relative to icon
     if (top + tooltipHeight > window.innerHeight - 20) {
-        top = window.innerHeight - tooltipHeight - 20;
+        top = rect.bottom - tooltipHeight + 8;
     }
     if (top < 15) {
         top = 15;
@@ -2516,24 +2545,26 @@ function validateApprovalFields(applyShake = false) {
         }
     };
 
-    // 1. Parent Selects
+    // 1. Parent Selects: File, Sheet, Code, Debit, Credit
     if (step1ApprovalState.parent) {
         checkSelect('select-parent-file', true);
         checkSelect('select-parent-sheet', true);
         checkSelect('col-parent-code', true);
         checkSelect('col-parent-debit', true);
+        checkSelect('col-parent-credit', true);
     }
 
-    // 2. Subsidiary Selects
+    // 2. Subsidiary Selects: File, Sheet, Code, Debit, Credit
     (step1ApprovalState.subsidiaries || []).forEach(sub => {
         const code = sub.entity_code;
         checkSelect(`select-${code}-file`, true);
         checkSelect(`select-${code}-sheet`, true);
         checkSelect(`col-${code}-code`, true);
         checkSelect(`col-${code}-debit`, true);
+        checkSelect(`col-${code}-credit`, true);
     });
 
-    // 3. FX Selects
+    // 3. FX Selects: File, Sheet, Closing Rate, Average Rate
     if (step1ApprovalState.fx_rates) {
         checkSelect('select-FX_RATES-file', true);
         checkSelect('select-FX_RATES-sheet', true);
@@ -2545,18 +2576,14 @@ function validateApprovalFields(applyShake = false) {
     const hasDateMismatch = (step1ApprovalState.parent && step1ApprovalState.parent.date_status === 'MISMATCH') ||
         (step1ApprovalState.subsidiaries || []).some(s => s.date_status === 'MISMATCH');
 
-    // Update Approve & Confirm Ingestion button
+    // Update Approve & Confirm Ingestion button title (preserving authentic KPMG color)
     const btnConfirm = document.getElementById('btn-confirm-perimeter-modal');
     if (btnConfirm) {
         if (unfilledCount > 0 || hasDateMismatch) {
-            btnConfirm.disabled = true;
-            btnConfirm.classList.add('opacity-60', 'cursor-not-allowed');
             btnConfirm.title = unfilledCount > 0
                 ? `${unfilledCount} required mapping fields need to be selected (highlighted in red).`
                 : 'Cannot confirm: Reporting period mismatch detected.';
         } else {
-            btnConfirm.disabled = false;
-            btnConfirm.classList.remove('opacity-60', 'cursor-not-allowed');
             btnConfirm.title = 'Approve and lock perimeter ingestion';
         }
     }
@@ -2594,7 +2621,7 @@ function filterApprovalGrid(filterType, searchQuery) {
     const rows = document.querySelectorAll('[data-approval-row]');
     let visibleCount = 0;
     rows.forEach(row => {
-        const rowStatus = row.getAttribute('data-status'); // 'ready' or 'flagged'
+        const rowStatus = row.getAttribute('data-status');
         const rowSearch = (row.getAttribute('data-search') || '').toLowerCase();
         const entityCode = row.getAttribute('data-entity-code') || '';
         const drawerRow = document.getElementById(`drawer-${entityCode}`);
@@ -2677,7 +2704,7 @@ function renderPerimeterApprovalModalContent(state) {
     const genColOptions = (sampleRows, selectedCol, defaultLabel) => {
         const colSet = new Set();
         if (sampleRows && sampleRows.length > 0) {
-            for (let r = 0; r < Math.min(5, sampleRows.length); r++) {
+            for (let r = 0; r < Math.min(10, sampleRows.length); r++) {
                 const row = sampleRows[r] || [];
                 const stringCount = row.filter(c => c && isNaN(Number(String(c).replace(/[,₹$%()]/g, '')))).length;
                 if (stringCount >= 2) {
@@ -2752,36 +2779,28 @@ function renderPerimeterApprovalModalContent(state) {
 
     let html = `
         <div class="space-y-3">
-            <!-- Institutional Summary KPI Bar & Quick Controls -->
-            <div class="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                <!-- Counters & Ignored Sheets Button -->
-                <div class="flex items-center space-x-2 text-xs flex-wrap gap-y-1.5">
-                    <div class="flex items-center space-x-1 px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs font-mono">
-                        <span class="text-slate-500 font-sans">Perimeter:</span>
-                        <strong class="text-slate-800">${mappedEntities}/${totalEntities} Mapped</strong>
-                    </div>
-                    <div class="flex items-center space-x-1 px-2.5 py-1 rounded-md ${flaggedCount > 0 ? 'bg-amber-50 border border-amber-200 text-amber-900' : 'bg-emerald-50 border border-emerald-200 text-emerald-900'} shadow-2xs font-mono">
-                        <span>${flaggedCount > 0 ? '⚠️' : '✓'}</span>
-                        <strong>${flaggedCount > 0 ? `${flaggedCount} Flagged` : '0 Issues'}</strong>
-                    </div>
-                    <div class="flex items-center space-x-1 px-2.5 py-1 rounded-md ${isFxMapped ? 'bg-indigo-50 border border-indigo-200 text-indigo-900' : 'bg-rose-50 border border-rose-200 text-rose-900'} shadow-2xs font-mono">
-                        <span>${isFxMapped ? '💱' : '⚠️'}</span>
-                        <strong>${isFxMapped ? 'FX Ready' : 'FX Missing'}</strong>
-                    </div>
-
-                    ${unassigned.length > 0 ? `
-                        <button type="button" id="btn-toggle-extra-sheets" onclick="toggleExtraSheetsTrayTop()"
-                            class="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 shadow-2xs font-mono text-xs transition cursor-pointer btn-tactile">
-                            <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                            </svg>
-                            <span>Ignored Extra Sheets (${unassigned.length})</span>
-                        </button>
-                    ` : ''}
+            <!-- 3-Segment Top Switcher Bar -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-200">
+                <div class="inline-flex p-1 bg-slate-200/80 rounded-lg space-x-1 text-xs">
+                    <button type="button" id="tab-approval-view-entities" onclick="switchApprovalTab('ENTITIES')"
+                        class="px-3 py-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer ${activeApprovalTab === 'ENTITIES' ? 'bg-kpmg-navy text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'}">
+                        <span>🏢 Perimeter Entities</span>
+                        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono ${flaggedSubsCount + (isParentFlagged ? 1 : 0) > 0 ? 'bg-amber-400 text-slate-900' : 'bg-emerald-500 text-white'}">${totalEntities}</span>
+                    </button>
+                    <button type="button" id="tab-approval-view-fx" onclick="switchApprovalTab('FX')"
+                        class="px-3 py-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer ${activeApprovalTab === 'FX' ? 'bg-kpmg-navy text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'}">
+                        <span>💱 Foreign Exchange</span>
+                        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono ${isFxMapped ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}">${isFxMapped ? '✓' : '!'}</span>
+                    </button>
+                    <button type="button" id="tab-approval-view-ignored" onclick="switchApprovalTab('IGNORED')"
+                        class="px-3 py-1.5 rounded-md text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer ${activeApprovalTab === 'IGNORED' ? 'bg-kpmg-navy text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'}">
+                        <span>📄 Ignored Extra Sheets</span>
+                        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-400 text-white">${unassigned.length}</span>
+                    </button>
                 </div>
 
-                <!-- Filter Tabs & Fast Search -->
-                <div class="flex items-center space-x-2">
+                <!-- Fast Filter & Search (for Entities View) -->
+                <div id="entities-quick-controls" class="flex items-center space-x-2 ${activeApprovalTab === 'ENTITIES' ? '' : 'hidden'}">
                     <div class="inline-flex items-center p-0.5 bg-slate-200/70 rounded-lg space-x-0.5 text-xs">
                         <button type="button" id="tab-approval-all" onclick="filterApprovalGrid('ALL')"
                             class="px-2.5 py-1 rounded-md text-xs font-semibold ${approvalActiveFilter === 'ALL' ? 'bg-kpmg-navy text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
@@ -2789,11 +2808,11 @@ function renderPerimeterApprovalModalContent(state) {
                         </button>
                         <button type="button" id="tab-approval-flagged" onclick="filterApprovalGrid('FLAGGED')"
                             class="px-2.5 py-1 rounded-md text-xs font-semibold ${approvalActiveFilter === 'FLAGGED' ? 'bg-kpmg-navy text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
-                            Flagged (${flaggedCount})
+                            Flagged (${flaggedSubsCount + (isParentFlagged ? 1 : 0)})
                         </button>
                         <button type="button" id="tab-approval-ready" onclick="filterApprovalGrid('READY')"
                             class="px-2.5 py-1 rounded-md text-xs font-semibold ${approvalActiveFilter === 'READY' ? 'bg-kpmg-navy text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
-                            Ready (${readyCount})
+                            Ready (${totalEntities - (flaggedSubsCount + (isParentFlagged ? 1 : 0))})
                         </button>
                     </div>
                     <div class="relative">
@@ -2808,29 +2827,10 @@ function renderPerimeterApprovalModalContent(state) {
                 </div>
             </div>
 
-            <!-- Ignored / Extra Sheets Dropdown Banner (Moved from bottom to top) -->
-            ${unassigned.length > 0 ? `
-                <div id="unassigned-sheets-tray-top" class="hidden p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
-                    <div class="flex items-center justify-between border-b border-slate-200 pb-1.5 text-slate-700 font-semibold">
-                        <span>Ignored / Extra Sheets (${unassigned.length}) — excluded from consolidation perimeter</span>
-                        <button type="button" onclick="toggleExtraSheetsTrayTop()" class="text-slate-400 hover:text-slate-600 font-bold">&times;</button>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                        ${unassigned.map(u => `
-                            <div class="p-2 rounded-lg border border-slate-200 bg-white flex items-center justify-between">
-                                <div class="truncate pr-2">
-                                    <div class="font-mono font-semibold text-slate-700 truncate text-[11px]">${escapeHtml(u.sheet_name || 'Sheet')}</div>
-                                    <div class="text-[10px] text-slate-400 truncate">${escapeHtml(u.filename)}</div>
-                                </div>
-                                <span class="px-1.5 py-0.5 rounded text-[9px] bg-slate-100 text-slate-600 font-semibold">Ignored</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            ` : ''}
-
-            <!-- High-Density Financial Ledger Table -->
-            <div class="border border-slate-200 rounded-xl overflow-x-auto bg-white shadow-xs max-h-[56vh]">
+            <!-- ========================================================================= -->
+            <!-- VIEW 1: PERIMETER ENTITIES TABLE                                          -->
+            <!-- ========================================================================= -->
+            <div id="pane-approval-entities" class="approval-view-pane ${activeApprovalTab === 'ENTITIES' ? '' : 'view-hidden'} border border-slate-200 rounded-xl overflow-x-auto bg-white shadow-xs max-h-[58vh]">
                 <table class="w-full text-left text-xs border-collapse">
                     <thead class="sticky top-0 z-20 bg-slate-100 border-b border-slate-200 font-semibold text-slate-700 shadow-2xs">
                         <tr>
@@ -2838,11 +2838,11 @@ function renderPerimeterApprovalModalContent(state) {
                             <th class="py-2 px-2.5 min-w-[160px]">Entity & Role</th>
                             <th class="py-2 px-2 min-w-[150px]">Assigned File</th>
                             <th class="py-2 px-2 min-w-[115px]">Worksheet</th>
-                            <th class="py-2 px-2 min-w-[110px]">Account Code Col</th>
-                            <th class="py-2 px-2 min-w-[110px]">Debit / Net Col</th>
-                            <th class="py-2 px-2 min-w-[100px]">Credit Col</th>
+                            <th class="py-2 px-2 min-w-[110px]">Account Code</th>
+                            <th class="py-2 px-2 min-w-[110px]">Debit</th>
+                            <th class="py-2 px-2 min-w-[110px]">Credit</th>
                             <th class="py-2 px-2 min-w-[125px]">Scale / Denom</th>
-                            <th class="py-2 px-2 text-center w-14">View</th>
+                            <th class="py-2 px-2 text-center min-w-[110px]">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100 font-mono text-[11px]">
@@ -2855,13 +2855,19 @@ function renderPerimeterApprovalModalContent(state) {
         const confPct = Math.round((parent.confidence || 1.0) * 100);
         const code = parent.entity_code;
         const hasDateMismatch = parent.date_status === 'MISMATCH';
-        const hasMissingCode = !(parent.detected_columns && parent.detected_columns.account_code);
-        const isFlagged = !isMapped || hasDateMismatch || hasMissingCode;
+        const cols = parent.detected_columns || {};
+        const hasMissingCode = !cols.account_code;
+        const hasMissingDebit = !cols.debit && !cols.amount;
+        const hasMissingCredit = !cols.credit && !cols.amount;
+        const isFlagged = !isMapped || hasDateMismatch || hasMissingCode || hasMissingDebit || hasMissingCredit;
         const rowStatus = isFlagged ? 'flagged' : 'ready';
 
         const statusIcon = isFlagged
             ? `<div onmouseenter="showApprovalTooltip(event, 'parent', 'flagged')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</div>`
             : `<div onmouseenter="showApprovalTooltip(event, 'parent', 'ready')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</div>`;
+
+        const debitPrefill = cols.debit || cols.amount || '';
+        const creditPrefill = cols.credit || cols.amount || '';
 
         html += `
             <tr data-approval-row data-status="${rowStatus}" data-search="${escapeHtml((parent.entity_name || code) + ' ' + code)}" data-entity-code="parent" class="hover:bg-slate-50/70 transition">
@@ -2884,20 +2890,10 @@ function renderPerimeterApprovalModalContent(state) {
                     </div>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <div class="flex items-center space-x-1">
-                        <button type="button" onclick="triggerRowFileUpload('parent')"
-                            class="text-slate-400 hover:text-kpmg-blue p-1 transition cursor-pointer shrink-0"
-                            title="Upload / Re-upload single file for ${escapeHtml(parent.entity_name || code)}">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                            </svg>
-                        </button>
-                        <input type="file" id="row-file-input-parent" class="hidden" accept=".xlsx,.xls,.csv" onchange="handleRowFileUpload(event, 'parent')" />
-                        <select id="select-parent-file" onchange="updateEntityFileMapping('${escapeHtml(code)}', this.value); onApprovalSelectChange(this);"
-                            class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                            ${genFileOptions(parent.filename)}
-                        </select>
-                    </div>
+                    <select id="select-parent-file" onchange="updateEntityFileMapping('${escapeHtml(code)}', this.value); onApprovalSelectChange(this);"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
+                        ${genFileOptions(parent.filename)}
+                    </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
                     <select id="select-parent-sheet" onchange="updateEntitySheetMapping('${escapeHtml(code)}', this.value); onApprovalSelectChange(this);"
@@ -2907,17 +2903,17 @@ function renderPerimeterApprovalModalContent(state) {
                 </td>
                 <td class="py-1.5 px-2 align-middle">
                     <select id="col-parent-code" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                        ${genColOptions(sampleRows, (parent.detected_columns || {}).account_code, 'Account Code')}
+                        ${genColOptions(sampleRows, cols.account_code, 'Account Code')}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
                     <select id="col-parent-debit" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                        ${genColOptions(sampleRows, (parent.detected_columns || {}).debit || (parent.detected_columns || {}).amount, 'Debit')}
+                        ${genColOptions(sampleRows, debitPrefill, 'Debit')}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
                     <select id="col-parent-credit" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                        ${genColOptions(sampleRows, (parent.detected_columns || {}).credit, 'Credit')}
+                        ${genColOptions(sampleRows, creditPrefill, 'Credit')}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
@@ -2926,8 +2922,10 @@ function renderPerimeterApprovalModalContent(state) {
                         ${genScaleOptions(parent.scale_multiplier)}
                     </select>
                 </td>
+                <!-- Sequence: Confidence % -> View (eye) -> Upload (ghost) -->
                 <td class="py-1.5 px-2 text-center align-middle">
-                    <div class="flex items-center justify-center space-x-1">
+                    <div class="flex items-center justify-center space-x-1.5">
+                        <span class="text-[10px] font-mono text-slate-600 font-bold">${confPct}%</span>
                         <button type="button" onclick="toggleSamplePreview('drawer-parent')"
                             class="w-6 h-6 rounded hover:bg-slate-200 text-slate-600 hover:text-kpmg-blue inline-flex items-center justify-center transition cursor-pointer"
                             title="Toggle Sample Data & Scale Details">
@@ -2936,7 +2934,14 @@ function renderPerimeterApprovalModalContent(state) {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
                         </button>
-                        <span class="text-[10px] font-mono text-slate-500 font-bold">${confPct}%</span>
+                        <button type="button" onclick="triggerRowFileUpload('parent')"
+                            class="w-6 h-6 rounded hover:bg-slate-200 text-slate-500 hover:text-kpmg-blue inline-flex items-center justify-center transition cursor-pointer"
+                            title="Upload / Replace file for ${escapeHtml(parent.entity_name || code)}">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                        </button>
+                        <input type="file" id="row-file-input-parent" class="hidden" accept=".xlsx,.xls,.csv" onchange="handleRowFileUpload(event, 'parent')" />
                     </div>
                 </td>
             </tr>
@@ -2958,7 +2963,7 @@ function renderPerimeterApprovalModalContent(state) {
                         <div class="overflow-x-auto text-[10px] font-mono border border-slate-200 rounded bg-white max-h-36">
                             <table class="w-full text-left">
                                 <tbody>
-                                    ${sampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
+                                    ${sampleRows.slice(0, 8).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
                                 </tbody>
                             </table>
                         </div>
@@ -2975,13 +2980,19 @@ function renderPerimeterApprovalModalContent(state) {
         const confPct = Math.round((sub.confidence || 1.0) * 100);
         const code = sub.entity_code;
         const hasDateMismatch = sub.date_status === 'MISMATCH';
-        const hasMissingCode = !(sub.detected_columns && sub.detected_columns.account_code);
-        const isFlagged = !isMapped || hasDateMismatch || hasMissingCode;
+        const cols = sub.detected_columns || {};
+        const hasMissingCode = !cols.account_code;
+        const hasMissingDebit = !cols.debit && !cols.amount;
+        const hasMissingCredit = !cols.credit && !cols.amount;
+        const isFlagged = !isMapped || hasDateMismatch || hasMissingCode || hasMissingDebit || hasMissingCredit;
         const rowStatus = isFlagged ? 'flagged' : 'ready';
 
         const statusIcon = isFlagged
             ? `<div onmouseenter="showApprovalTooltip(event, '${escapeHtml(code)}', 'flagged')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</div>`
             : `<div onmouseenter="showApprovalTooltip(event, '${escapeHtml(code)}', 'ready')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</div>`;
+
+        const debitPrefill = cols.debit || cols.amount || '';
+        const creditPrefill = cols.credit || cols.amount || '';
 
         html += `
             <tr data-approval-row data-status="${rowStatus}" data-search="${escapeHtml((sub.entity_name || code) + ' ' + code)}" data-entity-code="${escapeHtml(code)}" class="hover:bg-slate-50/70 transition">
@@ -3004,20 +3015,10 @@ function renderPerimeterApprovalModalContent(state) {
                     </div>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <div class="flex items-center space-x-1">
-                        <button type="button" onclick="triggerRowFileUpload('${escapeHtml(code)}')"
-                            class="text-slate-400 hover:text-kpmg-blue p-1 transition cursor-pointer shrink-0"
-                            title="Upload / Re-upload single file for ${escapeHtml(sub.entity_name || code)}">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                            </svg>
-                        </button>
-                        <input type="file" id="row-file-input-${escapeHtml(code)}" class="hidden" accept=".xlsx,.xls,.csv" onchange="handleRowFileUpload(event, '${escapeHtml(code)}')" />
-                        <select id="select-${escapeHtml(code)}-file" onchange="updateEntityFileMapping('${escapeHtml(code)}', this.value); onApprovalSelectChange(this);"
-                            class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                            ${genFileOptions(sub.filename)}
-                        </select>
-                    </div>
+                    <select id="select-${escapeHtml(code)}-file" onchange="updateEntityFileMapping('${escapeHtml(code)}', this.value); onApprovalSelectChange(this);"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
+                        ${genFileOptions(sub.filename)}
+                    </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
                     <select id="select-${escapeHtml(code)}-sheet" onchange="updateEntitySheetMapping('${escapeHtml(code)}', this.value); onApprovalSelectChange(this);"
@@ -3027,17 +3028,17 @@ function renderPerimeterApprovalModalContent(state) {
                 </td>
                 <td class="py-1.5 px-2 align-middle">
                     <select id="col-${escapeHtml(code)}-code" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                        ${genColOptions(sampleRows, (sub.detected_columns || {}).account_code, 'Account Code')}
+                        ${genColOptions(sampleRows, cols.account_code, 'Account Code')}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
                     <select id="col-${escapeHtml(code)}-debit" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                        ${genColOptions(sampleRows, (sub.detected_columns || {}).debit || (sub.detected_columns || {}).amount, 'Debit')}
+                        ${genColOptions(sampleRows, debitPrefill, 'Debit')}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
                     <select id="col-${escapeHtml(code)}-credit" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                        ${genColOptions(sampleRows, (sub.detected_columns || {}).credit, 'Credit')}
+                        ${genColOptions(sampleRows, creditPrefill, 'Credit')}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
@@ -3046,8 +3047,10 @@ function renderPerimeterApprovalModalContent(state) {
                         ${genScaleOptions(sub.scale_multiplier)}
                     </select>
                 </td>
+                <!-- Sequence: Confidence % -> View (eye) -> Upload (ghost) -->
                 <td class="py-1.5 px-2 text-center align-middle">
-                    <div class="flex items-center justify-center space-x-1">
+                    <div class="flex items-center justify-center space-x-1.5">
+                        <span class="text-[10px] font-mono text-slate-600 font-bold">${confPct}%</span>
                         <button type="button" onclick="toggleSamplePreview('drawer-${escapeHtml(code)}')"
                             class="w-6 h-6 rounded hover:bg-slate-200 text-slate-600 hover:text-kpmg-blue inline-flex items-center justify-center transition cursor-pointer"
                             title="Toggle Sample Data & Scale Details">
@@ -3056,7 +3059,14 @@ function renderPerimeterApprovalModalContent(state) {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
                         </button>
-                        <span class="text-[10px] font-mono text-slate-500 font-bold">${confPct}%</span>
+                        <button type="button" onclick="triggerRowFileUpload('${escapeHtml(code)}')"
+                            class="w-6 h-6 rounded hover:bg-slate-200 text-slate-500 hover:text-kpmg-blue inline-flex items-center justify-center transition cursor-pointer"
+                            title="Upload / Replace file for ${escapeHtml(sub.entity_name || code)}">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                        </button>
+                        <input type="file" id="row-file-input-${escapeHtml(code)}" class="hidden" accept=".xlsx,.xls,.csv" onchange="handleRowFileUpload(event, '${escapeHtml(code)}')" />
                     </div>
                 </td>
             </tr>
@@ -3078,7 +3088,7 @@ function renderPerimeterApprovalModalContent(state) {
                         <div class="overflow-x-auto text-[10px] font-mono border border-slate-200 rounded bg-white max-h-36">
                             <table class="w-full text-left">
                                 <tbody>
-                                    ${sampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
+                                    ${sampleRows.slice(0, 8).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-slate-100' : 'border-b border-slate-100'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
                                 </tbody>
                             </table>
                         </div>
@@ -3087,106 +3097,6 @@ function renderPerimeterApprovalModalContent(state) {
             </tr>
         `;
     });
-
-    // 3. RENDER MANDATORY FX RATES ROW
-    const fxSampleRows = fx.sample_rows || [];
-    const fxConfPct = Math.round((fx.confidence || 1.0) * 100);
-    const fxRowStatus = isFxMapped ? 'ready' : 'flagged';
-
-    const fxStatusIcon = isFxMapped
-        ? `<div onmouseenter="showApprovalTooltip(event, 'FX_RATES', 'ready')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</div>`
-        : `<div onmouseenter="showApprovalTooltip(event, 'FX_RATES', 'flagged')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</div>`;
-
-    html += `
-        <tr data-approval-row data-status="${fxRowStatus}" data-search="foreign exchange rates fx fx_rates" data-entity-code="FX_RATES" class="bg-indigo-50/40 hover:bg-indigo-50/70 transition border-t-2 border-indigo-200">
-            <td class="py-1.5 px-2 text-center align-middle">
-                <div class="inline-flex items-center justify-center">
-                    ${fxStatusIcon}
-                </div>
-            </td>
-            <td class="py-1.5 px-2.5 align-middle">
-                <div class="flex items-center space-x-2">
-                    <div class="w-6 h-6 rounded bg-indigo-700 text-white flex items-center justify-center font-bold text-[10px]">FX</div>
-                    <div>
-                        <div class="flex items-center space-x-1.5">
-                            <span class="font-bold text-indigo-950 text-xs">Foreign Exchange Rates</span>
-                            <span class="px-1.5 py-0.2 rounded text-[9px] bg-indigo-100 text-indigo-800 font-semibold border border-indigo-200">MANDATORY</span>
-                        </div>
-                        <div class="text-[10px] text-slate-500 font-mono">Closing / Average / Swap Rates</div>
-                    </div>
-                </div>
-            </td>
-            <td class="py-1.5 px-2 align-middle">
-                <div class="flex items-center space-x-1">
-                    <button type="button" onclick="triggerRowFileUpload('FX_RATES')"
-                        class="text-indigo-400 hover:text-indigo-700 p-1 transition cursor-pointer shrink-0"
-                        title="Upload / Re-upload Foreign Exchange Rates schedule">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
-                    </button>
-                    <input type="file" id="row-file-input-FX_RATES" class="hidden" accept=".xlsx,.xls,.csv" onchange="handleRowFileUpload(event, 'FX_RATES')" />
-                    <select id="select-FX_RATES-file" onchange="updateEntityFileMapping('FX_RATES', this.value); onApprovalSelectChange(this);"
-                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                        ${genFileOptions(fx.filename)}
-                    </select>
-                </div>
-            </td>
-            <td class="py-1.5 px-2 align-middle">
-                <select id="select-FX_RATES-sheet" onchange="updateEntitySheetMapping('FX_RATES', this.value); onApprovalSelectChange(this);"
-                    class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                    ${genSheetOptions(fx.filename, fx.sheet_name)}
-                </select>
-            </td>
-            <td class="py-1.5 px-2 align-middle">
-                <select id="col-fx-closing" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                    ${genColOptions(fxSampleRows, (fx.detected_columns || {}).closing_rate, 'Closing Rate')}
-                </select>
-            </td>
-            <td class="py-1.5 px-2 align-middle">
-                <select id="col-fx-average" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                    ${genColOptions(fxSampleRows, (fx.detected_columns || {}).average_rate, 'Average Rate')}
-                </select>
-            </td>
-            <td class="py-1.5 px-2 align-middle">
-                <select id="col-fx-swap" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
-                    ${genColOptions(fxSampleRows, (fx.detected_columns || {}).swap_rate, 'Swap Rate (Optional)')}
-                </select>
-            </td>
-            <td class="py-1.5 px-2 text-center align-middle font-sans text-slate-400 italic text-[10px]">
-                N/A (Rates)
-            </td>
-            <td class="py-1.5 px-2 text-center align-middle">
-                <div class="flex items-center justify-center space-x-1">
-                    <button type="button" onclick="toggleSamplePreview('drawer-FX_RATES')"
-                        class="w-6 h-6 rounded hover:bg-indigo-100 text-indigo-700 inline-flex items-center justify-center transition cursor-pointer"
-                        title="Toggle FX Rates Table Preview">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                    </button>
-                    <span class="text-[10px] font-mono text-slate-500 font-bold">${fxConfPct}%</span>
-                </div>
-            </td>
-        </tr>
-
-        <!-- FX Drawer Row -->
-        <tr id="drawer-FX_RATES" class="hidden bg-indigo-50/30 border-b border-indigo-100">
-            <td colspan="9" class="p-3 font-sans">
-                <div class="text-[10px] uppercase font-bold text-indigo-950 mb-1 tracking-wider">Top Extracted FX Rates Rows:</div>
-                ${fxSampleRows.length > 0 ? `
-                    <div class="overflow-x-auto text-[10px] font-mono border border-indigo-200 rounded bg-white max-h-36">
-                        <table class="w-full text-left">
-                            <tbody>
-                                ${fxSampleRows.slice(0, 5).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-indigo-100/60' : 'border-b border-indigo-100/40'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                ` : '<div class="text-[11px] text-slate-400">No raw FX rows extracted yet.</div>'}
-            </td>
-        </tr>
-    `;
 
     // Empty state row for filter/search
     html += `
@@ -3198,16 +3108,177 @@ function renderPerimeterApprovalModalContent(state) {
                     </tbody>
                 </table>
             </div>
+
+            <!-- ========================================================================= -->
+            <!-- VIEW 2: FOREIGN EXCHANGE RATES TABLE                                      -->
+            <!-- ========================================================================= -->
+            <div id="pane-approval-fx" class="approval-view-pane ${activeApprovalTab === 'FX' ? '' : 'view-hidden'} border border-slate-200 rounded-xl overflow-x-auto bg-white shadow-xs max-h-[58vh]">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead class="sticky top-0 z-20 bg-indigo-50/70 border-b border-indigo-200 font-semibold text-indigo-950 shadow-2xs">
+                        <tr>
+                            <th class="py-2 px-2 text-center w-11">Status</th>
+                            <th class="py-2 px-2.5 min-w-[170px]">Schedule & Pair</th>
+                            <th class="py-2 px-2 min-w-[160px]">Assigned File</th>
+                            <th class="py-2 px-2 min-w-[130px]">Worksheet</th>
+                            <th class="py-2 px-2 min-w-[120px]">Closing Rate</th>
+                            <th class="py-2 px-2 min-w-[120px]">Average Rate</th>
+                            <th class="py-2 px-2 min-w-[120px]">Swap Rate</th>
+                            <th class="py-2 px-2 text-center min-w-[110px]">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 font-mono text-[11px]">
     `;
 
-    html += `</div>`;
+    // Render FX Row
+    const fxSampleRows = fx.sample_rows || [];
+    const fxConfPct = Math.round((fx.confidence || 1.0) * 100);
+    const fxRowStatus = isFxMapped ? 'ready' : 'flagged';
+
+    const fxStatusIcon = isFxMapped
+        ? `<div onmouseenter="showApprovalTooltip(event, 'FX_RATES', 'ready')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</div>`
+        : `<div onmouseenter="showApprovalTooltip(event, 'FX_RATES', 'flagged')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</div>`;
+
+    html += `
+        <tr class="hover:bg-indigo-50/40 transition">
+            <td class="py-2 px-2 text-center align-middle">
+                <div class="inline-flex items-center justify-center">
+                    ${fxStatusIcon}
+                </div>
+            </td>
+            <td class="py-2 px-2.5 align-middle">
+                <div class="flex items-center space-x-2">
+                    <div class="w-6 h-6 rounded bg-indigo-700 text-white flex items-center justify-center font-bold text-[10px]">FX</div>
+                    <div>
+                        <div class="flex items-center space-x-1.5">
+                            <span class="font-bold text-indigo-950 text-xs">Foreign Exchange Schedule</span>
+                            <span class="px-1.5 py-0.2 rounded text-[9px] bg-indigo-100 text-indigo-800 font-semibold border border-indigo-200">MANDATORY</span>
+                        </div>
+                        <div class="text-[10px] text-slate-500 font-mono">Currency Translation & Equity Reserve</div>
+                    </div>
+                </div>
+            </td>
+            <td class="py-2 px-2 align-middle">
+                <select id="select-FX_RATES-file" onchange="updateEntityFileMapping('FX_RATES', this.value); onApprovalSelectChange(this);"
+                    class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
+                    ${genFileOptions(fx.filename)}
+                </select>
+            </td>
+            <td class="py-2 px-2 align-middle">
+                <select id="select-FX_RATES-sheet" onchange="updateEntitySheetMapping('FX_RATES', this.value); onApprovalSelectChange(this);"
+                    class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
+                    ${genSheetOptions(fx.filename, fx.sheet_name)}
+                </select>
+            </td>
+            <td class="py-2 px-2 align-middle">
+                <select id="col-fx-closing" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
+                    ${genColOptions(fxSampleRows, (fx.detected_columns || {}).closing_rate, 'Closing Rate')}
+                </select>
+            </td>
+            <td class="py-2 px-2 align-middle">
+                <select id="col-fx-average" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
+                    ${genColOptions(fxSampleRows, (fx.detected_columns || {}).average_rate, 'Average Rate')}
+                </select>
+            </td>
+            <td class="py-2 px-2 align-middle">
+                <select id="col-fx-swap" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
+                    ${genColOptions(fxSampleRows, (fx.detected_columns || {}).swap_rate, 'Swap Rate (Optional)')}
+                </select>
+            </td>
+            <!-- Sequence: Confidence % -> View (eye) -> Upload (ghost) -->
+            <td class="py-2 px-2 text-center align-middle">
+                <div class="flex items-center justify-center space-x-1.5">
+                    <span class="text-[10px] font-mono text-slate-600 font-bold">${fxConfPct}%</span>
+                    <button type="button" onclick="toggleSamplePreview('drawer-FX_RATES')"
+                        class="w-6 h-6 rounded hover:bg-indigo-100 text-indigo-700 inline-flex items-center justify-center transition cursor-pointer"
+                        title="Toggle FX Rates Table Preview">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                    </button>
+                    <button type="button" onclick="triggerRowFileUpload('FX_RATES')"
+                        class="w-6 h-6 rounded hover:bg-indigo-100 text-indigo-700 inline-flex items-center justify-center transition cursor-pointer"
+                        title="Upload / Replace Foreign Exchange Rates schedule">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                    </button>
+                    <input type="file" id="row-file-input-FX_RATES" class="hidden" accept=".xlsx,.xls,.csv" onchange="handleRowFileUpload(event, 'FX_RATES')" />
+                </div>
+            </td>
+        </tr>
+
+        <!-- FX Drawer Row -->
+        <tr id="drawer-FX_RATES" class="hidden bg-indigo-50/30 border-b border-indigo-100">
+            <td colspan="8" class="p-3 font-sans">
+                <div class="text-[10px] uppercase font-bold text-indigo-950 mb-1.5 tracking-wider">Top Extracted FX Rates Rows:</div>
+                ${fxSampleRows.length > 0 ? `
+                    <div class="overflow-x-auto text-[10px] font-mono border border-indigo-200 rounded bg-white max-h-36">
+                        <table class="w-full text-left">
+                            <tbody>
+                                ${fxSampleRows.slice(0, 8).map((r, i) => `<tr class="${i===0 ? 'font-bold bg-indigo-100/60' : 'border-b border-indigo-100/40'}">${r.map(c => `<td class="p-1">${escapeHtml(String(c))}</td>`).join('')}</tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                ` : '<div class="text-[11px] text-slate-400">No raw FX rows extracted yet.</div>'}
+            </td>
+        </tr>
+    `;
+
+    html += `
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- ========================================================================= -->
+            <!-- VIEW 3: IGNORED EXTRA SHEETS TABLE                                        -->
+            <!-- ========================================================================= -->
+            <div id="pane-approval-ignored" class="approval-view-pane ${activeApprovalTab === 'IGNORED' ? '' : 'view-hidden'} border border-slate-200 rounded-xl overflow-x-auto bg-white shadow-xs max-h-[58vh]">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead class="sticky top-0 z-20 bg-slate-100 border-b border-slate-200 font-semibold text-slate-700 shadow-2xs">
+                        <tr>
+                            <th class="py-2 px-3 text-center w-24">Status</th>
+                            <th class="py-2 px-3 min-w-[180px]">Sheet Name</th>
+                            <th class="py-2 px-3 min-w-[220px]">Source File</th>
+                            <th class="py-2 px-3 min-w-[220px]">Exclusion Context</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 font-mono text-[11px]">
+                        ${unassigned.length > 0 ? unassigned.map(u => `
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="py-2.5 px-3 text-center align-middle">
+                                    <span class="px-2 py-0.5 rounded text-[10px] bg-slate-200 text-slate-700 font-semibold">Ignored</span>
+                                </td>
+                                <td class="py-2.5 px-3 align-middle font-bold text-slate-800">
+                                    ${escapeHtml(u.sheet_name || 'Sheet')}
+                                </td>
+                                <td class="py-2.5 px-3 align-middle text-slate-500">
+                                    ${escapeHtml(u.filename)}
+                                </td>
+                                <td class="py-2.5 px-3 align-middle font-sans text-slate-500 text-[11px]">
+                                    Non-perimeter reference sheet (excluded from trial balance consolidation pipeline).
+                                </td>
+                            </tr>
+                        `).join('') : `
+                            <tr>
+                                <td colspan="4" class="p-8 text-center text-slate-400 font-sans">
+                                    No ignored or extra sheets found in the uploaded workbooks.
+                                </td>
+                            </tr>
+                        `}
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+    `;
+
     container.innerHTML = html;
 
     if (approvalActiveFilter !== 'ALL' || approvalSearchQuery !== '') {
         filterApprovalGrid(approvalActiveFilter, approvalSearchQuery);
     }
 
-    // Immediately run validation to highlight unfilled required cells in red
     validateApprovalFields(false);
 
     // Update footer status
@@ -3300,10 +3371,6 @@ async function confirmPerimeterApprovalModal() {
     // Strict Required Mapping Gate & Shake Animation for Unfilled Fields
     const unfilledCount = validateApprovalFields(true);
     if (unfilledCount > 0) {
-        if (btn) {
-            btn.disabled = true;
-            btn.classList.add('opacity-60', 'cursor-not-allowed');
-        }
         showToast('Incomplete Mapping', `Please select all required mapping columns (${unfilledCount} unfilled highlighted in red) before confirming.`, 'error');
         return;
     }
