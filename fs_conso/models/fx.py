@@ -12,6 +12,7 @@ class FXRateEntry(BaseModel):
     closing_rate: float = Field(..., gt=0.0, description="Used for Balance Sheet Assets & Liabilities")
     average_rate: float = Field(..., gt=0.0, description="Used for Profit & Loss Income & Expenses")
     historical_rate: float = Field(..., gt=0.0, description="Used for Equity & Share Capital")
+    swap_rate: Optional[float] = Field(default=None, description="Used for Forward & Currency Swap adjustments")
 
 
 class FXRateTable(BaseModel):

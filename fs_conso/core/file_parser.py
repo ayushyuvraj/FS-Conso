@@ -21,6 +21,7 @@ import openpyxl
 import pandas as pd
 
 from fs_conso.config import config
+from fs_conso.models.fx import FXRateEntry, FXRateTable
 from fs_conso.models.trial_balance import RawTBRow, RawTrialBalance
 
 
@@ -59,6 +60,28 @@ class FlexibleTBParser:
     DR_CR_INDICATOR_ALIASES = [
         "dr/cr", "d/c", "dr / cr", "d / c", "indicator", "type", "dc", "dr_cr",
         "sign", "balance type", "debit/credit"
+    ]
+
+    FX_AS_ON_DATE_ALIASES = [
+        "as on date", "as_on_date", "as of date", "as_of_date", "date", "period", "effective date", "effective_date"
+    ]
+    FX_FROM_CURRENCY_ALIASES = [
+        "from currency", "from_currency", "from", "from_curr", "source currency", "source_currency", "currency", "curr"
+    ]
+    FX_TO_CURRENCY_ALIASES = [
+        "to currency", "to_currency", "to", "to_curr", "target currency", "target_currency", "reporting currency", "base currency"
+    ]
+    FX_CLOSING_RATE_ALIASES = [
+        "closing", "closing rate", "closing_rate", "spot", "spot rate", "spot_rate", "bs rate", "ending rate"
+    ]
+    FX_AVERAGE_RATE_ALIASES = [
+        "average", "average rate", "average_rate", "avg", "avg rate", "avg_rate", "pl rate", "p&l rate"
+    ]
+    FX_HISTORICAL_RATE_ALIASES = [
+        "historical", "historical rate", "historical_rate", "hist", "hist rate", "equity rate"
+    ]
+    FX_SWAP_RATE_ALIASES = [
+        "swap", "swap rate", "swap_rate", "swap rates", "forward", "forward rate", "forward_rate"
     ]
 
     SUMMARY_ROW_KEYWORDS = [
@@ -507,6 +530,19 @@ Schema:
             return RawTrialBalance(entity_code=entity_code, entity_name=entity_name, period=period, currency=currency, rows=[])
 
         cols = [str(c).strip() for c in df.columns]
+
+        # Multi-period date filtering
+        date_candidates = ["date", "period", "as_on_date", "as_of_date", "reporting_period", "year", "fiscal_year"]
+        date_col = cls._find_column(cols, date_candidates)
+        if date_col and period:
+            valid_dates = df[date_col].dropna().astype(str).str.strip()
+            unique_dates = valid_dates.unique()
+            if len(unique_dates) > 1:
+                p_norm = re.sub(r"[^a-z0-9]", "", period.lower())
+                mask = valid_dates.apply(lambda d: p_norm in re.sub(r"[^a-z0-9]", "", str(d).lower()) or re.sub(r"[^a-z0-9]", "", str(d).lower()) in p_norm)
+                if mask.any():
+                    df = df[mask].copy()
+
         code_col = cls._find_column(cols, cls.ACCOUNT_CODE_ALIASES)
 
         # Check if header is offset in the data rows (preamble detection)
@@ -652,7 +688,8 @@ Schema:
         currency: str = "INR",
         duplicate_policy: str = "keep",
         entity_name: Optional[str] = None,
-        column_overrides: Optional[Dict[str, str]] = None
+        column_overrides: Optional[Dict[str, str]] = None,
+        sheet_name: Optional[str] = None
     ) -> RawTrialBalance:
         fn_lower = filename.lower()
         if fn_lower.endswith(".csv"):
@@ -689,10 +726,13 @@ Schema:
             cleaned_csv = "\n".join(raw_lines[header_line_idx:])
             df = pd.read_csv(io.StringIO(cleaned_csv), sep=delimiter, skipinitialspace=True, on_bad_lines="skip")
         elif fn_lower.endswith((".xlsx", ".xls")):
+            read_kwargs = {}
+            if sheet_name:
+                read_kwargs["sheet_name"] = sheet_name
             if isinstance(file_path_or_bytes, bytes):
-                df = pd.read_excel(io.BytesIO(file_path_or_bytes))
+                df = pd.read_excel(io.BytesIO(file_path_or_bytes), **read_kwargs)
             else:
-                df = pd.read_excel(file_path_or_bytes)
+                df = pd.read_excel(file_path_or_bytes, **read_kwargs)
         else:
             raise ValueError(f"Unsupported file format '{filename}'. Please upload .xlsx, .xls, or .csv.")
 
@@ -707,3 +747,97 @@ Schema:
         )
         res.source_filename = filename
         return res
+
+    @classmethod
+    def parse_fx_rates(
+        cls,
+        file_path_or_bytes: Union[Path, str, bytes],
+        filename: str,
+        sheet_name: Optional[str] = None,
+        reporting_currency: str = "INR",
+        as_on_date: str = "31-Mar-2024",
+        column_overrides: Optional[Dict[str, str]] = None
+    ) -> FXRateTable:
+        """Parses an Excel or CSV file into an FXRateTable with support for 5-6 standardized columns."""
+        fn_lower = filename.lower()
+        if fn_lower.endswith(".csv"):
+            if isinstance(file_path_or_bytes, bytes):
+                df = pd.read_csv(io.BytesIO(file_path_or_bytes))
+            else:
+                df = pd.read_csv(file_path_or_bytes)
+        elif fn_lower.endswith((".xlsx", ".xls")):
+            read_kwargs = {}
+            if sheet_name:
+                read_kwargs["sheet_name"] = sheet_name
+            if isinstance(file_path_or_bytes, bytes):
+                df = pd.read_excel(io.BytesIO(file_path_or_bytes), **read_kwargs)
+            else:
+                df = pd.read_excel(file_path_or_bytes, **read_kwargs)
+        else:
+            raise ValueError(f"Unsupported FX file format '{filename}'.")
+
+        df = df.dropna(how="all").copy()
+        if df.empty:
+            return FXRateTable()
+
+        cols = [str(c).strip() for c in df.columns]
+
+        # Preamble detection if header is not on row 0
+        from_col = cls._find_column(cols, cls.FX_FROM_CURRENCY_ALIASES)
+        closing_col = cls._find_column(cols, cls.FX_CLOSING_RATE_ALIASES)
+
+        if not (from_col and closing_col):
+            for r_idx in range(min(15, len(df))):
+                row_vals = [str(x).strip() for x in df.iloc[r_idx].values if pd.notna(x)]
+                f_c = cls._find_column(row_vals, cls.FX_FROM_CURRENCY_ALIASES)
+                c_c = cls._find_column(row_vals, cls.FX_CLOSING_RATE_ALIASES)
+                if f_c and c_c:
+                    df.columns = [str(x).strip() for x in df.iloc[r_idx].values]
+                    df = df.iloc[r_idx + 1:].copy()
+                    cols = [str(c).strip() for c in df.columns]
+                    break
+
+        date_col = cls._find_column(cols, cls.FX_AS_ON_DATE_ALIASES)
+        from_col = cls._find_column(cols, cls.FX_FROM_CURRENCY_ALIASES)
+        to_col = cls._find_column(cols, cls.FX_TO_CURRENCY_ALIASES)
+        closing_col = cls._find_column(cols, cls.FX_CLOSING_RATE_ALIASES)
+        avg_col = cls._find_column(cols, cls.FX_AVERAGE_RATE_ALIASES)
+        hist_col = cls._find_column(cols, cls.FX_HISTORICAL_RATE_ALIASES)
+        swap_col = cls._find_column(cols, cls.FX_SWAP_RATE_ALIASES)
+
+        # Overrides if provided
+        if column_overrides:
+            if column_overrides.get("date"): date_col = column_overrides["date"]
+            if column_overrides.get("from_currency"): from_col = column_overrides["from_currency"]
+            if column_overrides.get("to_currency"): to_col = column_overrides["to_currency"]
+            if column_overrides.get("closing_rate"): closing_col = column_overrides["closing_rate"]
+            if column_overrides.get("average_rate"): avg_col = column_overrides["average_rate"]
+            if column_overrides.get("historical_rate"): hist_col = column_overrides["historical_rate"]
+            if column_overrides.get("swap_rate"): swap_col = column_overrides["swap_rate"]
+
+        fx_table = FXRateTable()
+        for _, row_data in df.iterrows():
+            from_val = str(row_data[from_col]).strip().upper() if from_col and pd.notna(row_data[from_col]) else ""
+            if not from_val or from_val in ("FROM", "SOURCE", "TOTAL", "CURRENCY"):
+                continue
+
+            to_val = str(row_data[to_col]).strip().upper() if to_col and pd.notna(row_data[to_col]) else reporting_currency.upper()
+            row_date = str(row_data[date_col]).strip() if date_col and pd.notna(row_data[date_col]) else as_on_date
+
+            closing_val = cls.clean_number(row_data[closing_col]) if closing_col and pd.notna(row_data[closing_col]) else 1.0
+            avg_val = cls.clean_number(row_data[avg_col]) if avg_col and pd.notna(row_data[avg_col]) else (closing_val or 1.0)
+            hist_val = cls.clean_number(row_data[hist_col]) if hist_col and pd.notna(row_data[hist_col]) else (closing_val or 1.0)
+            swap_val = cls.clean_number(row_data[swap_col]) if swap_col and pd.notna(row_data[swap_col]) else None
+
+            if from_val and closing_val is not None:
+                fx_table.add_rate(FXRateEntry(
+                    from_currency=from_val,
+                    to_currency=to_val,
+                    as_on_date=row_date,
+                    closing_rate=float(closing_val),
+                    average_rate=float(avg_val or closing_val),
+                    historical_rate=float(hist_val or closing_val),
+                    swap_rate=float(swap_val) if swap_val is not None else None
+                ))
+
+        return fx_table

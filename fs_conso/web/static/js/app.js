@@ -1919,243 +1919,824 @@ function renderActiveStepContent() {
     else if (activeStep === 6) renderStep6(container);
 }
 
-// STEP 1: INGESTION
-function renderStep1(el) {
-    const tbs = (pipelineData && pipelineData.raw_tbs) ? pipelineData.raw_tbs : [];
-    const tbMap = new Map();
-    tbs.forEach(tb => {
-        if (tb.entity_code) {
-            tbMap.set(tb.entity_code.toUpperCase(), tb);
-        }
-    });
+// STEP 1: INGESTION (Dual-Engine Ingestion & Perimeter Approval)
+let step1ApprovalState = null;
+let selectedSingleUploadEntity = null;
+let selectedSingleFile = null;
+let step1SelectedFiles = [];
 
-    const perimeter = (appStatus && appStatus.perimeter_entities) ? appStatus.perimeter_entities : [];
-    const missingEntities = (appStatus && appStatus.missing_entities) ? appStatus.missing_entities : [];
-    const hasPerimeter = perimeter.length > 0;
-
-    let rowsHtml = "";
-    if (hasPerimeter) {
-        // Render each perimeter entity (uploaded or pending)
-        rowsHtml = perimeter.map(ent => {
-            const tb = tbMap.get(ent.entity_code.toUpperCase());
-            const isUploaded = !!tb;
-            const displayName = ent.entity_name || (tb && tb.entity_name) || ent.entity_code;
-            const currency = ent.currency || (tb && tb.currency) || '—';
-            const holdingPct = ent.holding_percentage != null ? `${Math.round(ent.holding_percentage * 100)}%` : (ent.is_parent ? '100%' : '100%');
-            const rolePill = ent.is_parent 
-                ? `<span class="px-1.5 py-0.2 rounded text-[10px] bg-blue-100 text-kpmg-blue font-semibold">PARENT</span>` 
-                : `<span class="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 text-slate-600 font-medium">${holdingPct} OWNED</span>`;
-
-            if (isUploaded) {
-                return `
-                    <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
-                        <td class="py-2.5 px-3 text-xs">
-                            <div class="font-bold text-kpmg-navy text-[13px] leading-snug">
-                                ${escapeHtml(displayName)}
-                            </div>
-                            <div class="flex items-center space-x-1.5 mt-0.5 text-[11px] text-slate-500">
-                                <span class="font-mono font-semibold">${escapeHtml(ent.entity_code)}</span>
-                                <span>•</span>
-                                ${rolePill}
-                            </div>
-                        </td>
-                        <td class="py-2.5 px-3 text-xs">
-                            <span class="px-2 py-0.5 rounded bg-slate-100 font-mono text-[11px] font-semibold text-slate-700 border border-slate-200/60">${escapeHtml(currency)}</span>
-                        </td>
-                        <td class="num-cell py-2.5 px-3 text-xs font-mono">${tb.row_count}</td>
-                        <td class="num-cell py-2.5 px-3 text-xs font-mono">${formatNum(tb.total_debit)}</td>
-                        <td class="num-cell py-2.5 px-3 text-xs font-mono">${formatNum(tb.total_credit)}</td>
-                        <td class="num-cell py-2.5 px-3 text-xs font-mono font-bold ${tb.is_tallied ? 'text-emerald-600' : 'text-red-600'}">${formatNum(tb.signed_sum)}</td>
-                        <td class="text-center py-2.5 px-3 text-xs">
-                            <span class="px-2.5 py-0.5 rounded text-[11px] font-semibold ${tb.is_tallied ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
-                                ${tb.is_tallied ? 'Tallied (0.00)' : 'Unbalanced'}
-                            </span>
-                        </td>
-                    </tr>
-                `;
-            } else {
-                return `
-                    <tr class="hover:bg-amber-50/30 border-b border-gray-100 transition bg-slate-50/40">
-                        <td class="py-2.5 px-3 text-xs">
-                            <div class="font-bold text-slate-700 text-[13px] leading-snug">
-                                ${escapeHtml(displayName)}
-                            </div>
-                            <div class="flex items-center space-x-1.5 mt-0.5 text-[11px] text-slate-500">
-                                <span class="font-mono font-semibold">${escapeHtml(ent.entity_code)}</span>
-                                <span>•</span>
-                                ${rolePill}
-                            </div>
-                        </td>
-                        <td class="py-2.5 px-3 text-xs">
-                            <span class="px-2 py-0.5 rounded bg-slate-100 font-mono text-[11px] font-semibold text-slate-500 border border-slate-200/60">${escapeHtml(currency)}</span>
-                        </td>
-                        <td class="num-cell py-2.5 px-3 text-xs font-mono text-slate-400">—</td>
-                        <td class="num-cell py-2.5 px-3 text-xs font-mono text-slate-400">—</td>
-                        <td class="num-cell py-2.5 px-3 text-xs font-mono text-slate-400">—</td>
-                        <td class="num-cell py-2.5 px-3 text-xs font-mono text-slate-400">—</td>
-                        <td class="text-center py-2.5 px-3 text-xs">
-                            <span class="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80">
-                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1 animate-pulse"></span>
-                                Pending Upload
-                            </span>
-                        </td>
-                    </tr>
-                `;
+async function fetchStep1ApprovalState() {
+    try {
+        const res = await fetch("/api/pipeline/ingestion-approval-state");
+        const data = await res.json();
+        if (res.ok && data.success) {
+            step1ApprovalState = data.approval_state;
+            const container = document.getElementById("step-content");
+            if (activeStep === 1 && container) {
+                renderStep1(container);
             }
-        }).join("");
-
-        // Also check if any uploaded TB is outside perimeter (e.g. prior period or ad-hoc)
-        const perimeterCodes = new Set(perimeter.map(p => p.entity_code.toUpperCase()));
-        const extraTbs = tbs.filter(tb => !perimeterCodes.has((tb.entity_code || '').toUpperCase()));
-        if (extraTbs.length > 0) {
-            rowsHtml += extraTbs.map(tb => `
-                <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
-                    <td class="py-2.5 px-3 text-xs">
-                        <div class="font-bold text-kpmg-navy text-[13px] leading-snug">
-                            ${escapeHtml(tb.entity_name || tb.entity_code)}
-                        </div>
-                        <div class="flex items-center space-x-1.5 mt-0.5 text-[11px] text-slate-500">
-                            <span class="font-mono font-semibold">${escapeHtml(tb.entity_code)}</span>
-                            ${tb.is_prior_period ? '<span class="ml-1 px-1.5 py-0.2 rounded text-[9px] bg-slate-200 text-slate-700 font-mono">PRIOR</span>' : ''}
-                        </div>
-                    </td>
-                    <td class="py-2.5 px-3 text-xs"><span class="px-2 py-0.5 rounded bg-gray-100 font-mono text-[11px] font-semibold text-slate-700">${escapeHtml(tb.currency)}</span></td>
-                    <td class="num-cell py-2.5 px-3 text-xs font-mono">${tb.row_count}</td>
-                    <td class="num-cell py-2.5 px-3 text-xs font-mono">${formatNum(tb.total_debit)}</td>
-                    <td class="num-cell py-2.5 px-3 text-xs font-mono">${formatNum(tb.total_credit)}</td>
-                    <td class="num-cell py-2.5 px-3 text-xs font-mono font-bold ${tb.is_tallied ? 'text-emerald-600' : 'text-red-600'}">${formatNum(tb.signed_sum)}</td>
-                    <td class="text-center py-2.5 px-3 text-xs">
-                        <span class="px-2.5 py-0.5 rounded text-[11px] font-semibold ${tb.is_tallied ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
-                            ${tb.is_tallied ? 'Tallied (0.00)' : 'Unbalanced'}
-                        </span>
-                    </td>
-                </tr>
-            `).join("");
         }
-    } else {
-        // Fallback when no perimeter is configured
-        rowsHtml = tbs.map(tb => `
+    } catch (e) {
+        console.error("Failed to fetch Step 1 approval state:", e);
+    }
+}
+
+function renderStep1(el) {
+    if (!step1ApprovalState) {
+        fetchStep1ApprovalState();
+        el.innerHTML = `
+            <div class="flex flex-col items-center justify-center h-64 space-y-3">
+                <div class="w-8 h-8 rounded-full border-3 border-kpmg-blue border-t-transparent animate-spin"></div>
+                <span class="text-xs text-slate-500 font-medium">Loading Step 1 Ingestion Workspace...</span>
+            </div>
+        `;
+        return;
+    }
+
+    const state = step1ApprovalState;
+    const isCompleted = appStatus.completed_steps && appStatus.completed_steps.includes(1);
+    const targetPeriod = state.target_period || (appStatus && appStatus.current_period) || "31-Mar-2024";
+    const repCurr = state.reporting_currency || "INR";
+    const thresholdVal = Math.round((appStatus.ai_confidence_threshold || 0.85) * 100);
+
+    // If already completed and user hasn't explicitly triggered re-ingestion edit mode
+    if (isCompleted && !window._step1ReIngestMode) {
+        const tbs = (pipelineData && pipelineData.raw_tbs) ? pipelineData.raw_tbs : [];
+        const rowsHtml = tbs.map(tb => `
             <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
-                <td class="font-bold text-kpmg-navy py-2 px-3 text-xs">
-                    ${escapeHtml(tb.entity_name || tb.entity_code)}
-                    <span class="ml-1 font-mono text-slate-400 font-normal">(${escapeHtml(tb.entity_code)})</span>
-                    ${tb.is_prior_period ? '<span class="ml-1 px-1.5 py-0.2 rounded text-[9px] bg-slate-200 text-slate-700 font-mono">PRIOR</span>' : ''}
+                <td class="py-2.5 px-3 text-xs">
+                    <div class="font-bold text-kpmg-navy text-[13px] leading-snug">${escapeHtml(tb.entity_name || tb.entity_code)}</div>
+                    <div class="flex items-center space-x-1.5 mt-0.5 text-[11px] text-slate-500">
+                        <span class="font-mono font-semibold">${escapeHtml(tb.entity_code)}</span>
+                        ${tb.is_prior_period ? '<span class="ml-1 px-1.5 py-0.2 rounded text-[9px] bg-slate-200 text-slate-700 font-mono">PRIOR</span>' : ''}
+                    </div>
                 </td>
-                <td class="py-2 px-3 text-xs"><span class="px-2 py-0.5 rounded bg-gray-100 font-mono text-[11px]">${escapeHtml(tb.currency)}</span></td>
-                <td class="num-cell py-2 px-3 text-xs font-mono">${tb.row_count}</td>
-                <td class="num-cell py-2 px-3 text-xs font-mono">${formatNum(tb.total_debit)}</td>
-                <td class="num-cell py-2 px-3 text-xs font-mono">${formatNum(tb.total_credit)}</td>
-                <td class="num-cell py-2 px-3 text-xs font-mono font-bold ${tb.is_tallied ? 'text-emerald-600' : 'text-red-600'}">${formatNum(tb.signed_sum)}</td>
-                <td class="text-center py-2 px-3 text-xs">
+                <td class="py-2.5 px-3 text-xs"><span class="px-2 py-0.5 rounded bg-slate-100 font-mono text-[11px] font-semibold text-slate-700">${escapeHtml(tb.currency)}</span></td>
+                <td class="num-cell py-2.5 px-3 text-xs font-mono">${tb.row_count}</td>
+                <td class="num-cell py-2.5 px-3 text-xs font-mono">${formatNum(tb.total_debit)}</td>
+                <td class="num-cell py-2.5 px-3 text-xs font-mono">${formatNum(tb.total_credit)}</td>
+                <td class="num-cell py-2.5 px-3 text-xs font-mono font-bold ${tb.is_tallied ? 'text-emerald-600' : 'text-red-600'}">${formatNum(tb.signed_sum)}</td>
+                <td class="text-center py-2.5 px-3 text-xs">
                     <span class="px-2.5 py-0.5 rounded text-[11px] font-semibold ${tb.is_tallied ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
                         ${tb.is_tallied ? 'Tallied (0.00)' : 'Unbalanced'}
                     </span>
                 </td>
             </tr>
         `).join("");
+
+        el.innerHTML = `
+            <div class="space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-kpmg-border pb-3">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h3 class="font-bold text-base text-kpmg-navy">Step 1: Ingestion Completed & Locked</h3>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">✓ Ingestion Locked</span>
+                        </div>
+                        <p class="text-xs text-kpmg-muted mt-0.5">All ${tbs.length} legal entities and exchange rates have been verified and ingested for ${escapeHtml(targetPeriod)}.</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="window._step1ReIngestMode = true; renderStep1(document.getElementById('step-content'))"
+                            class="h-8 px-3 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition border border-slate-300 btn-tactile cursor-pointer">
+                            Modify / Re-Ingest Files
+                        </button>
+                        <button onclick="switchStep(2)"
+                            class="h-8 px-4 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition shadow-xs btn-tactile cursor-pointer">
+                            Proceed to Mapping &rarr;
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto min-h-[420px] border border-kpmg-border rounded-lg bg-white shadow-2xs">
+                    <table class="fin-table">
+                        <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
+                            <tr>
+                                <th>Entity Name & Code</th>
+                                <th>Currency</th>
+                                <th class="num-cell">GL Accounts</th>
+                                <th class="num-cell">Total Debits</th>
+                                <th class="num-cell">Total Credits</th>
+                                <th class="num-cell">Signed Balance</th>
+                                <th class="text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        return;
     }
 
-    // Perimeter readiness strip
-    let readinessBanner = '';
-    if (hasPerimeter) {
-        const totalCount = perimeter.length;
-        const uploadedCount = totalCount - missingEntities.length;
-        const isComplete = missingEntities.length === 0;
+    // Helper: render an individual entity card
+    const renderEntityCard = (item) => {
+        const isMatched = item.matched;
+        const availableFiles = Object.keys(state.files_map || {});
+        const selectedFile = item.filename || (availableFiles.length > 0 ? availableFiles[0] : "");
+        const availableSheets = (state.files_map && state.files_map[selectedFile]) ? state.files_map[selectedFile] : ["Sheet1"];
+        const selectedSheet = item.sheet_name || availableSheets[0] || "Sheet1";
 
-        if (isComplete) {
-            readinessBanner = `
-                <div class="bg-emerald-50 border border-emerald-200/80 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-emerald-800">
-                    <div class="flex items-center space-x-2">
-                        <svg class="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span><strong class="font-semibold text-emerald-900">Perimeter Ingestion Complete:</strong> All ${totalCount} legal entities have valid ingested trial balances. Consolidation pipeline is ready to run.</span>
-                    </div>
-                    <span class="font-mono font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded self-start sm:self-auto">${uploadedCount} / ${totalCount} Ingested</span>
-                </div>
-            `;
+        // Status badge
+        let statusBadge = "";
+        if (!isMatched) {
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">Missing Upload</span>`;
+        } else if (item.date_status === "MISMATCH") {
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">Period Mismatch (${escapeHtml(item.detected_period || '')})</span>`;
+        } else if (item.date_status === "MULTI_PERIOD") {
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">Multi-Period Filtered</span>`;
+        } else if (item.classification_method === "DETERMINISTIC") {
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-kpmg-blue border border-blue-200">Deterministic (${Math.round(item.confidence * 100)}%)</span>`;
+        } else if (item.classification_method === "GEMINI_AI") {
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">AI Agent (${Math.round(item.confidence * 100)}%)</span>`;
         } else {
-            const missingDisplay = missingEntities.map(m => {
-                const ent = perimeter.find(p => p.entity_code === m);
-                return ent ? `${ent.entity_name || ent.entity_code} (${ent.entity_code})` : m;
-            }).join(", ");
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">Matched</span>`;
+        }
 
-            readinessBanner = `
-                <div class="bg-amber-50 border border-amber-200/80 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-amber-800">
-                    <div class="flex items-center space-x-2">
-                        <span class="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0 animate-pulse"></span>
-                        <span><strong class="font-semibold text-amber-900">Perimeter Incomplete:</strong> Missing trial balances for <strong>${escapeHtml(missingDisplay)}</strong>. All entities must be uploaded before consolidation can run.</span>
-                    </div>
-                    <div class="flex items-center space-x-2 self-start sm:self-auto">
-                        <span class="font-mono font-bold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded">${uploadedCount} / ${totalCount} Ready</span>
-                        <button onclick="openBatchUploadModal()" class="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-medium text-[11px] transition cursor-pointer btn-tactile">
-                            Upload Files
-                        </button>
+        const rolePill = item.is_parent
+            ? `<span class="px-1.5 py-0.2 rounded text-[10px] bg-blue-100 text-kpmg-blue font-semibold">PARENT</span>`
+            : `<span class="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 text-slate-600 font-medium">${item.holding_pct || 100}% OWNED</span>`;
+
+        // File options HTML
+        const fileOpts = availableFiles.map(fn => `<option value="${escapeHtml(fn)}" ${fn === selectedFile ? 'selected' : ''}>${escapeHtml(fn)}</option>`).join("");
+        // Sheet options HTML
+        const sheetOpts = availableSheets.map(sn => `<option value="${escapeHtml(sn)}" ${sn === selectedSheet ? 'selected' : ''}>${escapeHtml(sn)}</option>`).join("");
+
+        // Column inputs
+        const cols = item.detected_columns || {};
+        const codeCol = cols.account_code || "Account Code";
+        const descCol = cols.account_description || "Description";
+        const drCol = cols.debit || "Debit";
+        const crCol = cols.credit || "Credit";
+        const amtCol = cols.amount || "";
+
+        // Sample rows preview HTML
+        const previewRows = (item.sample_rows && item.sample_rows.length > 0) ? item.sample_rows : [];
+        let previewHtml = "";
+        if (previewRows.length > 0) {
+            previewHtml = `
+                <div class="mt-2.5 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="toggleCardPreview('${escapeHtml(item.entity_code)}')"
+                        class="text-[11px] font-medium text-kpmg-blue hover:text-kpmg-navy flex items-center space-x-1 cursor-pointer">
+                        <span>Preview Extracted Data (${previewRows.length} sample rows)</span>
+                        <svg class="w-3 h-3 transform transition-transform" id="preview-chevron-${escapeHtml(item.entity_code)}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                    <div id="preview-tray-${escapeHtml(item.entity_code)}" class="hidden mt-2 overflow-x-auto border border-slate-200 rounded bg-slate-50/70 p-2 text-[10px] font-mono">
+                        <table class="w-full text-left">
+                            <tbody>
+                                ${previewRows.map((r, rIdx) => `
+                                    <tr class="${rIdx === 0 ? 'font-bold text-slate-800 border-b border-slate-300' : 'text-slate-600 border-b border-slate-200/60'}">
+                                        ${r.map(c => `<td class="py-1 px-1.5 whitespace-nowrap">${escapeHtml(String(c))}</td>`).join("")}
+                                    </tr>
+                                `).join("")}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             `;
         }
+
+        return `
+            <div class="bg-white border ${isMatched ? 'border-slate-200' : 'border-amber-300 bg-amber-50/20'} rounded-xl p-4 shadow-2xs space-y-3 transition hover:border-slate-300">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h4 class="font-bold text-sm text-kpmg-navy leading-snug">${escapeHtml(item.entity_name)}</h4>
+                            <span class="font-mono text-xs text-slate-400">(${escapeHtml(item.entity_code)})</span>
+                            ${rolePill}
+                            <span class="px-1.5 py-0.2 rounded bg-slate-100 font-mono text-[10px] font-semibold text-slate-700">${escapeHtml(item.currency)}</span>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-0.5">${escapeHtml(item.reasoning || '')}</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        ${statusBadge}
+                        ${!isMatched ? `
+                            <button onclick="openSingleUploadModal('${escapeHtml(item.entity_code)}', '${escapeHtml(item.entity_name)}')"
+                                class="h-7 px-2.5 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition btn-tactile cursor-pointer shadow-xs">
+                                Upload File
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+
+                ${isMatched ? `
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 text-xs">
+                        <div class="lg:col-span-2 space-y-1">
+                            <label class="block text-[11px] font-semibold text-slate-700">Source Document</label>
+                            <select onchange="onApprovalFileChange('${escapeHtml(item.entity_code)}', this.value)"
+                                class="w-full h-8 px-2 rounded-lg border border-slate-300 bg-slate-50 text-xs font-mono font-medium text-slate-800 focus:bg-white focus:border-kpmg-blue focus:outline-none transition cursor-pointer">
+                                ${fileOpts}
+                            </select>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="block text-[11px] font-semibold text-slate-700">Target Sheet</label>
+                            <select onchange="onApprovalSheetChange('${escapeHtml(item.entity_code)}', this.value)"
+                                class="w-full h-8 px-2 rounded-lg border border-slate-300 bg-slate-50 text-xs font-mono font-medium text-slate-800 focus:bg-white focus:border-kpmg-blue focus:outline-none transition cursor-pointer">
+                                ${sheetOpts}
+                            </select>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="block text-[11px] font-semibold text-slate-700">Account Code Col</label>
+                            <input type="text" value="${escapeHtml(codeCol)}" onchange="onApprovalColChange('${escapeHtml(item.entity_code)}', 'account_code', this.value)"
+                                class="w-full h-8 px-2 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:border-kpmg-blue focus:outline-none transition">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="block text-[11px] font-semibold text-slate-700">Description Col</label>
+                            <input type="text" value="${escapeHtml(descCol)}" onchange="onApprovalColChange('${escapeHtml(item.entity_code)}', 'account_description', this.value)"
+                                class="w-full h-8 px-2 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:border-kpmg-blue focus:outline-none transition">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="block text-[11px] font-semibold text-slate-700">Debit / Credit / Net</label>
+                            <div class="flex items-center space-x-1">
+                                <input type="text" title="Debit Column" placeholder="Dr" value="${escapeHtml(drCol)}" onchange="onApprovalColChange('${escapeHtml(item.entity_code)}', 'debit', this.value)"
+                                    class="w-1/2 h-8 px-1.5 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:border-kpmg-blue focus:outline-none transition">
+                                <input type="text" title="Credit Column" placeholder="Cr" value="${escapeHtml(crCol)}" onchange="onApprovalColChange('${escapeHtml(item.entity_code)}', 'credit', this.value)"
+                                    class="w-1/2 h-8 px-1.5 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:border-kpmg-blue focus:outline-none transition">
+                            </div>
+                        </div>
+                    </div>
+                    ${previewHtml}
+                ` : `
+                    <div class="p-3 bg-amber-50/60 rounded-lg text-xs text-amber-800 flex items-center justify-between">
+                        <span>No trial balance matched for <strong>${escapeHtml(item.entity_name)}</strong>. Please upload its trial balance or select an existing workbook sheet.</span>
+                    </div>
+                `}
+            </div>
+        `;
+    };
+
+    // Render FX card
+    const fx = state.fx_rates || {};
+    const fxMatched = fx.matched;
+    const fxAvailableFiles = Object.keys(state.files_map || {});
+    const fxSelectedFile = fx.filename || (fxAvailableFiles.length > 0 ? fxAvailableFiles[0] : "");
+    const fxAvailableSheets = (state.files_map && state.files_map[fxSelectedFile]) ? state.files_map[fxSelectedFile] : ["Sheet1"];
+    const fxSelectedSheet = fx.sheet_name || fxAvailableSheets[0] || "Sheet1";
+
+    const fxFileOpts = fxAvailableFiles.map(fn => `<option value="${escapeHtml(fn)}" ${fn === fxSelectedFile ? 'selected' : ''}>${escapeHtml(fn)}</option>`).join("");
+    const fxSheetOpts = fxAvailableSheets.map(sn => `<option value="${escapeHtml(sn)}" ${sn === fxSelectedSheet ? 'selected' : ''}>${escapeHtml(sn)}</option>`).join("");
+
+    const fxCols = fx.detected_columns || {};
+    const fxRates = fx.rates_preview || [];
+
+    const fxCardHtml = `
+        <div class="bg-white border ${fxMatched ? 'border-slate-200' : 'border-amber-300 bg-amber-50/20'} rounded-xl p-4 shadow-2xs space-y-3 transition hover:border-slate-300">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h4 class="font-bold text-sm text-kpmg-navy leading-snug">Exchange Rates Schedule (Mandatory)</h4>
+                        <span class="px-1.5 py-0.2 rounded bg-blue-100 text-kpmg-blue font-semibold text-[10px]">FX RATES</span>
+                        <span class="font-mono text-xs text-slate-400">Effective: ${escapeHtml(targetPeriod)}</span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-0.5">${escapeHtml(fx.reasoning || 'Closing, average, and swap rates for foreign subsidiary translation in Step 3.')}</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    ${fxMatched ? `
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            ${fx.is_existing ? 'Profile Master FX' : 'Detected FX Table'}
+                        </span>
+                    ` : `
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">Missing FX Rates</span>
+                        <button onclick="openSingleUploadModal('FX_RATES', 'Exchange Rates Table')"
+                            class="h-7 px-2.5 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition btn-tactile cursor-pointer shadow-xs">
+                            Upload FX File
+                        </button>
+                    `}
+                </div>
+            </div>
+
+            ${fxMatched ? `
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 text-xs">
+                    <div class="lg:col-span-2 space-y-1">
+                        <label class="block text-[11px] font-semibold text-slate-700">Source Document</label>
+                        <select onchange="onApprovalFileChange('FX_RATES', this.value)"
+                            class="w-full h-8 px-2 rounded-lg border border-slate-300 bg-slate-50 text-xs font-mono font-medium text-slate-800 focus:bg-white focus:border-kpmg-blue focus:outline-none transition cursor-pointer">
+                            ${fxFileOpts}
+                        </select>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="block text-[11px] font-semibold text-slate-700">Target Sheet</label>
+                        <select onchange="onApprovalSheetChange('FX_RATES', this.value)"
+                            class="w-full h-8 px-2 rounded-lg border border-slate-300 bg-slate-50 text-xs font-mono font-medium text-slate-800 focus:bg-white focus:border-kpmg-blue focus:outline-none transition cursor-pointer">
+                            ${fxSheetOpts}
+                        </select>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="block text-[11px] font-semibold text-slate-700">Closing Rate Col</label>
+                        <input type="text" value="${escapeHtml(fxCols.closing_rate || 'Closing')}" onchange="onApprovalColChange('FX_RATES', 'closing_rate', this.value)"
+                            class="w-full h-8 px-2 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:border-kpmg-blue focus:outline-none transition">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="block text-[11px] font-semibold text-slate-700">Average Rate Col</label>
+                        <input type="text" value="${escapeHtml(fxCols.average_rate || 'Average')}" onchange="onApprovalColChange('FX_RATES', 'average_rate', this.value)"
+                            class="w-full h-8 px-2 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:border-kpmg-blue focus:outline-none transition">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="block text-[11px] font-semibold text-slate-700">Historical / Swap</label>
+                        <input type="text" value="${escapeHtml(fxCols.historical_rate || 'Historical')}" onchange="onApprovalColChange('FX_RATES', 'historical_rate', this.value)"
+                            class="w-full h-8 px-2 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:border-kpmg-blue focus:outline-none transition">
+                    </div>
+                </div>
+
+                ${fxRates.length > 0 ? `
+                    <div class="mt-2.5 pt-2 border-t border-slate-100 overflow-x-auto">
+                        <span class="text-[11px] font-semibold text-slate-700 block mb-1.5">Effective Exchange Rates Preview (${fxRates.length} pairs):</span>
+                        <div class="flex flex-wrap gap-2">
+                            ${fxRates.map(r => `
+                                <div class="px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200/80 text-xs font-mono space-x-1">
+                                    <strong class="text-kpmg-navy font-bold">${escapeHtml(r.from_currency)} &rarr; ${escapeHtml(r.to_currency)}</strong>:
+                                    <span class="text-slate-600">Close: ${r.closing_rate}</span> •
+                                    <span class="text-slate-600">Avg: ${r.average_rate}</span> •
+                                    <span class="text-slate-600">Hist: ${r.historical_rate}</span>
+                                    ${r.swap_rate != null ? ` • <span class="text-slate-600">Swap: ${r.swap_rate}</span>` : ''}
+                                </div>
+                            `).join("")}
+                        </div>
+                    </div>
+                ` : ''}
+            ` : `
+                <div class="p-3 bg-amber-50/60 rounded-lg text-xs text-amber-800 flex items-center justify-between">
+                    <span>No exchange rates found for period <strong>${escapeHtml(targetPeriod)}</strong>. Step 3 Translation requires FX rates for all foreign subsidiaries.</span>
+                </div>
+            `}
+        </div>
+    `;
+
+    // Unassigned extra sheets tray
+    const unassigned = state.unassigned_items || [];
+    let unassignedHtml = "";
+    if (unassigned.length > 0) {
+        unassignedHtml = `
+            <details class="bg-slate-50 border border-slate-200/90 rounded-xl p-3 text-xs select-none">
+                <summary class="font-bold text-slate-700 cursor-pointer flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                        <span>Unassigned / Extra Sheets & Documents (${unassigned.length}) — <span class="text-slate-500 font-normal">Marked as Ignored</span></span>
+                    </div>
+                    <span class="text-[11px] text-kpmg-blue font-semibold hover:underline">View details</span>
+                </summary>
+                <div class="mt-3 space-y-2 pt-2 border-t border-slate-200/70">
+                    ${unassigned.map(u => `
+                        <div class="p-2.5 rounded bg-white border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                            <div>
+                                <span class="font-bold text-slate-800">${escapeHtml(u.filename)}</span>
+                                ${u.sheet_name ? `<span class="text-slate-400 font-mono"> &bull; Sheet: [${escapeHtml(u.sheet_name)}]</span>` : ''}
+                                <span class="text-slate-500 block text-[11px]">${escapeHtml(u.reasoning)}</span>
+                            </div>
+                            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px] self-start sm:self-auto">IGNORED</span>
+                        </div>
+                    `).join("")}
+                </div>
+            </details>
+        `;
     }
 
+    const isReadyToConfirm = state.is_ready_to_confirm;
+    const parentCardHtml = state.parent ? renderEntityCard(state.parent) : "";
+    const subsCardsHtml = (state.subsidiaries || []).map(s => renderEntityCard(s)).join("");
+
     el.innerHTML = `
-        <div class="space-y-4">
+        <div class="space-y-6">
+            <!-- 1. Page Header & Actions Toolbar -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-kpmg-border pb-3">
                 <div>
-                    <h3 class="font-bold text-base text-kpmg-navy">Ingested Entity Submissions</h3>
-                    <p class="text-xs text-kpmg-muted">Deterministic & Gemini Agentic Brain pipeline with dynamic currency parsing and perimeter verification.</p>
+                    <h3 class="font-bold text-base text-kpmg-navy">Step 1: Document Ingestion & Perimeter Review</h3>
+                    <p class="text-xs text-kpmg-muted">Upload dump files or a multi-sheet workbook. Dual-engine intelligence automatically identifies sheets, legal entities, and financial columns.</p>
                 </div>
-                <div class="flex items-center space-x-1.5">
-                    <!-- Ghost Upload Icon Button -->
-                    <button onclick="openBatchUploadModal()"
-                        class="w-8 h-8 rounded text-slate-500 hover:text-kpmg-blue hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none"
-                        title="Upload Trial Balance Files">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
-                    </button>
-
-                    <!-- Ghost Reset Icon Button -->
+                <div class="flex items-center space-x-2">
                     <button onclick="triggerResetBaseline()"
-                        class="w-8 h-8 rounded text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none"
-                        title="Reset Workspace">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="h-8 px-3 rounded bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-200 text-xs font-medium transition flex items-center space-x-1.5 btn-tactile cursor-pointer"
+                        title="Reset to Clean Baseline">
+                        <svg class="w-3.5 h-3.5 text-slate-400 hover:text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
-                    </button>
-
-                    <!-- Run Consolidation Primary Action Button -->
-                    <button id="btn-run-pipeline" onclick="triggerRunPipeline()"
-                        class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
-                        title="Run Consolidation">
-                        <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>Run Consolidation</span>
+                        <span>Reset Baseline</span>
                     </button>
                 </div>
             </div>
 
-            ${readinessBanner}
+            <!-- 2. Embedded Batch Upload Dropzone with Dual-Engine Checkboxes -->
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+                <div id="step1-drop-zone" class="luxury-dropzone p-6 text-center cursor-pointer transition select-none"
+                    onclick="document.getElementById('step1-batch-file-input').click()">
+                    <svg class="mx-auto h-9 w-9 text-kpmg-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <p class="mt-2 text-xs font-semibold text-slate-800" id="step1-drop-label">
+                        Drop batch dump files here or click to browse
+                    </p>
+                    <p class="text-[11px] text-slate-500 mt-0.5">
+                        Accepts multiple Excel (.xlsx, .xls) and CSV files, or a single multi-sheet workbook.
+                    </p>
+                    <input id="step1-batch-file-input" type="file" multiple accept=".xlsx,.xls,.csv" class="hidden"
+                        onclick="event.stopPropagation()" onchange="handleStep1FilesChosen(this)">
+                </div>
 
-            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-280px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
-                <table class="fin-table">
-                    <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
-                        <tr>
-                            <th>Entity Name & Code</th>
-                            <th>Currency</th>
-                            <th class="num-cell">GL Accounts</th>
-                            <th class="num-cell">Total Debits</th>
-                            <th class="num-cell">Total Credits</th>
-                            <th class="num-cell">Signed Balance</th>
-                            <th class="text-center">Validation Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rowsHtml || '<tr><td colspan="7" class="p-8 text-center text-kpmg-muted">No trial balances ingested yet. Upload files above.</td></tr>'}</tbody>
-                </table>
+                <!-- Selected Files Chips -->
+                <div id="step1-selected-chips" class="hidden flex flex-wrap gap-2 pt-1"></div>
+
+                <!-- Dual-Engine Switch Bar -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200/90 text-xs select-none">
+                    <div class="flex items-center space-x-5">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" id="step1-chk-deterministic" checked class="w-4 h-4 rounded text-kpmg-blue accent-kpmg-blue cursor-pointer">
+                            <span class="font-semibold text-slate-800">Check deterministic</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" id="step1-chk-ai-agents" checked class="w-4 h-4 rounded text-kpmg-blue accent-kpmg-blue cursor-pointer">
+                            <span class="font-semibold text-slate-800">AI agents</span>
+                        </label>
+                        <span class="text-slate-300 hidden sm:inline">•</span>
+                        <span class="text-[11px] text-slate-500">
+                            Confidence Threshold: <strong class="text-kpmg-blue font-mono font-bold">${thresholdVal}%</strong>
+                        </span>
+                    </div>
+
+                    <button id="btn-step1-process" onclick="processStep1DropFiles()"
+                        class="h-8 px-4 rounded-lg bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer">
+                        <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        <span>Process Documents</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. Perimeter Approval & Mapping Review View -->
+            <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="font-bold text-sm text-kpmg-navy">Perimeter Ingestion Approval</h4>
+                        <p class="text-xs text-slate-500">Review mapped sheets and standardized accounting columns. All entities must be verified before proceeding.</p>
+                    </div>
+                </div>
+
+                <!-- Parent Entity Card -->
+                ${parentCardHtml}
+
+                <!-- Subsidiary Entity Cards -->
+                ${subsCardsHtml}
+
+                <!-- Mandatory FX Rates Card -->
+                ${fxCardHtml}
+
+                <!-- Unassigned Extra Sheets Tray -->
+                ${unassignedHtml}
+            </div>
+
+            <!-- 4. Bottom Approval Action Bar -->
+            <div class="p-4 rounded-xl ${isReadyToConfirm ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50 border border-slate-200'} flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition">
+                <div class="flex items-center space-x-2 text-xs">
+                    ${isReadyToConfirm ? `
+                        <svg class="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span class="text-emerald-900 font-semibold">Perimeter Ingestion Complete: All legal entities and exchange rates have verified sources.</span>
+                    ` : `
+                        <svg class="w-5 h-5 text-amber-500 flex-shrink-0 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span class="text-amber-900 font-medium">Incomplete Perimeter: Please upload files for missing entities or exchange rates above before locking Step 1.</span>
+                    `}
+                </div>
+
+                <button id="btn-approve-step1" onclick="confirmStep1Ingestion()" ${isReadyToConfirm ? '' : 'disabled'}
+                    class="h-10 px-6 rounded-lg ${isReadyToConfirm ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer' : 'bg-slate-200 text-slate-400 cursor-not-allowed pointer-events-none'} text-xs font-semibold transition-all duration-150 flex items-center space-x-2 shadow-xs btn-tactile">
+                    <span>Approve & Confirm Ingestion (Unlock Step 2)</span>
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                </button>
             </div>
         </div>
     `;
+
+    initStep1DropZone();
+}
+
+function initStep1DropZone() {
+    const dropZone = document.getElementById("step1-drop-zone");
+    if (!dropZone) return;
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        if (dt.files && dt.files.length > 0) {
+            step1SelectedFiles = Array.from(dt.files);
+            renderStep1SelectedChips();
+        }
+    }, false);
+}
+
+function handleStep1FilesChosen(input) {
+    if (input.files && input.files.length > 0) {
+        step1SelectedFiles = Array.from(input.files);
+        renderStep1SelectedChips();
+    }
+}
+
+function renderStep1SelectedChips() {
+    const chipsContainer = document.getElementById("step1-selected-chips");
+    const label = document.getElementById("step1-drop-label");
+    if (!chipsContainer || !label) return;
+
+    if (step1SelectedFiles.length === 0) {
+        chipsContainer.classList.add("hidden");
+        chipsContainer.innerHTML = "";
+        label.textContent = "Drop batch dump files here or click to browse";
+        return;
+    }
+
+    chipsContainer.classList.remove("hidden");
+    label.textContent = `${step1SelectedFiles.length} file(s) selected. Ready to process.`;
+    chipsContainer.innerHTML = step1SelectedFiles.map((f, i) => `
+        <span class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-blue-50 border border-blue-200 text-xs font-mono text-kpmg-navy">
+            <span>${escapeHtml(f.name)} (${(f.size / 1024).toFixed(1)} KB)</span>
+            <button type="button" onclick="removeStep1File(${i})" class="text-slate-400 hover:text-rose-600 font-bold ml-1 cursor-pointer">&times;</button>
+        </span>
+    `).join("");
+}
+
+function removeStep1File(index) {
+    step1SelectedFiles.splice(index, 1);
+    renderStep1SelectedChips();
+}
+
+async function processStep1DropFiles() {
+    if (!step1SelectedFiles || step1SelectedFiles.length === 0) {
+        showToast("No Files Selected", "Please select or drop at least one file to process.", "warning");
+        return;
+    }
+
+    const chkDet = document.getElementById("step1-chk-deterministic");
+    const chkAI = document.getElementById("step1-chk-ai-agents");
+    const useDet = chkDet ? chkDet.checked : true;
+    const useAI = chkAI ? chkAI.checked : true;
+
+    const btn = document.getElementById("btn-step1-process");
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full mr-1.5"></span><span>Classifying ${step1SelectedFiles.length} File(s)...</span>`;
+    }
+
+    const formData = new FormData();
+    step1SelectedFiles.forEach(f => formData.append("files", f));
+    formData.append("use_deterministic", useDet ? "true" : "false");
+    formData.append("use_ai", useAI ? "true" : "false");
+
+    const targetPeriod = (step1ApprovalState && step1ApprovalState.target_period) || (appStatus && appStatus.current_period) || "";
+    if (targetPeriod) formData.append("period", targetPeriod);
+
+    try {
+        const res = await fetch("/api/upload-batch", {
+            method: "POST",
+            body: formData
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            step1ApprovalState = data.approval_state;
+            step1SelectedFiles = [];
+            showToast("Documents Processed", `Classified ${data.total_files} file(s) across perimeter entities.`, "success");
+            const container = document.getElementById("step-content");
+            if (container) renderStep1(container);
+        } else {
+            showToast("Processing Error", data.detail || "Failed to process uploaded files.", "error");
+        }
+    } catch (err) {
+        showToast("Network Error", "Batch upload failed: " + err, "error");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<span>Process Documents</span>`;
+        }
+    }
+}
+
+function toggleCardPreview(entityCode) {
+    const tray = document.getElementById(`preview-tray-${entityCode}`);
+    const chev = document.getElementById(`preview-chevron-${entityCode}`);
+    if (!tray) return;
+    tray.classList.toggle("hidden");
+    if (chev) {
+        chev.classList.toggle("rotate-180");
+    }
+}
+
+function onApprovalFileChange(entityCode, filename) {
+    if (!step1ApprovalState) return;
+    const sheets = (step1ApprovalState.files_map && step1ApprovalState.files_map[filename]) ? step1ApprovalState.files_map[filename] : ["Sheet1"];
+
+    if (entityCode === "PARENT" && step1ApprovalState.parent) {
+        step1ApprovalState.parent.filename = filename;
+        step1ApprovalState.parent.sheet_name = sheets[0] || "Sheet1";
+        step1ApprovalState.parent.matched = true;
+    } else if (entityCode === "FX_RATES" && step1ApprovalState.fx_rates) {
+        step1ApprovalState.fx_rates.filename = filename;
+        step1ApprovalState.fx_rates.sheet_name = sheets[0] || "Sheet1";
+        step1ApprovalState.fx_rates.matched = true;
+    } else if (step1ApprovalState.subsidiaries) {
+        const sub = step1ApprovalState.subsidiaries.find(s => s.entity_code === entityCode);
+        if (sub) {
+            sub.filename = filename;
+            sub.sheet_name = sheets[0] || "Sheet1";
+            sub.matched = true;
+        }
+    }
+    const container = document.getElementById("step-content");
+    if (container) renderStep1(container);
+}
+
+function onApprovalSheetChange(entityCode, sheetName) {
+    if (!step1ApprovalState) return;
+    if (entityCode === "PARENT" && step1ApprovalState.parent) {
+        step1ApprovalState.parent.sheet_name = sheetName;
+    } else if (entityCode === "FX_RATES" && step1ApprovalState.fx_rates) {
+        step1ApprovalState.fx_rates.sheet_name = sheetName;
+    } else if (step1ApprovalState.subsidiaries) {
+        const sub = step1ApprovalState.subsidiaries.find(s => s.entity_code === entityCode);
+        if (sub) sub.sheet_name = sheetName;
+    }
+}
+
+function onApprovalColChange(entityCode, role, colName) {
+    if (!step1ApprovalState) return;
+    let target = null;
+    if (entityCode === "PARENT") target = step1ApprovalState.parent;
+    else if (entityCode === "FX_RATES") target = step1ApprovalState.fx_rates;
+    else if (step1ApprovalState.subsidiaries) target = step1ApprovalState.subsidiaries.find(s => s.entity_code === entityCode);
+
+    if (target) {
+        if (!target.detected_columns) target.detected_columns = {};
+        target.detected_columns[role] = colName.trim();
+    }
+}
+
+async function confirmStep1Ingestion() {
+    if (!step1ApprovalState) return;
+
+    const btn = document.getElementById("btn-approve-step1");
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full mr-1.5"></span><span>Verifying & Locking Step 1...</span>`;
+    }
+
+    const payload = {
+        entities: [],
+        fx_rates: null
+    };
+
+    if (step1ApprovalState.parent && step1ApprovalState.parent.filename) {
+        payload.entities.push({
+            entity_code: step1ApprovalState.parent.entity_code,
+            filename: step1ApprovalState.parent.filename,
+            sheet_name: step1ApprovalState.parent.sheet_name,
+            columns: step1ApprovalState.parent.detected_columns || {}
+        });
+    }
+
+    if (step1ApprovalState.subsidiaries) {
+        step1ApprovalState.subsidiaries.forEach(s => {
+            if (s.filename) {
+                payload.entities.push({
+                    entity_code: s.entity_code,
+                    filename: s.filename,
+                    sheet_name: s.sheet_name,
+                    columns: s.detected_columns || {}
+                });
+            }
+        });
+    }
+
+    if (step1ApprovalState.fx_rates && step1ApprovalState.fx_rates.filename) {
+        payload.fx_rates = {
+            filename: step1ApprovalState.fx_rates.filename,
+            sheet_name: step1ApprovalState.fx_rates.sheet_name,
+            columns: step1ApprovalState.fx_rates.detected_columns || {}
+        };
+    }
+
+    try {
+        const res = await fetch("/api/pipeline/confirm-ingestion", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            window._step1ReIngestMode = false;
+            showToast("Ingestion Approved", "Step 1 locked with green checkmark. Step 2 (Mapping) is now unlocked.", "success");
+            await fetchStatus();
+            await loadPipelineData();
+            switchStep(2);
+        } else {
+            showToast("Approval Failed", data.detail || "Cannot close Step 1 until all entities are uploaded.", "error");
+        }
+    } catch (err) {
+        showToast("Network Error", "Confirmation failed: " + err, "error");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<span>Approve & Confirm Ingestion (Unlock Step 2)</span>`;
+        }
+    }
+}
+
+// Single Entity Upload Modal Functions
+function openSingleUploadModal(entityCode, entityName) {
+    selectedSingleUploadEntity = entityCode;
+    selectedSingleFile = null;
+
+    const modal = document.getElementById("modal-single-upload");
+    const title = document.getElementById("single-upload-title");
+    const desc = document.getElementById("single-upload-desc");
+    const codeInput = document.getElementById("single-upload-entity-code");
+    const label = document.getElementById("single-file-label");
+    const fileInput = document.getElementById("single-file-input");
+
+    if (fileInput) fileInput.value = "";
+    if (codeInput) codeInput.value = entityCode;
+    if (label) label.textContent = "Choose file or drag here";
+    if (title) title.textContent = `Upload Document for ${entityName}`;
+    if (desc) desc.textContent = entityCode === "FX_RATES" ? "Upload an Excel or CSV file containing exchange rates table." : `Upload an Excel or CSV trial balance specifically for ${entityName} (${entityCode}).`;
+
+    if (modal) modal.classList.remove("hidden");
+}
+
+function closeSingleUploadModal() {
+    const modal = document.getElementById("modal-single-upload");
+    if (modal) modal.classList.add("hidden");
+    selectedSingleUploadEntity = null;
+    selectedSingleFile = null;
+}
+
+function handleSingleFileSelected(input) {
+    if (input.files && input.files.length > 0) {
+        selectedSingleFile = input.files[0];
+        const label = document.getElementById("single-file-label");
+        if (label) label.textContent = `${selectedSingleFile.name} (${(selectedSingleFile.size / 1024).toFixed(1)} KB)`;
+    }
+}
+
+async function submitSingleUpload(e) {
+    e.preventDefault();
+    if (!selectedSingleFile || !selectedSingleUploadEntity) {
+        showToast("Missing File", "Please select a file to upload.", "warning");
+        return;
+    }
+
+    const btn = document.getElementById("btn-submit-single");
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>Uploading...</span>`;
+    }
+
+    const formData = new FormData();
+    formData.append("file", selectedSingleFile);
+    formData.append("entity_code", selectedSingleUploadEntity);
+
+    const targetPeriod = (step1ApprovalState && step1ApprovalState.target_period) || (appStatus && appStatus.current_period) || "";
+    if (targetPeriod) formData.append("period", targetPeriod);
+
+    try {
+        const res = await fetch("/api/pipeline/single-entity-upload", {
+            method: "POST",
+            body: formData
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            step1ApprovalState = data.approval_state;
+            closeSingleUploadModal();
+            showToast("File Uploaded", `Successfully mapped document for ${selectedSingleUploadEntity}.`, "success");
+            const container = document.getElementById("step-content");
+            if (container) renderStep1(container);
+        } else {
+            showToast("Upload Error", data.detail || "Failed to upload file.", "error");
+        }
+    } catch (err) {
+        showToast("Network Error", "Single upload failed: " + err, "error");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<span>Upload & Map</span>`;
+        }
+    }
 }
 
 // STEP 2: COA MAPPING
@@ -2696,6 +3277,11 @@ async function submitBatchUpload(e) {
     }
 
     const period = document.getElementById("batch-upload-period").value.trim();
+    const chkDet = document.getElementById("modal-chk-deterministic");
+    const chkAI = document.getElementById("modal-chk-ai-agents");
+    const useDet = chkDet ? chkDet.checked : true;
+    const useAI = chkAI ? chkAI.checked : true;
+
     const btn = document.getElementById("btn-submit-batch");
     btn.disabled = true;
     btn.innerHTML = `<span>Ingesting & Classifying ${selectedBatchFiles.length} files...</span>`;
@@ -2703,6 +3289,8 @@ async function submitBatchUpload(e) {
     const formData = new FormData();
     selectedBatchFiles.forEach(f => formData.append("files", f));
     if (period) formData.append("period", period);
+    formData.append("use_deterministic", useDet ? "true" : "false");
+    formData.append("use_ai", useAI ? "true" : "false");
 
     try {
         const res = await fetch("/api/upload-batch", {
@@ -2712,16 +3300,15 @@ async function submitBatchUpload(e) {
         const data = await res.json();
         if (res.ok && data.success) {
             closeBatchUploadModal();
-            if (data.needs_review && data.pending_reviews && data.pending_reviews.length > 0) {
-                openHITLMappingModal(data.pending_reviews);
-                await fetchStatus();
-                await loadPipelineData();
-                return;
+            if (data.approval_state) {
+                step1ApprovalState = data.approval_state;
             }
-            showToast("Batch Ingested", `Successfully classified and ingested ${data.total_files} file(s): ${data.ingested_tbs.length} TBs, ${data.ingested_fx} FX tables, ${data.ingested_ic_pairs} IC pairs.`, "success");
+            showToast("Batch Processed", `Successfully classified ${data.total_files} file(s) across perimeter entities.`, "success");
             await fetchStatus();
             await loadPipelineData();
             switchStep(1);
+            const container = document.getElementById("step-content");
+            if (container) renderStep1(container);
         } else {
             showToast("Batch Ingestion Error", data.detail || "Failed to process files.", "error");
         }

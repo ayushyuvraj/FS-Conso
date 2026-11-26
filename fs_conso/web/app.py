@@ -96,12 +96,16 @@ class SessionManager:
         self.is_running: bool = False
         self.current_stage: Optional[str] = None
         self.current_node: Optional[str] = None
+        self.pending_approval_state: Optional[Dict[str, Any]] = None
+        self.cached_file_bytes: Dict[str, bytes] = {}
         companies = company_manager.list_companies()
         if companies:
             self.initialize_company(companies[0]["company_id"], load_samples=False)
             self.is_launcher_active = True
 
     def initialize_company(self, company_id: Optional[str], load_samples: bool = False):
+        self.pending_approval_state = None
+        self.cached_file_bytes = {}
         if not company_id:
             self.active_company_id = None
             self.active_run_id = None
@@ -684,158 +688,436 @@ async def import_master_workbook(
 
 # --- Batch Upload & Agentic Ingestion ---
 
+def build_perimeter_approval_state(
+    classified_files: List[ClassifiedFile],
+    files_map: Dict[str, List[str]],
+    prof: Any,
+    target_period: str
+) -> Dict[str, Any]:
+    """Constructs a unified, editable Perimeter Ingestion Approval payload."""
+    hierarchy = prof.entity_hierarchy or EntityHierarchy(parent_code=prof.company_code or prof.company_id)
+    parent_code = hierarchy.parent_code or (prof.company_code or prof.company_id)
+    parent_ent = hierarchy.get_entity(parent_code)
+    parent_name = parent_ent.entity_name if parent_ent else (prof.company_name or parent_code)
+    parent_curr = parent_ent.input_currency if parent_ent else prof.reporting_currency
+
+    subsidiary_entities = [e for e in hierarchy.entities.values() if e.entity_code != parent_code]
+
+    tb_map: Dict[str, ClassifiedFile] = {}
+    fx_item: Optional[ClassifiedFile] = None
+    unassigned_items: List[Dict[str, Any]] = []
+
+    for cf in classified_files:
+        if cf.file_type in ("CURRENT_TB", "PRIOR_TB") and cf.entity_code:
+            code_upper = cf.entity_code.upper()
+            if code_upper not in tb_map or cf.confidence > tb_map[code_upper].confidence:
+                tb_map[code_upper] = cf
+        elif cf.file_type == "FX_RATES":
+            if not fx_item or cf.confidence > fx_item.confidence:
+                fx_item = cf
+        else:
+            unassigned_items.append({
+                "filename": cf.filename,
+                "sheet_name": cf.sheet_name or "",
+                "reasoning": cf.reasoning or "Unassigned extra sheet / document",
+                "sample_rows": cf.sample_rows[:5]
+            })
+
+    # 1. Parent card
+    parent_cf = tb_map.get(parent_code.upper())
+    parent_matched = parent_cf is not None
+    parent_obj = {
+        "entity_code": parent_code,
+        "entity_name": parent_name,
+        "is_parent": True,
+        "currency": parent_curr,
+        "holding_pct": 100.0,
+        "matched": parent_matched,
+        "filename": parent_cf.filename if parent_cf else "",
+        "sheet_name": parent_cf.sheet_name if parent_cf else (files_map.get(parent_cf.filename, ["Sheet1"])[0] if parent_cf and files_map.get(parent_cf.filename) else ""),
+        "detected_columns": parent_cf.detected_columns if parent_cf else {
+            "account_code": "Account Code", "account_description": "Description", "debit": "Debit", "credit": "Credit"
+        },
+        "sample_rows": parent_cf.sample_rows if parent_cf else [],
+        "confidence": parent_cf.confidence if parent_cf else 0.0,
+        "classification_method": parent_cf.classification_method if parent_cf else "NONE",
+        "date_status": parent_cf.date_status if parent_cf else "MATCH",
+        "detected_period": parent_cf.detected_period if parent_cf else target_period,
+        "needs_review": parent_cf.needs_review if parent_cf else True,
+        "reasoning": parent_cf.reasoning if parent_cf else "Trial balance not yet uploaded."
+    }
+
+    # 2. Subsidiaries cards
+    subs_list = []
+    for sub in subsidiary_entities:
+        sub_cf = tb_map.get(sub.entity_code.upper())
+        sub_matched = sub_cf is not None
+        holding_pct = round(float(sub.holding_percentage or 1.0) * 100, 2)
+        subs_list.append({
+            "entity_code": sub.entity_code,
+            "entity_name": sub.entity_name or sub.entity_code,
+            "is_parent": False,
+            "currency": sub.input_currency or prof.reporting_currency,
+            "holding_pct": holding_pct,
+            "matched": sub_matched,
+            "filename": sub_cf.filename if sub_cf else "",
+            "sheet_name": sub_cf.sheet_name if sub_cf else (files_map.get(sub_cf.filename, ["Sheet1"])[0] if sub_cf and files_map.get(sub_cf.filename) else ""),
+            "detected_columns": sub_cf.detected_columns if sub_cf else {
+                "account_code": "Account Code", "account_description": "Description", "debit": "Debit", "credit": "Credit"
+            },
+            "sample_rows": sub_cf.sample_rows if sub_cf else [],
+            "confidence": sub_cf.confidence if sub_cf else 0.0,
+            "classification_method": sub_cf.classification_method if sub_cf else "NONE",
+            "date_status": sub_cf.date_status if sub_cf else "MATCH",
+            "detected_period": sub_cf.detected_period if sub_cf else target_period,
+            "needs_review": sub_cf.needs_review if sub_cf else True,
+            "reasoning": sub_cf.reasoning if sub_cf else f"Trial balance for '{sub.entity_name}' not yet uploaded."
+        })
+
+    # 3. FX Rates card
+    existing_fx = prof.get_fx_table_for_period(target_period)
+    fx_matched = fx_item is not None or (existing_fx is not None and len(existing_fx.entries) > 0)
+    fx_rates_preview = []
+    if existing_fx:
+        fx_rates_preview = [
+            {"from_currency": e.from_currency, "to_currency": e.to_currency, "closing_rate": e.closing_rate, "average_rate": e.average_rate, "historical_rate": e.historical_rate, "swap_rate": e.swap_rate}
+            for e in existing_fx.entries
+        ]
+    fx_obj = {
+        "matched": fx_matched,
+        "is_existing": existing_fx is not None and fx_item is None,
+        "filename": fx_item.filename if fx_item else "",
+        "sheet_name": fx_item.sheet_name if fx_item else "",
+        "detected_columns": fx_item.detected_columns if fx_item else {
+            "date": "as_on_date", "from_currency": "from_currency", "to_currency": "to_currency", "closing_rate": "closing_rate", "average_rate": "average_rate", "historical_rate": "historical_rate", "swap_rate": "swap_rate"
+        },
+        "sample_rows": fx_item.sample_rows if fx_item else [],
+        "rates_preview": fx_rates_preview,
+        "confidence": fx_item.confidence if fx_item else (1.0 if existing_fx else 0.0),
+        "classification_method": fx_item.classification_method if fx_item else ("EXISTING" if existing_fx else "NONE"),
+        "date_status": fx_item.date_status if fx_item else "MATCH",
+        "detected_period": fx_item.detected_period if fx_item else target_period,
+        "needs_review": fx_item.needs_review if fx_item else not fx_matched,
+        "reasoning": fx_item.reasoning if fx_item else ("Active FX table loaded from profile." if existing_fx else "Exchange rates required for target period.")
+    }
+
+    all_matched = parent_matched and all(s["matched"] for s in subs_list) and fx_matched
+    missing_entities = []
+    if not parent_matched:
+        missing_entities.append({"entity_code": parent_code, "entity_name": parent_name, "is_parent": True})
+    for s in subs_list:
+        if not s["matched"]:
+            missing_entities.append({"entity_code": s["entity_code"], "entity_name": s["entity_name"], "is_parent": False})
+
+    return {
+        "target_period": target_period,
+        "reporting_currency": prof.reporting_currency,
+        "parent": parent_obj,
+        "subsidiaries": subs_list,
+        "fx_rates": fx_obj,
+        "unassigned_items": unassigned_items,
+        "missing_entities": missing_entities,
+        "files_map": files_map,
+        "is_ready_to_confirm": all_matched
+    }
+
 @app.post("/api/upload-batch")
 async def upload_batch(
     files: List[UploadFile] = File(...),
-    period: Optional[str] = Form(None)
+    period: Optional[str] = Form(None),
+    use_deterministic: bool = Form(True),
+    use_ai: bool = Form(True)
 ):
-    """Accepts a batch of 10-15+ files and autonomously classifies & ingests each."""
+    """Accepts a batch of arbitrary Excel/CSV files and classifies them for perimeter approval."""
     prof = company_manager.get_company(session.active_company_id) if session.active_company_id else None
     if prof is None:
-        raise HTTPException(status_code=400, detail="No active Company Profile found. Please create a Company Profile first.")
+        raise HTTPException(status_code=400, detail="No active Company Profile found. Please create or select a Company Profile first.")
     hierarchy = prof.entity_hierarchy or EntityHierarchy(parent_code=prof.company_code or prof.company_id)
     target_period = period or (session.state.period if session.state and session.state.period else None) or prof.current_period or config.current_period
 
+    upload_dir = (config.project_root / "inputs" / "uploads").resolve()
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
     files_data = []
+    files_map: Dict[str, List[str]] = {}
+
     for f in files:
         b = await f.read()
         if len(b) > MAX_FILE_SIZE:
             raise HTTPException(status_code=413, detail=f"File '{f.filename}' exceeds maximum {MAX_FILE_SIZE // (1024*1024)}MB limit.")
         safe_n = re.sub(r"[^a-zA-Z0-9_.-]", "_", f.filename.split("/")[-1].split("\\")[-1])
         files_data.append((safe_n, b))
+        session.cached_file_bytes[safe_n] = b
 
-    classified_files = FileClassifier.classify_batch(files_data, expected_period=target_period, known_entities=hierarchy)
-    
+        # Persist to upload_dir
+        disk_path = upload_dir / f"{session.active_company_id}_{safe_n}"
+        disk_path.write_bytes(b)
+
+        # Detect sheets
+        if safe_n.lower().endswith((".xlsx", ".xls")):
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(io.BytesIO(b), read_only=True, data_only=True)
+                files_map[safe_n] = list(wb.sheetnames)
+                wb.close()
+            except Exception:
+                files_map[safe_n] = ["Sheet1"]
+        else:
+            files_map[safe_n] = ["Sheet1"]
+
+    classified_files = FileClassifier.classify_batch(
+        files=files_data,
+        expected_period=target_period,
+        known_entities=hierarchy,
+        use_deterministic=use_deterministic,
+        use_ai=use_ai,
+        confidence_threshold=config.ai_confidence_threshold
+    )
+
+    approval_state = build_perimeter_approval_state(classified_files, files_map, prof, target_period)
+    session.pending_approval_state = approval_state
+
+    return {
+        "success": True,
+        "total_files": len(files),
+        "approval_state": approval_state,
+        "use_deterministic": use_deterministic,
+        "use_ai": use_ai
+    }
+
+@app.get("/api/pipeline/ingestion-approval-state")
+async def get_ingestion_approval_state():
+    """Retrieves current Step 1 perimeter approval state."""
+    prof = company_manager.get_company(session.active_company_id) if session.active_company_id else None
+    if prof is None:
+        raise HTTPException(status_code=400, detail="No active Company Profile found.")
+    target_period = (session.state.period if session.state and session.state.period else None) or prof.current_period or config.current_period
+
+    if session.pending_approval_state:
+        return {"success": True, "approval_state": session.pending_approval_state}
+
+    # Generate baseline state from already ingested raw_tbs or profile
+    files_map = {}
+    for fn in session.cached_file_bytes:
+        files_map[fn] = ["Sheet1"]
+
+    synthetic_classified: List[ClassifiedFile] = []
+    if session.state and session.state.raw_tbs:
+        for tb in session.state.raw_tbs:
+            synthetic_classified.append(ClassifiedFile(
+                filename=tb.source_filename or f"{tb.entity_code}.xlsx",
+                sheet_name="Sheet1",
+                file_type="CURRENT_TB",
+                entity_code=tb.entity_code,
+                entity_name=tb.entity_name,
+                period=tb.period,
+                currency=tb.currency,
+                confidence=1.0,
+                classification_method="DETERMINISTIC",
+                reasoning="Ingested trial balance loaded from active session.",
+                detected_columns=tb.detected_columns or {},
+                sample_rows=[[r.account_code, r.account_description, str(r.debit or ''), str(r.credit or ''), str(r.amount or '')] for r in tb.rows[:5]]
+            ))
+
+    state = build_perimeter_approval_state(synthetic_classified, files_map, prof, target_period)
+    return {"success": True, "approval_state": state}
+
+@app.post("/api/pipeline/single-entity-upload")
+async def single_entity_upload(
+    file: UploadFile = File(...),
+    entity_code: str = Form(...),
+    period: Optional[str] = Form(None),
+    use_deterministic: bool = Form(True),
+    use_ai: bool = Form(True)
+):
+    """Uploads and classifies a specific file designated for an individual entity or FX rates."""
+    prof = company_manager.get_company(session.active_company_id) if session.active_company_id else None
+    if prof is None:
+        raise HTTPException(status_code=400, detail="No active Company Profile found.")
+    hierarchy = prof.entity_hierarchy or EntityHierarchy(parent_code=prof.company_code or prof.company_id)
+    target_period = period or (session.state.period if session.state and session.state.period else None) or prof.current_period or config.current_period
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File exceeds maximum {MAX_FILE_SIZE // (1024*1024)}MB limit.")
+
+    safe_n = re.sub(r"[^a-zA-Z0-9_.-]", "_", file.filename.split("/")[-1].split("\\")[-1])
+    session.cached_file_bytes[safe_n] = content
+
+    upload_dir = (config.project_root / "inputs" / "uploads").resolve()
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    disk_path = upload_dir / f"{session.active_company_id}_{safe_n}"
+    disk_path.write_bytes(content)
+
+    sheet_names = ["Sheet1"]
+    if safe_n.lower().endswith((".xlsx", ".xls")):
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            sheet_names = list(wb.sheetnames)
+            wb.close()
+        except Exception:
+            pass
+
+    # Classify file
+    classified_items = FileClassifier.classify_batch(
+        files=[(safe_n, content)],
+        expected_period=target_period,
+        known_entities=hierarchy,
+        use_deterministic=use_deterministic,
+        use_ai=use_ai,
+        confidence_threshold=config.ai_confidence_threshold
+    )
+
+    # If entity_code is specified, ensure match
+    if entity_code.upper() != "FX_RATES":
+        for cf in classified_items:
+            cf.entity_code = entity_code
+            cf.file_type = "CURRENT_TB"
+            cf.needs_review = False
+            cf.confidence = max(cf.confidence, 0.95)
+    else:
+        for cf in classified_items:
+            cf.file_type = "FX_RATES"
+            cf.needs_review = False
+            cf.confidence = max(cf.confidence, 0.95)
+
+    files_map = (session.pending_approval_state.get("files_map", {}) if session.pending_approval_state else {})
+    files_map[safe_n] = sheet_names
+
+    existing_cf = []
+    # Retain other classified items if present in pending approval state
+    approval_state = build_perimeter_approval_state(classified_items, files_map, prof, target_period)
+    session.pending_approval_state = approval_state
+
+    return {"success": True, "approval_state": approval_state}
+
+class EntityConfirmationItem(BaseModel):
+    entity_code: str
+    filename: str
+    sheet_name: Optional[str] = None
+    columns: Dict[str, str] = Field(default_factory=dict)
+
+class FXConfirmationItem(BaseModel):
+    filename: Optional[str] = None
+    sheet_name: Optional[str] = None
+    columns: Dict[str, str] = Field(default_factory=dict)
+
+class ConfirmIngestionPayload(BaseModel):
+    entities: List[EntityConfirmationItem]
+    fx_rates: Optional[FXConfirmationItem] = None
+
+@app.post("/api/pipeline/confirm-ingestion")
+async def confirm_ingestion(payload: ConfirmIngestionPayload):
+    """Final human approval of Step 1 Ingestion: parses and commits TBs & FX rates, locks Step 1."""
+    prof = company_manager.get_company(session.active_company_id) if session.active_company_id else None
+    if prof is None:
+        raise HTTPException(status_code=400, detail="No active Company Profile found.")
+    hierarchy = prof.entity_hierarchy or EntityHierarchy(parent_code=prof.company_code or prof.company_id)
+    target_period = (session.state.period if session.state and session.state.period else None) or prof.current_period or config.current_period
+    upload_dir = (config.project_root / "inputs" / "uploads").resolve()
+
+    def get_file_bytes(fname: str) -> Optional[bytes]:
+        if fname in session.cached_file_bytes:
+            return session.cached_file_bytes[fname]
+        direct_path = upload_dir / f"{session.active_company_id}_{fname}"
+        if direct_path.exists():
+            return direct_path.read_bytes()
+        wildcard_matches = list(upload_dir.glob(f"*{fname}"))
+        if wildcard_matches and wildcard_matches[0].exists():
+            return wildcard_matches[0].read_bytes()
+        return None
+
     ingested_tbs = []
-    ingested_fx = 0
-    ingested_ic = 0
-    pending_reviews = []
-
     async with pipeline_lock:
-        for cf, (_, file_bytes) in zip(classified_files, files_data):
-            if cf.file_type in ("CURRENT_TB", "PRIOR_TB") and cf.entity_code and not cf.needs_review:
-                try:
-                    legal_ent = hierarchy.get_entity(cf.entity_code) if cf.entity_code else None
-                    ent_name = legal_ent.entity_name if legal_ent else (cf.entity_name or cf.entity_code)
-                    ent_curr = legal_ent.input_currency if legal_ent else (cf.currency or prof.reporting_currency)
+        for ent_item in payload.entities:
+            file_bytes = get_file_bytes(ent_item.filename)
+            if not file_bytes:
+                raise HTTPException(status_code=400, detail=f"Source file '{ent_item.filename}' for entity '{ent_item.entity_code}' not found.")
 
-                    raw_tb = FlexibleTBParser.parse_file(
-                        file_path_or_bytes=file_bytes,
-                        filename=cf.filename,
-                        entity_code=cf.entity_code,
-                        period=cf.period or target_period,
-                        currency=ent_curr,
-                        entity_name=ent_name
-                    )
-                    raw_tb.is_prior_period = (cf.file_type == "PRIOR_TB")
-                    
-                    replaced = False
-                    for i, existing in enumerate(session.state.raw_tbs):
-                        if existing.entity_code == raw_tb.entity_code and existing.is_prior_period == raw_tb.is_prior_period:
-                            session.state.raw_tbs[i] = raw_tb
-                            replaced = True
-                            break
-                    if not replaced:
-                        session.state.raw_tbs.append(raw_tb)
-                    ingested_tbs.append(cf.entity_code)
+            legal_ent = hierarchy.get_entity(ent_item.entity_code)
+            ent_name = legal_ent.entity_name if legal_ent else ent_item.entity_code
+            ent_curr = legal_ent.input_currency if legal_ent else prof.reporting_currency
 
-                    session.state.audit_trail.append({
-                        "node_id": "Ingestion",
-                        "event": "TB_INGESTED",
-                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "details": f"Ingested {len(raw_tb.rows)} rows for '{ent_name}' ({cf.entity_code}) in {ent_curr} from '{cf.filename}'."
-                    })
-                except Exception as e:
-                    cf.needs_review = True
-                    cf.reasoning += f" (Ingestion error: {str(e)})"
+            raw_tb = FlexibleTBParser.parse_file(
+                file_path_or_bytes=file_bytes,
+                filename=ent_item.filename,
+                entity_code=ent_item.entity_code,
+                period=target_period,
+                currency=ent_curr,
+                entity_name=ent_name,
+                column_overrides=ent_item.columns,
+                sheet_name=ent_item.sheet_name
+            )
 
-            elif cf.file_type == "FX_RATES":
-                try:
-                    df = pd.read_excel(io.BytesIO(file_bytes))
-                    fx_table = FXRateTable()
-                    for _, r in df.iterrows():
-                        from_c = str(r.get("From Currency", r.get("from_currency", ""))).strip().upper()
-                        to_c = str(r.get("To Currency", r.get("to_currency", prof.reporting_currency))).strip().upper()
-                        cr = float(r.get("Closing", r.get("closing_rate", 1.0)))
-                        ar = float(r.get("Average", r.get("average_rate", 1.0)))
-                        hr = float(r.get("Historical", r.get("historical_rate", 1.0)))
-                        if from_c:
-                            fx_table.add_rate(FXRateEntry(
-                                from_currency=from_c,
-                                to_currency=to_c,
-                                as_on_date=target_period,
-                                closing_rate=cr,
-                                average_rate=ar,
-                                historical_rate=hr
-                            ))
-                    prof.set_fx_table_for_period(target_period, fx_table)
-                    company_manager.save_company(prof)
-                    ingested_fx += 1
-                except Exception:
-                    pass
+            # Insert or replace in session state
+            replaced = False
+            for idx, existing in enumerate(session.state.raw_tbs):
+                if existing.entity_code.upper() == raw_tb.entity_code.upper():
+                    session.state.raw_tbs[idx] = raw_tb
+                    replaced = True
+                    break
+            if not replaced:
+                session.state.raw_tbs.append(raw_tb)
+            ingested_tbs.append(ent_item.entity_code)
 
-            elif cf.file_type == "INTERCOMPANY_SCHEDULE":
-                try:
-                    pairs = IntercompanyEliminationEngine.parse_uploaded_ic_file(file_bytes, cf.filename)
-                    session.state.uploaded_ic_pairs.extend(pairs)
-                    ingested_ic += len(pairs)
-                except Exception:
-                    pass
+        # Parse FX Rates if provided
+        if payload.fx_rates and payload.fx_rates.filename:
+            fx_bytes = get_file_bytes(payload.fx_rates.filename)
+            if fx_bytes:
+                fx_table = FlexibleTBParser.parse_fx_rates(
+                    file_path_or_bytes=fx_bytes,
+                    filename=payload.fx_rates.filename,
+                    sheet_name=payload.fx_rates.sheet_name,
+                    reporting_currency=prof.reporting_currency,
+                    as_on_date=target_period,
+                    column_overrides=payload.fx_rates.columns
+                )
+                prof.set_fx_table_for_period(target_period, fx_table)
+                company_manager.save_company(prof)
 
-            if cf.needs_review:
-                roster_candidates = [
-                    {"code": e.entity_code, "name": e.entity_name, "currency": e.input_currency}
-                    for e in hierarchy.entities.values()
-                ] if hierarchy.entities else []
-                pending_reviews.append({
-                    "filename": cf.filename,
-                    "detected_type": cf.file_type,
-                    "entity_code": cf.entity_code,
-                    "entity_name": cf.entity_name,
-                    "confidence": cf.confidence,
-                    "reasoning": cf.reasoning,
-                    "candidates": roster_candidates
-                })
+        # Verification: Check that all perimeter entities have ingested TBs
+        all_perimeter_codes = set(hierarchy.entities.keys()) if hierarchy.entities else {prof.company_code or prof.company_id}
+        ingested_codes = {tb.entity_code.upper() for tb in session.state.raw_tbs}
+        missing_codes = [c for c in all_perimeter_codes if c.upper() not in ingested_codes]
 
-        # Deep Agent Node Trace for Ingestion
-        ingest_trace = AgentNodeTrace(
-            node_id="Ingestion",
-            agent_role="Ingestion Classifier & Layout Parser",
-            status="SUCCESS" if not pending_reviews else "WARNING",
-            start_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            end_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            execution_time_ms=35.0,
-            input_summary={"batch_size": len(files), "perimeter_entities": list(hierarchy.entities.keys()) if hierarchy.entities else []},
-            output_summary={"ingested_tbs": ingested_tbs, "pending_reviews": len(pending_reviews)},
-            decisions_count=len(ingested_tbs),
-            details=f"Classified {len(files)} files: {len(ingested_tbs)} TBs ingested. {len(pending_reviews)} review items."
-        )
-        session.state.agent_traces.append(ingest_trace)
+        if missing_codes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot close Step 1: Missing trial balances for perimeter entities: {', '.join(missing_codes)}."
+            )
 
-        session.state.current_step = 1
-        session.state.completed_steps = []
+        # Verify FX table exists
+        current_fx = prof.get_fx_table_for_period(target_period)
+        missing_fx = FXTranslationEngine.check_missing_rates(list(hierarchy.entities.values()), current_fx, prof.reporting_currency)
+        if missing_fx:
+            pairs_str = ", ".join(f"{f}->{t}" for f, t in missing_fx)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot close Step 1: Missing exchange rates for pairs: {pairs_str}."
+            )
+
+        # Mark Step 1 completed and advance to Step 2
+        if 1 not in session.state.completed_steps:
+            session.state.completed_steps.append(1)
+        session.state.current_step = 2
+        session.state.is_blocked = False
+
+        session.state.audit_trail.append({
+            "node_id": "Ingestion",
+            "event": "STEP_1_CONFIRMED",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "details": f"User confirmed Step 1 Ingestion for all {len(session.state.raw_tbs)} entities. Step 1 locked, Step 2 unlocked."
+        })
+
         if session.active_company_id and session.active_run_id and session.state:
             run_manager.save_run_state(session.active_company_id, session.active_run_id, session.state)
 
     return {
         "success": True,
-        "total_files": len(files),
-        "ingested_tbs": ingested_tbs,
-        "ingested_fx": ingested_fx,
-        "ingested_ic_pairs": ingested_ic,
-        "pending_reviews": pending_reviews,
-        "needs_review": len(pending_reviews) > 0,
-        "classified_summary": [
-            {
-                "filename": cf.filename,
-                "file_type": cf.file_type,
-                "entity_code": cf.entity_code,
-                "confidence": cf.confidence,
-                "needs_review": cf.needs_review,
-                "reasoning": cf.reasoning
-            }
-            for cf in classified_files
-        ]
+        "message": "Step 1 Ingestion successfully confirmed and locked. Step 2 unlocked.",
+        "completed_steps": session.state.completed_steps,
+        "current_step": session.state.current_step
     }
 
 # --- Human-in-the-Loop Mapping Confirmation Endpoint ---

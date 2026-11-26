@@ -6,6 +6,33 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-26 14:35] Milestone: Step 1 Dual-Engine Ingestion, Multi-Sheet Parsing & Perimeter Approval
+- **Branch**: `feature/profile-v2`
+- **Core Requirements Implemented**:
+  1. **Dual-Engine Toggle & Dynamic Confidence Routing**:
+     - Embedded and modal checkboxes: `"Check deterministic"` and `"AI agents"` (both checked by default).
+     - Dynamically respects configured confidence threshold percentage from settings (e.g. 85%).
+     - Fast deterministic heuristics inspect file names, sheet names, headers, and top 5–10 sample rows; escalates ambiguous or low-confidence layouts to Gemini Agentic Brain; falls back with clear "Human-in-the-Loop review" badge if confidence remains below threshold.
+  2. **Multi-Sheet & Dump File Deconstruction**:
+     - Decomposes single Excel workbooks containing multiple sheets (`openpyxl`) into discrete classified candidates.
+     - Unassigned/extra sheets (e.g. notes, instructions, logs) cleanly routed to a collapsed "Ignored / Extra Sheets" tray.
+  3. **Financial Column Variations & Number Cleansing**:
+     - Flexible handling of separate Dr/Cr vs single signed Net Amount (`+`, `-`, accounting parentheses `(1,000.00)`, trailing minus `1,000-`, and `CR`/`DR` indicators).
+  4. **Period & Multi-Year Schedule Intelligence**:
+     - Automatically scans and filters multi-period schedules by active run cutoff date.
+     - Detects calendar year discrepancies (e.g., uploaded 2025 data when run date is 2024) and displays amber warning pills.
+  5. **Mandatory FX Rates Table Collection**:
+     - Dedicated FX Rates verification card requiring standard columns (As of Date, From Currency, To Currency, Closing Rate, Average Rate, and Swap Rate).
+  6. **Human Approval View (Perimeter Review)**:
+     - Editable perimeter review interface displaying Parent, each Subsidiary, and FX Rates with mapped columns, top-5 rows preview, and inline fallback single-entity upload.
+  7. **Strict Pipeline Gating**:
+     - Prevents advancement to Step 2 until all perimeter entities and FX rates are verified and confirmed via `"Approve & Confirm Ingestion"`, locking Step 1 with a green checkmark and unlocking Step 2.
+- **Verification & Hardening**:
+  - Node.js syntax check: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
+  - Dedicated automated suite: `tests/test_step1_dual_engine_ingestion.py` (5/5 PASSED).
+  - Full regression test suite: 76/76 PASSED (100% pass rate).
+  - Live server check: HTTP 200 OK on port 8000.
+
 ### [2026-11-25 18:35] Milestone: Dynamic Profile Creation & Base COA Architecture (Phase 1)
 - **Branch**: `feature/profile-v2`
 - **Core Changes**:
