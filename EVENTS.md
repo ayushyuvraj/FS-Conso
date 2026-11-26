@@ -6,6 +6,31 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-26 17:20] Milestone: Red Cell Highlighting, Shake Animation, Inline Row Upload & Overflow-Proof Tooltips
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Red Cell Highlighting & Dynamic Shake Validation**:
+     - Added dynamic validation for required mapping dropdowns (`Assigned File`, `Worksheet`, `Account Code Col`, `Debit / Net Col`, and FX closing/average rates).
+     - Any unfilled required select is immediately highlighted with a vivid red outline (`border-rose-600 ring-2 ring-rose-200 bg-rose-50/20 text-rose-800`).
+     - As the user selects or maps a valid value, the red outline disappears instantaneously.
+     - If the user attempts to confirm with unfilled required fields, a tactile shake animation (`animate-field-shake`) shakes the unfilled dropdowns, disables confirmation, and alerts the user.
+  2. **Row-Level Re-Upload Action with Single-File Enforcement**:
+     - Provided a clean ghost upload icon (without borders or background) beside each entity's `Assigned File` dropdown.
+     - Enforces exactly 1 file selection, uploads via `/api/pipeline/single-entity-upload`, re-evaluates deterministic/AI classification, automatically updates sheet and column mappings in place, and preserves the open review modal.
+     - Any still-missing columns remain clearly highlighted in red.
+  3. **Overflow-Proof Floating Tooltips**:
+     - Eliminated table overflow clipping by migrating tooltips from relative children inside scrollable table cells to a global fixed floating popper (`#approval-floating-tooltip`).
+     - Calculates viewport bounds (`getBoundingClientRect()`) to dynamically prevent off-screen or cropped text. All period alerts, mapped sheets, columns, and scales are 100% visible and crystal-clear.
+  4. **Tactile Status Icon Micro-Animation**:
+     - Added smooth Emil Kowalski spring micro-interaction on hover over status ticks and crosses (`transform: scale(1.25) rotate(6deg); box-shadow: 0 4px 12px rgba(0,0,0,0.15)`).
+  5. **Top KPI Strip Relocation for Ignored Sheets**:
+     - Replaced the bulky bottom drawer with an `Ignored Extra Sheets (n)` action button inside the top KPI strip, expanding a neat top banner tray when clicked.
+  6. **Verification & Hardening**:
+     - Test Suite: **80/80 PASSED (100%)** in 8.48s.
+     - JavaScript syntax: `node -c "fs_conso/web/static/js/app.js"` exited with 0 errors.
+     - Git: Committed and pushed to `feature/profile-v2`.
+
+
 ### [2026-11-26 17:00] Milestone: High-Density Financial Ledger Grid for Ingestion Review Modal (Option 1)
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:

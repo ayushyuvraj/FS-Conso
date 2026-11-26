@@ -2342,6 +2342,238 @@ function closePerimeterApprovalModal() {
 let approvalActiveFilter = 'ALL';
 let approvalSearchQuery = '';
 
+function toggleExtraSheetsTrayTop() {
+    const el = document.getElementById('unassigned-sheets-tray-top');
+    if (el) el.classList.toggle('hidden');
+}
+
+function triggerRowFileUpload(entityCode) {
+    const input = document.getElementById(`row-file-input-${entityCode}`);
+    if (input) input.click();
+}
+
+async function handleRowFileUpload(event, entityCode) {
+    const input = event.target;
+    if (!input || !input.files || input.files.length === 0) return;
+    if (input.files.length !== 1) {
+        showToast('Single File Required', 'Please select exactly one file for this entity.', 'error');
+        input.value = '';
+        return;
+    }
+
+    const file = input.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('entity_code', entityCode);
+
+    const targetPeriod = (step1ApprovalState && step1ApprovalState.target_period) || '';
+    if (targetPeriod) formData.append('period', targetPeriod);
+
+    const chkDet = document.getElementById('chk-deterministic-engine');
+    const chkAI = document.getElementById('chk-ai-agent-engine');
+    formData.append('use_deterministic', chkDet ? String(chkDet.checked) : 'true');
+    formData.append('use_ai', chkAI ? String(chkAI.checked) : 'true');
+
+    showToast('Processing File', `Classifying and mapping ${file.name} for ${entityCode}...`, 'info');
+
+    try {
+        const res = await fetch('/api/pipeline/single-entity-upload', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            step1ApprovalState = data.approval_state;
+            renderPerimeterApprovalModalContent(step1ApprovalState);
+            validateApprovalFields(false);
+            showToast('File Mapped', `Successfully updated mappings for ${entityCode} from ${file.name}.`, 'success');
+        } else {
+            showToast('Upload Error', data.detail || 'Failed to map uploaded file.', 'error');
+        }
+    } catch (e) {
+        showToast('Network Error', 'Upload failed: ' + e.message, 'error');
+    } finally {
+        input.value = '';
+    }
+}
+
+function showApprovalTooltip(event, entityCode, statusType) {
+    const tooltip = document.getElementById('approval-floating-tooltip');
+    if (!tooltip || !step1ApprovalState) return;
+
+    let target = null;
+    let name = '';
+    let isParent = false;
+    let isFx = false;
+
+    if (entityCode === 'FX_RATES') {
+        target = step1ApprovalState.fx_rates || {};
+        name = 'Foreign Exchange Rates';
+        isFx = true;
+    } else if (step1ApprovalState.parent && (step1ApprovalState.parent.entity_code === entityCode || entityCode === 'parent')) {
+        target = step1ApprovalState.parent;
+        name = target.entity_name || target.entity_code;
+        isParent = true;
+    } else {
+        target = (step1ApprovalState.subsidiaries || []).find(s => s.entity_code === entityCode);
+        name = target ? (target.entity_name || target.entity_code) : entityCode;
+    }
+
+    if (!target) return;
+
+    const bullets = [];
+    const targetPeriod = step1ApprovalState.target_period || '31-03-2024';
+    const confPct = Math.round((target.confidence || 1.0) * 100);
+
+    if (isFx) {
+        if (target.filename) {
+            bullets.push(`<li class="text-emerald-400">• FX Status: Exchange rate table detected & mapped</li>`);
+            bullets.push(`<li class="text-slate-300">• File: <span class="font-mono text-slate-200">${escapeHtml(target.filename)}</span></li>`);
+            bullets.push(`<li class="text-slate-300">• Sheet: <span class="font-mono text-slate-200">${escapeHtml(target.sheet_name || 'Default')}</span></li>`);
+        } else {
+            bullets.push(`<li class="text-rose-400 font-semibold">• FX Status: Mandatory FX rates file missing</li>`);
+        }
+        bullets.push(`<li class="text-indigo-300">• Currency Pairs: Mandatory for Step 3 Translation & CTA</li>`);
+        bullets.push(`<li class="text-slate-400">• Classification: ${confPct}% Confidence</li>`);
+    } else {
+        if (target.date_status === 'MISMATCH') {
+            bullets.push(`<li class="text-rose-400 font-semibold">• Date Discrepancy: File has ${escapeHtml(target.detected_period || '')} vs Cutoff ${escapeHtml(targetPeriod)}</li>`);
+        } else {
+            bullets.push(`<li class="text-emerald-400">• Period: Aligned with ${escapeHtml(targetPeriod)}</li>`);
+        }
+
+        if (!target.filename) {
+            bullets.push(`<li class="text-rose-400 font-semibold">• File Status: No trial balance sheet assigned</li>`);
+        } else {
+            bullets.push(`<li class="text-slate-300">• File: <span class="font-mono text-slate-200">${escapeHtml(target.filename)}</span></li>`);
+            bullets.push(`<li class="text-slate-300">• Sheet: <span class="font-mono text-slate-200">${escapeHtml(target.sheet_name || 'Default')}</span></li>`);
+        }
+
+        bullets.push(`<li class="text-indigo-300">• Scale: ${escapeHtml(target.scale_instruction || 'Reported in exact absolute currency')}</li>`);
+
+        const cols = target.detected_columns || {};
+        bullets.push(`<li class="text-slate-300">• Mapped: Code: ${escapeHtml(cols.account_code || 'None')}, Debit/Net: ${escapeHtml(cols.debit || cols.amount || 'None')}, Credit: ${escapeHtml(cols.credit || 'None')}</li>`);
+        bullets.push(`<li class="text-slate-400">• Method: ${confPct}% Confidence (${escapeHtml(target.method || 'Deterministic')})</li>`);
+    }
+
+    const isFlagged = statusType === 'flagged';
+    tooltip.innerHTML = `
+        <div class="font-bold text-xs border-b border-slate-700/80 pb-1 mb-1.5 flex items-center justify-between">
+            <span class="truncate pr-1 text-white">${escapeHtml(name)}</span>
+            <span class="font-mono text-[9px] px-1 py-0.2 rounded shrink-0 ${isFlagged ? 'bg-rose-900/90 text-rose-200 border border-rose-700/60' : 'bg-emerald-900/90 text-emerald-200 border border-emerald-700/60'}">${isFlagged ? 'FLAGGED' : 'READY'}</span>
+        </div>
+        <ul class="space-y-1 text-[11px] leading-relaxed">
+            ${bullets.join('')}
+        </ul>
+    `;
+
+    tooltip.classList.remove('hidden');
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const tooltipWidth = 320;
+    const tooltipHeight = tooltip.offsetHeight || 160;
+
+    let left = rect.right + 12;
+    if (left + tooltipWidth > window.innerWidth - 10) {
+        left = rect.left - tooltipWidth - 12;
+    }
+
+    let top = rect.top - 10;
+    if (top + tooltipHeight > window.innerHeight - 20) {
+        top = window.innerHeight - tooltipHeight - 20;
+    }
+    if (top < 15) {
+        top = 15;
+    }
+
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+}
+
+function hideApprovalTooltip() {
+    const tooltip = document.getElementById('approval-floating-tooltip');
+    if (tooltip) tooltip.classList.add('hidden');
+}
+
+function validateApprovalFields(applyShake = false) {
+    if (!step1ApprovalState) return 0;
+
+    let unfilledCount = 0;
+    const checkSelect = (id, isRequired = true) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const val = (el.value || '').trim();
+        const isUnfilled = isRequired && (!val || val.startsWith('--'));
+        if (isUnfilled) {
+            el.classList.add('required-unfilled');
+            if (applyShake) {
+                el.classList.add('animate-field-shake');
+                setTimeout(() => el.classList.remove('animate-field-shake'), 450);
+            }
+            unfilledCount++;
+        } else {
+            el.classList.remove('required-unfilled');
+        }
+    };
+
+    // 1. Parent Selects
+    if (step1ApprovalState.parent) {
+        checkSelect('select-parent-file', true);
+        checkSelect('select-parent-sheet', true);
+        checkSelect('col-parent-code', true);
+        checkSelect('col-parent-debit', true);
+    }
+
+    // 2. Subsidiary Selects
+    (step1ApprovalState.subsidiaries || []).forEach(sub => {
+        const code = sub.entity_code;
+        checkSelect(`select-${code}-file`, true);
+        checkSelect(`select-${code}-sheet`, true);
+        checkSelect(`col-${code}-code`, true);
+        checkSelect(`col-${code}-debit`, true);
+    });
+
+    // 3. FX Selects
+    if (step1ApprovalState.fx_rates) {
+        checkSelect('select-FX_RATES-file', true);
+        checkSelect('select-FX_RATES-sheet', true);
+        checkSelect('col-fx-closing', true);
+        checkSelect('col-fx-average', true);
+    }
+
+    // Check date mismatches
+    const hasDateMismatch = (step1ApprovalState.parent && step1ApprovalState.parent.date_status === 'MISMATCH') ||
+        (step1ApprovalState.subsidiaries || []).some(s => s.date_status === 'MISMATCH');
+
+    // Update Approve & Confirm Ingestion button
+    const btnConfirm = document.getElementById('btn-confirm-perimeter-modal');
+    if (btnConfirm) {
+        if (unfilledCount > 0 || hasDateMismatch) {
+            btnConfirm.disabled = true;
+            btnConfirm.classList.add('opacity-60', 'cursor-not-allowed');
+            btnConfirm.title = unfilledCount > 0
+                ? `${unfilledCount} required mapping fields need to be selected (highlighted in red).`
+                : 'Cannot confirm: Reporting period mismatch detected.';
+        } else {
+            btnConfirm.disabled = false;
+            btnConfirm.classList.remove('opacity-60', 'cursor-not-allowed');
+            btnConfirm.title = 'Approve and lock perimeter ingestion';
+        }
+    }
+
+    return unfilledCount;
+}
+
+function onApprovalSelectChange(el) {
+    if (el) {
+        const val = (el.value || '').trim();
+        if (val && !val.startsWith('--')) {
+            el.classList.remove('required-unfilled');
+        }
+    }
+    validateApprovalFields(false);
+}
+
 function filterApprovalGrid(filterType, searchQuery) {
     if (filterType !== undefined) approvalActiveFilter = filterType;
     if (searchQuery !== undefined) approvalSearchQuery = (searchQuery || '').trim().toLowerCase();
@@ -2513,7 +2745,6 @@ function renderPerimeterApprovalModalContent(state) {
     const mappedEntities = (parent && parent.filename ? 1 : 0) + subs.filter(s => s.filename).length;
     const isFxMapped = !!fx.filename;
 
-    // Check issues for parent
     const isParentFlagged = !parent || !parent.filename || parent.date_status === 'MISMATCH' || !(parent.detected_columns && parent.detected_columns.account_code);
     const flaggedSubsCount = subs.filter(s => !s.filename || s.date_status === 'MISMATCH' || !(s.detected_columns && s.detected_columns.account_code)).length;
     const flaggedCount = (isParentFlagged ? 1 : 0) + flaggedSubsCount + (!isFxMapped ? 1 : 0);
@@ -2523,8 +2754,8 @@ function renderPerimeterApprovalModalContent(state) {
         <div class="space-y-3">
             <!-- Institutional Summary KPI Bar & Quick Controls -->
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                <!-- Counters -->
-                <div class="flex items-center space-x-2 text-xs">
+                <!-- Counters & Ignored Sheets Button -->
+                <div class="flex items-center space-x-2 text-xs flex-wrap gap-y-1.5">
                     <div class="flex items-center space-x-1 px-2.5 py-1 rounded-md bg-white border border-slate-200 shadow-2xs font-mono">
                         <span class="text-slate-500 font-sans">Perimeter:</span>
                         <strong class="text-slate-800">${mappedEntities}/${totalEntities} Mapped</strong>
@@ -2537,6 +2768,16 @@ function renderPerimeterApprovalModalContent(state) {
                         <span>${isFxMapped ? '💱' : '⚠️'}</span>
                         <strong>${isFxMapped ? 'FX Ready' : 'FX Missing'}</strong>
                     </div>
+
+                    ${unassigned.length > 0 ? `
+                        <button type="button" id="btn-toggle-extra-sheets" onclick="toggleExtraSheetsTrayTop()"
+                            class="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 shadow-2xs font-mono text-xs transition cursor-pointer btn-tactile">
+                            <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            <span>Ignored Extra Sheets (${unassigned.length})</span>
+                        </button>
+                    ` : ''}
                 </div>
 
                 <!-- Filter Tabs & Fast Search -->
@@ -2567,6 +2808,27 @@ function renderPerimeterApprovalModalContent(state) {
                 </div>
             </div>
 
+            <!-- Ignored / Extra Sheets Dropdown Banner (Moved from bottom to top) -->
+            ${unassigned.length > 0 ? `
+                <div id="unassigned-sheets-tray-top" class="hidden p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+                    <div class="flex items-center justify-between border-b border-slate-200 pb-1.5 text-slate-700 font-semibold">
+                        <span>Ignored / Extra Sheets (${unassigned.length}) — excluded from consolidation perimeter</span>
+                        <button type="button" onclick="toggleExtraSheetsTrayTop()" class="text-slate-400 hover:text-slate-600 font-bold">&times;</button>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        ${unassigned.map(u => `
+                            <div class="p-2 rounded-lg border border-slate-200 bg-white flex items-center justify-between">
+                                <div class="truncate pr-2">
+                                    <div class="font-mono font-semibold text-slate-700 truncate text-[11px]">${escapeHtml(u.sheet_name || 'Sheet')}</div>
+                                    <div class="text-[10px] text-slate-400 truncate">${escapeHtml(u.filename)}</div>
+                                </div>
+                                <span class="px-1.5 py-0.5 rounded text-[9px] bg-slate-100 text-slate-600 font-semibold">Ignored</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
             <!-- High-Density Financial Ledger Table -->
             <div class="border border-slate-200 rounded-xl overflow-x-auto bg-white shadow-xs max-h-[56vh]">
                 <table class="w-full text-left text-xs border-collapse">
@@ -2574,7 +2836,7 @@ function renderPerimeterApprovalModalContent(state) {
                         <tr>
                             <th class="py-2 px-2 text-center w-11">Status</th>
                             <th class="py-2 px-2.5 min-w-[160px]">Entity & Role</th>
-                            <th class="py-2 px-2 min-w-[140px]">Assigned File</th>
+                            <th class="py-2 px-2 min-w-[150px]">Assigned File</th>
                             <th class="py-2 px-2 min-w-[115px]">Worksheet</th>
                             <th class="py-2 px-2 min-w-[110px]">Account Code Col</th>
                             <th class="py-2 px-2 min-w-[110px]">Debit / Net Col</th>
@@ -2597,42 +2859,15 @@ function renderPerimeterApprovalModalContent(state) {
         const isFlagged = !isMapped || hasDateMismatch || hasMissingCode;
         const rowStatus = isFlagged ? 'flagged' : 'ready';
 
-        // Bullets for hover tooltip
-        const bullets = [];
-        if (hasDateMismatch) {
-            bullets.push(`<li class="text-rose-400 font-semibold">• Date Discrepancy: File has ${escapeHtml(parent.detected_period || '')} vs Cutoff ${escapeHtml(state.target_period || '')}</li>`);
-        } else {
-            bullets.push(`<li class="text-emerald-400">• Period: Aligned with ${escapeHtml(state.target_period || '')}</li>`);
-        }
-        if (!isMapped) {
-            bullets.push(`<li class="text-rose-400 font-semibold">• File Status: No trial balance sheet assigned</li>`);
-        } else {
-            bullets.push(`<li class="text-slate-300">• File: <span class="font-mono text-slate-200">${escapeHtml(parent.filename)}</span></li>`);
-            bullets.push(`<li class="text-slate-300">• Sheet: <span class="font-mono text-slate-200">${escapeHtml(parent.sheet_name || 'Default')}</span></li>`);
-        }
-        bullets.push(`<li class="text-indigo-300">• Scale: ${escapeHtml(parent.scale_instruction || 'Reported in exact absolute currency')}</li>`);
-        bullets.push(`<li class="text-slate-300">• Mapped: Code: ${escapeHtml((parent.detected_columns || {}).account_code || 'Auto')}, Debit/Net: ${escapeHtml((parent.detected_columns || {}).debit || (parent.detected_columns || {}).amount || 'Auto')}, Credit: ${escapeHtml((parent.detected_columns || {}).credit || 'None')}</li>`);
-        bullets.push(`<li class="text-slate-400">• Method: ${confPct}% Confidence (${escapeHtml(parent.method || 'Deterministic')})</li>`);
-
         const statusIcon = isFlagged
-            ? `<span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</span>`
-            : `<span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</span>`;
+            ? `<div onmouseenter="showApprovalTooltip(event, 'parent', 'flagged')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</div>`
+            : `<div onmouseenter="showApprovalTooltip(event, 'parent', 'ready')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</div>`;
 
         html += `
             <tr data-approval-row data-status="${rowStatus}" data-search="${escapeHtml((parent.entity_name || code) + ' ' + code)}" data-entity-code="parent" class="hover:bg-slate-50/70 transition">
                 <td class="py-1.5 px-2 text-center align-middle">
-                    <div class="group relative inline-flex items-center justify-center cursor-help">
+                    <div class="inline-flex items-center justify-center">
                         ${statusIcon}
-                        <!-- Rich Tooltip -->
-                        <div class="pointer-events-none absolute left-7 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-72 p-2.5 bg-slate-900/95 backdrop-blur-md text-white text-[11px] rounded-lg shadow-xl border border-slate-700/60 font-sans">
-                            <div class="font-bold text-xs border-b border-slate-700 pb-1 mb-1.5 flex items-center justify-between">
-                                <span class="truncate pr-1">${escapeHtml(parent.entity_name || code)}</span>
-                                <span class="font-mono text-[9px] px-1 py-0.2 rounded ${isFlagged ? 'bg-rose-900/80 text-rose-200' : 'bg-emerald-900/80 text-emerald-200'}">${isFlagged ? 'FLAGGED' : 'READY'}</span>
-                            </div>
-                            <ul class="space-y-1">
-                                ${bullets.join('')}
-                            </ul>
-                        </div>
                     </div>
                 </td>
                 <td class="py-1.5 px-2.5 align-middle">
@@ -2649,35 +2884,45 @@ function renderPerimeterApprovalModalContent(state) {
                     </div>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <select onchange="updateEntityFileMapping('${escapeHtml(code)}', this.value)"
-                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
-                        ${genFileOptions(parent.filename)}
-                    </select>
+                    <div class="flex items-center space-x-1">
+                        <button type="button" onclick="triggerRowFileUpload('parent')"
+                            class="text-slate-400 hover:text-kpmg-blue p-1 transition cursor-pointer shrink-0"
+                            title="Upload / Re-upload single file for ${escapeHtml(parent.entity_name || code)}">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                        </button>
+                        <input type="file" id="row-file-input-parent" class="hidden" accept=".xlsx,.xls,.csv" onchange="handleRowFileUpload(event, 'parent')" />
+                        <select id="select-parent-file" onchange="updateEntityFileMapping('${escapeHtml(code)}', this.value); onApprovalSelectChange(this);"
+                            class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
+                            ${genFileOptions(parent.filename)}
+                        </select>
+                    </div>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <select onchange="updateEntitySheetMapping('${escapeHtml(code)}', this.value)"
-                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    <select id="select-parent-sheet" onchange="updateEntitySheetMapping('${escapeHtml(code)}', this.value); onApprovalSelectChange(this);"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                         ${genSheetOptions(parent.filename, parent.sheet_name)}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <select id="col-parent-code" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    <select id="col-parent-code" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                         ${genColOptions(sampleRows, (parent.detected_columns || {}).account_code, 'Account Code')}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <select id="col-parent-debit" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    <select id="col-parent-debit" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                         ${genColOptions(sampleRows, (parent.detected_columns || {}).debit || (parent.detected_columns || {}).amount, 'Debit')}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <select id="col-parent-credit" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    <select id="col-parent-credit" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                         ${genColOptions(sampleRows, (parent.detected_columns || {}).credit, 'Credit')}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <select id="scale-parent" onchange="updateEntityScaleInstruction('${escapeHtml(code)}', this.value)"
-                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    <select id="scale-parent" onchange="updateEntityScaleInstruction('${escapeHtml(code)}', this.value); onApprovalSelectChange(this);"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                         ${genScaleOptions(parent.scale_multiplier)}
                     </select>
                 </td>
@@ -2734,41 +2979,15 @@ function renderPerimeterApprovalModalContent(state) {
         const isFlagged = !isMapped || hasDateMismatch || hasMissingCode;
         const rowStatus = isFlagged ? 'flagged' : 'ready';
 
-        const bullets = [];
-        if (hasDateMismatch) {
-            bullets.push(`<li class="text-rose-400 font-semibold">• Date Discrepancy: File has ${escapeHtml(sub.detected_period || '')} vs Cutoff ${escapeHtml(state.target_period || '')}</li>`);
-        } else {
-            bullets.push(`<li class="text-emerald-400">• Period: Aligned with ${escapeHtml(state.target_period || '')}</li>`);
-        }
-        if (!isMapped) {
-            bullets.push(`<li class="text-rose-400 font-semibold">• File Status: No trial balance sheet assigned</li>`);
-        } else {
-            bullets.push(`<li class="text-slate-300">• File: <span class="font-mono text-slate-200">${escapeHtml(sub.filename)}</span></li>`);
-            bullets.push(`<li class="text-slate-300">• Sheet: <span class="font-mono text-slate-200">${escapeHtml(sub.sheet_name || 'Default')}</span></li>`);
-        }
-        bullets.push(`<li class="text-indigo-300">• Scale: ${escapeHtml(sub.scale_instruction || 'Reported in exact absolute currency')}</li>`);
-        bullets.push(`<li class="text-slate-300">• Mapped: Code: ${escapeHtml((sub.detected_columns || {}).account_code || 'Auto')}, Debit/Net: ${escapeHtml((sub.detected_columns || {}).debit || (sub.detected_columns || {}).amount || 'Auto')}, Credit: ${escapeHtml((sub.detected_columns || {}).credit || 'None')}</li>`);
-        bullets.push(`<li class="text-slate-400">• Method: ${confPct}% Confidence (${escapeHtml(sub.method || 'Deterministic')})</li>`);
-
         const statusIcon = isFlagged
-            ? `<span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</span>`
-            : `<span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</span>`;
+            ? `<div onmouseenter="showApprovalTooltip(event, '${escapeHtml(code)}', 'flagged')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</div>`
+            : `<div onmouseenter="showApprovalTooltip(event, '${escapeHtml(code)}', 'ready')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</div>`;
 
         html += `
             <tr data-approval-row data-status="${rowStatus}" data-search="${escapeHtml((sub.entity_name || code) + ' ' + code)}" data-entity-code="${escapeHtml(code)}" class="hover:bg-slate-50/70 transition">
                 <td class="py-1.5 px-2 text-center align-middle">
-                    <div class="group relative inline-flex items-center justify-center cursor-help">
+                    <div class="inline-flex items-center justify-center">
                         ${statusIcon}
-                        <!-- Rich Tooltip -->
-                        <div class="pointer-events-none absolute left-7 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-72 p-2.5 bg-slate-900/95 backdrop-blur-md text-white text-[11px] rounded-lg shadow-xl border border-slate-700/60 font-sans">
-                            <div class="font-bold text-xs border-b border-slate-700 pb-1 mb-1.5 flex items-center justify-between">
-                                <span class="truncate pr-1">${escapeHtml(sub.entity_name || code)}</span>
-                                <span class="font-mono text-[9px] px-1 py-0.2 rounded ${isFlagged ? 'bg-rose-900/80 text-rose-200' : 'bg-emerald-900/80 text-emerald-200'}">${isFlagged ? 'FLAGGED' : 'READY'}</span>
-                            </div>
-                            <ul class="space-y-1">
-                                ${bullets.join('')}
-                            </ul>
-                        </div>
                     </div>
                 </td>
                 <td class="py-1.5 px-2.5 align-middle">
@@ -2785,35 +3004,45 @@ function renderPerimeterApprovalModalContent(state) {
                     </div>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <select onchange="updateEntityFileMapping('${escapeHtml(code)}', this.value)"
-                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
-                        ${genFileOptions(sub.filename)}
-                    </select>
+                    <div class="flex items-center space-x-1">
+                        <button type="button" onclick="triggerRowFileUpload('${escapeHtml(code)}')"
+                            class="text-slate-400 hover:text-kpmg-blue p-1 transition cursor-pointer shrink-0"
+                            title="Upload / Re-upload single file for ${escapeHtml(sub.entity_name || code)}">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                        </button>
+                        <input type="file" id="row-file-input-${escapeHtml(code)}" class="hidden" accept=".xlsx,.xls,.csv" onchange="handleRowFileUpload(event, '${escapeHtml(code)}')" />
+                        <select id="select-${escapeHtml(code)}-file" onchange="updateEntityFileMapping('${escapeHtml(code)}', this.value); onApprovalSelectChange(this);"
+                            class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
+                            ${genFileOptions(sub.filename)}
+                        </select>
+                    </div>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <select onchange="updateEntitySheetMapping('${escapeHtml(code)}', this.value)"
-                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    <select id="select-${escapeHtml(code)}-sheet" onchange="updateEntitySheetMapping('${escapeHtml(code)}', this.value); onApprovalSelectChange(this);"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                         ${genSheetOptions(sub.filename, sub.sheet_name)}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <select id="col-${escapeHtml(code)}-code" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    <select id="col-${escapeHtml(code)}-code" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                         ${genColOptions(sampleRows, (sub.detected_columns || {}).account_code, 'Account Code')}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <select id="col-${escapeHtml(code)}-debit" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    <select id="col-${escapeHtml(code)}-debit" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                         ${genColOptions(sampleRows, (sub.detected_columns || {}).debit || (sub.detected_columns || {}).amount, 'Debit')}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <select id="col-${escapeHtml(code)}-credit" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    <select id="col-${escapeHtml(code)}-credit" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                         ${genColOptions(sampleRows, (sub.detected_columns || {}).credit, 'Credit')}
                     </select>
                 </td>
                 <td class="py-1.5 px-2 align-middle">
-                    <select id="scale-${escapeHtml(code)}" onchange="updateEntityScaleInstruction('${escapeHtml(code)}', this.value)"
-                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                    <select id="scale-${escapeHtml(code)}" onchange="updateEntityScaleInstruction('${escapeHtml(code)}', this.value); onApprovalSelectChange(this);"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                         ${genScaleOptions(sub.scale_multiplier)}
                     </select>
                 </td>
@@ -2864,34 +3093,15 @@ function renderPerimeterApprovalModalContent(state) {
     const fxConfPct = Math.round((fx.confidence || 1.0) * 100);
     const fxRowStatus = isFxMapped ? 'ready' : 'flagged';
 
-    const fxBullets = [
-        isFxMapped
-            ? `<li class="text-emerald-400">• FX Status: Exchange rate table detected & mapped</li>`
-            : `<li class="text-rose-400 font-semibold">• FX Status: Mandatory FX rates file missing</li>`,
-        `<li class="text-slate-300">• File: <span class="font-mono text-slate-200">${escapeHtml(fx.filename || 'None')}</span></li>`,
-        `<li class="text-slate-300">• Sheet: <span class="font-mono text-slate-200">${escapeHtml(fx.sheet_name || 'Default')}</span></li>`,
-        `<li class="text-indigo-300">• Currency Pairs: Used in Step 3 for Translation & CTA</li>`,
-        `<li class="text-slate-400">• Classification: ${fxConfPct}% Confidence</li>`
-    ];
-
     const fxStatusIcon = isFxMapped
-        ? `<span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</span>`
-        : `<span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</span>`;
+        ? `<div onmouseenter="showApprovalTooltip(event, 'FX_RATES', 'ready')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-300">✓</div>`
+        : `<div onmouseenter="showApprovalTooltip(event, 'FX_RATES', 'flagged')" onmouseleave="hideApprovalTooltip()" class="status-indicator-badge w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] bg-rose-100 text-rose-700 border border-rose-300">✕</div>`;
 
     html += `
         <tr data-approval-row data-status="${fxRowStatus}" data-search="foreign exchange rates fx fx_rates" data-entity-code="FX_RATES" class="bg-indigo-50/40 hover:bg-indigo-50/70 transition border-t-2 border-indigo-200">
             <td class="py-1.5 px-2 text-center align-middle">
-                <div class="group relative inline-flex items-center justify-center cursor-help">
+                <div class="inline-flex items-center justify-center">
                     ${fxStatusIcon}
-                    <div class="pointer-events-none absolute left-7 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-72 p-2.5 bg-slate-900/95 backdrop-blur-md text-white text-[11px] rounded-lg shadow-xl border border-slate-700/60 font-sans">
-                        <div class="font-bold text-xs border-b border-slate-700 pb-1 mb-1.5 flex items-center justify-between">
-                            <span>FX Rates Table</span>
-                            <span class="font-mono text-[9px] px-1 py-0.2 rounded ${isFxMapped ? 'bg-emerald-900/80 text-emerald-200' : 'bg-rose-900/80 text-rose-200'}">${isFxMapped ? 'VERIFIED' : 'MANDATORY'}</span>
-                        </div>
-                        <ul class="space-y-1">
-                            ${fxBullets.join('')}
-                        </ul>
-                    </div>
                 </div>
             </td>
             <td class="py-1.5 px-2.5 align-middle">
@@ -2907,29 +3117,39 @@ function renderPerimeterApprovalModalContent(state) {
                 </div>
             </td>
             <td class="py-1.5 px-2 align-middle">
-                <select onchange="updateEntityFileMapping('FX_RATES', this.value)"
-                    class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
-                    ${genFileOptions(fx.filename)}
-                </select>
+                <div class="flex items-center space-x-1">
+                    <button type="button" onclick="triggerRowFileUpload('FX_RATES')"
+                        class="text-indigo-400 hover:text-indigo-700 p-1 transition cursor-pointer shrink-0"
+                        title="Upload / Re-upload Foreign Exchange Rates schedule">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                    </button>
+                    <input type="file" id="row-file-input-FX_RATES" class="hidden" accept=".xlsx,.xls,.csv" onchange="handleRowFileUpload(event, 'FX_RATES')" />
+                    <select id="select-FX_RATES-file" onchange="updateEntityFileMapping('FX_RATES', this.value); onApprovalSelectChange(this);"
+                        class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
+                        ${genFileOptions(fx.filename)}
+                    </select>
+                </div>
             </td>
             <td class="py-1.5 px-2 align-middle">
-                <select onchange="updateEntitySheetMapping('FX_RATES', this.value)"
-                    class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                <select id="select-FX_RATES-sheet" onchange="updateEntitySheetMapping('FX_RATES', this.value); onApprovalSelectChange(this);"
+                    class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                     ${genSheetOptions(fx.filename, fx.sheet_name)}
                 </select>
             </td>
             <td class="py-1.5 px-2 align-middle">
-                <select id="col-fx-closing" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                <select id="col-fx-closing" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                     ${genColOptions(fxSampleRows, (fx.detected_columns || {}).closing_rate, 'Closing Rate')}
                 </select>
             </td>
             <td class="py-1.5 px-2 align-middle">
-                <select id="col-fx-average" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                <select id="col-fx-average" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                     ${genColOptions(fxSampleRows, (fx.detected_columns || {}).average_rate, 'Average Rate')}
                 </select>
             </td>
             <td class="py-1.5 px-2 align-middle">
-                <select id="col-fx-swap" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue">
+                <select id="col-fx-swap" onchange="onApprovalSelectChange(this)" class="w-full h-7 px-1.5 py-0 text-[11px] font-mono rounded border border-slate-200 bg-white text-slate-700 focus:ring-1 focus:ring-kpmg-blue transition">
                     ${genColOptions(fxSampleRows, (fx.detected_columns || {}).swap_rate, 'Swap Rate (Optional)')}
                 </select>
             </td>
@@ -2980,46 +3200,15 @@ function renderPerimeterApprovalModalContent(state) {
             </div>
     `;
 
-    // 4. IGNORED / EXTRA SHEETS TRAY
-    if (unassigned.length > 0) {
-        html += `
-            <div class="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
-                <button type="button" onclick="toggleSamplePreview('unassigned-sheets-tray')"
-                    class="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/80 flex items-center justify-between text-xs font-semibold text-slate-700 transition cursor-pointer">
-                    <div class="flex items-center space-x-2">
-                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                        </svg>
-                        <span>Ignored / Extra Sheets (${unassigned.length} sheets)</span>
-                        <span class="text-[10px] font-normal text-slate-500">— excluded from consolidation perimeter</span>
-                    </div>
-                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                </button>
-                <div id="unassigned-sheets-tray" class="hidden p-3 bg-white border-t border-slate-200 space-y-2 text-xs">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                        ${unassigned.map(u => `
-                            <div class="p-2 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between">
-                                <div class="truncate pr-2">
-                                    <div class="font-mono font-semibold text-slate-700 truncate text-[11px]">${escapeHtml(u.sheet_name || 'Sheet')}</div>
-                                    <div class="text-[10px] text-slate-400 truncate">${escapeHtml(u.filename)}</div>
-                                </div>
-                                <span class="px-1.5 py-0.5 rounded text-[9px] bg-slate-200 text-slate-600 font-semibold">Ignored</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
     html += `</div>`;
     container.innerHTML = html;
 
     if (approvalActiveFilter !== 'ALL' || approvalSearchQuery !== '') {
         filterApprovalGrid(approvalActiveFilter, approvalSearchQuery);
     }
+
+    // Immediately run validation to highlight unfilled required cells in red
+    validateApprovalFields(false);
 
     // Update footer status
     if (footerStatus) {
@@ -3107,6 +3296,17 @@ async function confirmPerimeterApprovalModal() {
     if (!step1ApprovalState) return;
 
     const btn = document.getElementById('btn-confirm-perimeter-modal');
+
+    // Strict Required Mapping Gate & Shake Animation for Unfilled Fields
+    const unfilledCount = validateApprovalFields(true);
+    if (unfilledCount > 0) {
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.add('opacity-60', 'cursor-not-allowed');
+        }
+        showToast('Incomplete Mapping', `Please select all required mapping columns (${unfilledCount} unfilled highlighted in red) before confirming.`, 'error');
+        return;
+    }
 
     // Strict Period Discrepancy Guard: check if any perimeter entity has unresolved date mismatch
     const mismatches = [];
