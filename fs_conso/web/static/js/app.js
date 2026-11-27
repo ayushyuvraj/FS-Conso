@@ -6133,10 +6133,10 @@ function renderStep6(el) {
 
             return `
                 <tr class="hover:bg-slate-50/80 border-b border-gray-100 transition">
-                    <td class="font-mono font-bold text-xs py-2 px-3 text-kpmg-navy w-[110px] min-w-[110px] sticky left-0 z-10 bg-white shadow-[inset_-1px_0_0_var(--kpmg-border)]">
+                    <td class="col-account-code font-mono font-bold text-xs py-2 px-3 text-kpmg-navy bg-white" style="position: sticky; left: 0px; width: 120px; min-width: 120px; max-width: 120px;">
                         ${escapeHtml(r.account_code)}
                     </td>
-                    <td class="py-2 px-3 text-xs text-gray-800 min-w-[220px] max-w-[280px] truncate sticky left-[110px] z-10 bg-white shadow-[inset_-1px_0_0_var(--kpmg-border)]" title="${escapeHtml(r.account_description)}">
+                    <td class="col-account-desc py-2 px-3 text-xs text-gray-800 truncate bg-white" style="position: sticky; left: 120px; width: 260px; min-width: 260px; max-width: 260px;" title="${escapeHtml(r.account_description)}">
                         ${escapeHtml(r.account_description)}
                     </td>
                     ${entCells}
@@ -6244,35 +6244,35 @@ function renderStep6(el) {
             <!-- Master Consolidated Table -->
             <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-290px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
                 <table class="fin-table min-w-full">
-                    <thead class="sticky top-0 z-20 shadow-xs">
+                    <thead>
                         <!-- Top Multi-Header Row for Grouping -->
-                        <tr class="border-b border-slate-200 text-[10px] uppercase font-bold tracking-wider">
-                            <th colspan="2" class="text-left px-3 py-1.5 bg-slate-100 text-slate-600 sticky left-0 z-30 shadow-[inset_-1px_-1px_0_var(--kpmg-border)]">
+                        <tr class="matrix-header-group border-b border-slate-200 text-[10px] uppercase font-bold tracking-wider">
+                            <th colspan="2" class="col-coa-group text-left px-3 py-1 bg-slate-100 text-slate-600" style="position: sticky; left: 0px; top: 0px; width: 380px; min-width: 380px; max-width: 380px;">
                                 Chart of Accounts (Level 0)
                             </th>
-                            <th colspan="${standaloneEnts.length}" class="text-center px-3 py-1.5 bg-blue-50/70 text-kpmg-navy border-r border-slate-200">
+                            <th colspan="${standaloneEnts.length}" class="text-center px-3 py-1 bg-blue-50/70 text-kpmg-navy border-r border-slate-200">
                                 Standalone Entity Balances (${escapeHtml(ctb.currency || 'INR')})
                             </th>
-                            <th class="text-center px-3 py-1.5 bg-blue-100/70 text-kpmg-navy border-r border-slate-200">
+                            <th class="text-center px-3 py-1 bg-blue-100/70 text-kpmg-navy border-r border-slate-200">
                                 Rollup
                             </th>
-                            <th colspan="${elimEnts.length}" class="text-center px-3 py-1.5 bg-amber-100/60 text-amber-950 border-r border-amber-300">
+                            <th colspan="${elimEnts.length}" class="text-center px-3 py-1 bg-amber-100/60 text-amber-950 border-r border-amber-300">
                                 Intercompany Eliminations (Linked to Step 4)
                             </th>
-                            <th class="text-center px-3 py-1.5 bg-amber-200/70 text-amber-950 border-r border-slate-200">
+                            <th class="text-center px-3 py-1 bg-amber-200/70 text-amber-950 border-r border-slate-200">
                                 Total Elim
                             </th>
-                            <th class="text-center px-3 py-1.5 bg-slate-900 text-[#ACEAFF]">
+                            <th class="text-center px-3 py-1 bg-slate-900 text-[#ACEAFF]">
                                 Group Total
                             </th>
                         </tr>
 
                         <!-- Sub-Header Row: Column Titles -->
-                        <tr class="bg-slate-100 border-b border-slate-200 text-xs">
-                            <th class="text-left px-3 py-2 text-xs font-bold text-kpmg-navy w-[110px] min-w-[110px] sticky left-0 z-30 bg-slate-100 shadow-[inset_-1px_-1px_0_var(--kpmg-border)]">
+                        <tr class="matrix-header-cols bg-slate-100 border-b border-slate-200 text-xs">
+                            <th class="col-account-code text-left px-3 py-2 text-xs font-bold text-kpmg-navy bg-slate-100" style="position: sticky; left: 0px; top: 28px; width: 120px; min-width: 120px; max-width: 120px;">
                                 Account Code
                             </th>
-                            <th class="text-left px-3 py-2 text-xs font-bold text-kpmg-navy min-w-[220px] max-w-[280px] sticky left-[110px] z-30 bg-slate-100 shadow-[inset_-1px_-1px_0_var(--kpmg-border)]">
+                            <th class="col-account-desc text-left px-3 py-2 text-xs font-bold text-kpmg-navy bg-slate-100" style="position: sticky; left: 120px; top: 28px; width: 260px; min-width: 260px; max-width: 260px;">
                                 Account Description
                             </th>
                             ${entHeaders}
@@ -6293,10 +6293,10 @@ function renderStep6(el) {
                     </tbody>
                     <tfoot class="sticky bottom-0 z-20 bg-slate-100 border-t-2 border-kpmg-navy shadow-xs font-bold text-xs">
                         <tr>
-                            <td class="py-2.5 px-3 font-mono font-bold text-kpmg-navy w-[110px] min-w-[110px] sticky left-0 z-30 bg-slate-100 shadow-[inset_-1px_0_0_var(--kpmg-border)]">
+                            <td class="col-account-code py-2.5 px-3 font-mono font-bold text-kpmg-navy bg-slate-100" style="position: sticky; left: 0px; width: 120px; min-width: 120px; max-width: 120px;">
                                 TOTAL
                             </td>
-                            <td class="py-2.5 px-3 font-bold text-kpmg-navy min-w-[220px] max-w-[280px] sticky left-[110px] z-30 bg-slate-100 shadow-[inset_-1px_0_0_var(--kpmg-border)]">
+                            <td class="col-account-desc py-2.5 px-3 font-bold text-kpmg-navy bg-slate-100 truncate" style="position: sticky; left: 120px; width: 260px; min-width: 260px; max-width: 260px;" title="Total Consolidated Balances">
                                 Total Consolidated Balances
                             </td>
                             ${entFooters}

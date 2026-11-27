@@ -6,6 +6,26 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-27 14:50] Milestone: Step 6 Consolidation Matrix - Pinned Account Description Header Alignment & Multi-Column Eliminations
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Fixed Account Description Column Header Pinning**:
+     - Resolved visual bug where scrolling horizontally caused the `Account Description` header cell (`th`) to scroll off to the left while its body cells (`td`) stayed pinned, causing subsequent headers (`C2 PARENT`, `A SUB`, `B SUB`, etc.) to misalign directly above the pinned description column.
+     - Root Cause: In `style.css`, `.fin-table th` had `position: relative;`, overriding Tailwind's `position: sticky` on `th` cells due to CSS specificity (`0,1,1` vs `0,1,0`). Only `th:first-child` (`Account Code`) was previously pinned in CSS.
+     - Solution:
+       - Created dedicated `.col-account-code` (`position: sticky !important; left: 0px !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; box-sizing: border-box !important; z-index: 15 !important; background-color: #FFFFFF !important; box-shadow: inset -1px 0 0 var(--kpmg-border) !important;`).
+       - Created dedicated `.col-account-desc` (`position: sticky !important; left: 120px !important; width: 260px !important; min-width: 260px !important; max-width: 260px !important; box-sizing: border-box !important; z-index: 15 !important; background-color: #FFFFFF !important; box-shadow: inset -1px 0 0 var(--kpmg-border), 3px 0 6px -2px rgba(0, 0, 0, 0.08) !important;`).
+       - Created dedicated `.col-coa-group` for the top header row spanning columns 1 & 2 (`position: sticky !important; left: 0px !important; top: 0px !important; width: 380px !important; min-width: 380px !important; max-width: 380px !important; z-index: 45 !important;`).
+       - Synchronized header rows (`.matrix-header-group` at `top: 0px !important; z-index: 25 !important; height: 28px !important;` and `.matrix-header-cols` at `top: 28px !important; z-index: 25 !important;`).
+       - Applied sticky positions and matching widths across `thead` `<th>`, `tbody` `<td>`, and `tfoot` `<td>` elements in `renderStep6` (`app.js`).
+  2. **Multi-Column Elimination Allocation Linked to Step 4**:
+     - Displayed 1 Parent elimination column + 1 column per subsidiary + 1 Total Eliminations column (e.g. 5 elimination columns for Client 2 with 3 subsidiaries; 9 columns for 7 subsidiaries).
+     - Filtered Consolidation Matrix to exclusively populate Level 0 accounts matching the mapping and COA dropdowns.
+  3. **Verification & Hardening**:
+     - Node.js syntax check (`node -c fs_conso/web/static/js/app.js`): 0 errors (EXIT 0).
+     - Full automated test suite: 109 passed, 1 skipped.
+     - Live server: HTTP 200 on static assets (`/static/css/style.css`, `/static/js/app.js`) and `/api/pipeline-data`.
+
 ### [2026-11-27 13:20] Milestone: Step 5 Goodwill - Floppy Disk Icon Save Button & FX Transition Header Indicators
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:
