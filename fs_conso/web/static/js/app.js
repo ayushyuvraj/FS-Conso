@@ -5179,9 +5179,9 @@ async function renderStep5(el) {
         const isParent = d.is_parent || (ent === sched.parent_entity_code);
         const displayName = d.entity_name || ent;
         return `
-            <th class="text-right px-3 py-2.5 overflow-hidden">
-                <div class="font-bold text-xs text-kpmg-navy truncate" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</div>
-                <div class="text-[10px] font-mono text-slate-500 font-normal flex items-center justify-end space-x-1 mt-0.5">
+            <th class="text-center px-3 py-2.5 min-w-[160px]">
+                <div class="font-bold text-xs text-kpmg-navy truncate text-center" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</div>
+                <div class="text-[10px] font-mono text-slate-500 font-normal flex items-center justify-center space-x-1 mt-0.5">
                     ${isParent ? '<span class="px-1.5 py-0.2 rounded bg-blue-100 text-kpmg-blue font-bold text-[9px]">PARENT</span>' : '<span class="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-bold text-[9px]">SUBSIDIARY</span>'}
                     <span class="text-[9px] text-slate-500">${escapeHtml(d.currency || sched.reporting_currency || 'INR')}</span>
                 </div>
@@ -5196,7 +5196,7 @@ async function renderStep5(el) {
         const l0Name = d.share_capital_l0_name || '';
 
         return `
-            <td class="py-2 px-3 text-xs align-top border-r border-slate-100 overflow-hidden">
+            <td class="py-2 px-3 text-xs align-top border-r border-slate-100 min-w-[160px]">
                 <div class="num-cell font-mono font-bold text-xs text-slate-900 pb-1 text-right" id="goodwill-sc-val-${escapeHtml(ent)}">
                     ${formatNum(d.share_capital_amount)}
                 </div>
@@ -5216,7 +5216,7 @@ async function renderStep5(el) {
         let adjCells = entities.map(ent => {
             const val = (adj.amounts_by_entity && adj.amounts_by_entity[ent] != null) ? adj.amounts_by_entity[ent] : 0.0;
             return `
-                <td class="py-1.5 px-2 text-xs align-middle border-r border-slate-100 overflow-hidden">
+                <td class="py-1.5 px-2 text-xs align-middle border-r border-slate-100 min-w-[160px]">
                     <input type="number" step="any"
                         value="${val}"
                         oninput="onGoodwillAdjustmentAmountInput('${escapeHtml(adj.id)}', '${escapeHtml(ent)}', this.value)"
@@ -5227,7 +5227,7 @@ async function renderStep5(el) {
 
         return `
             <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
-                <td class="py-2 px-3 text-xs align-middle border-r border-slate-100 overflow-hidden">
+                <td class="py-2 px-3 text-xs align-middle w-[220px] min-w-[220px] max-w-[220px] sticky left-0 z-10 bg-white shadow-[inset_-1px_0_0_var(--kpmg-border)] border-r border-slate-100">
                     <div class="flex items-center space-x-1.5">
                         ${idx === 0 ? `
                             <button type="button" onclick="addGoodwillAdjustmentRow()"
@@ -5247,10 +5247,10 @@ async function renderStep5(el) {
                     </div>
                 </td>
                 ${adjCells}
-                <td class="py-1.5 px-2 text-xs align-middle overflow-hidden">
+                <td class="py-1.5 px-2 text-xs align-middle min-w-[180px]">
                     <input type="text"
                         value="${escapeHtml(adj.remarks || '')}"
-                        onchange="onGoodwillAdjustmentRemarksChange('${escapeHtml(adj.id)}', this.value)"
+                        oninput="onGoodwillAdjustmentRemarksChange('${escapeHtml(adj.id)}', this.value)"
                         placeholder="Remarks..."
                         class="h-7 px-2 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-kpmg-blue w-full" />
                 </td>
@@ -5263,7 +5263,7 @@ async function renderStep5(el) {
         const d = dataByEnt[ent] || {};
         const val = d.retained_earnings_amount != null ? d.retained_earnings_amount : 0.0;
         return `
-            <td class="py-1.5 px-2 text-xs align-middle border-r border-slate-100 overflow-hidden">
+            <td class="py-1.5 px-2 text-xs align-middle border-r border-slate-100 min-w-[160px]">
                 <input type="number" step="any"
                     value="${val}"
                     oninput="onGoodwillRetainedEarningsInput('${escapeHtml(ent)}', this.value)"
@@ -5276,7 +5276,7 @@ async function renderStep5(el) {
     let netAssetCells = entities.map(ent => {
         const d = dataByEnt[ent] || {};
         return `
-            <td class="py-2 px-3 text-xs align-middle border-r border-slate-100 bg-slate-50/50 overflow-hidden">
+            <td class="py-2 px-3 text-xs align-middle border-r border-slate-100 bg-slate-50/50 min-w-[160px]">
                 <div class="num-cell font-mono font-bold text-xs text-kpmg-navy formula-interactive py-1 text-right"
                     id="goodwill-net-assets-${escapeHtml(ent)}"
                     onmouseenter="showFormula(event, '=${formatNum(d.share_capital_amount)} + Adjustments + ${formatNum(d.retained_earnings_amount)}', 'Net Assets at Acquisition Date')"
@@ -5296,7 +5296,7 @@ async function renderStep5(el) {
 
         if (isParent) {
             return `
-                <td class="py-2 px-3 text-xs align-top border-r border-slate-100 overflow-hidden">
+                <td class="py-2 px-3 text-xs align-top border-r border-slate-100 min-w-[160px]">
                     <div class="num-cell font-mono font-bold text-xs text-slate-400 py-1 text-right">0.00</div>
                     <div class="text-[11px] text-slate-400 font-mono italic text-center py-0.5">—</div>
                 </td>
@@ -5304,7 +5304,7 @@ async function renderStep5(el) {
         }
 
         return `
-            <td class="py-2 px-2 text-xs align-top border-r border-slate-100 overflow-hidden ${hitlActive ? 'bg-amber-50/40' : ''}">
+            <td class="py-2 px-2 text-xs align-top border-r border-slate-100 min-w-[160px] ${hitlActive ? 'bg-amber-50/40' : ''}">
                 <div class="space-y-1">
                     <input type="number" step="any"
                         value="${invAmt}"
@@ -5329,7 +5329,7 @@ async function renderStep5(el) {
         const d = dataByEnt[ent] || {};
         const isGoodwill = (d.goodwill_amount || 0) > 0.001;
         return `
-            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100 ${isGoodwill ? 'bg-emerald-50/60' : ''} overflow-hidden">
+            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100 min-w-[160px] ${isGoodwill ? 'bg-emerald-50/60' : ''}">
                 <div class="num-cell font-mono font-bold text-xs ${isGoodwill ? 'text-emerald-700' : 'text-slate-400'} formula-interactive text-right"
                     id="goodwill-gw-val-${escapeHtml(ent)}"
                     onmouseenter="showFormula(event, '=MAX(0, ${formatNum(d.investment_amount)} - ${formatNum(d.net_assets_at_acquisition)})', 'Goodwill on Acquisition')"
@@ -5345,7 +5345,7 @@ async function renderStep5(el) {
         const d = dataByEnt[ent] || {};
         const isReserve = (d.capital_reserve_amount || 0) > 0.001;
         return `
-            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100 ${isReserve ? 'bg-amber-50/60' : ''} overflow-hidden">
+            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100 min-w-[160px] ${isReserve ? 'bg-amber-50/60' : ''}">
                 <div class="num-cell font-mono font-bold text-xs ${isReserve ? 'text-amber-800' : 'text-slate-400'} formula-interactive text-right"
                     id="goodwill-cr-val-${escapeHtml(ent)}"
                     onmouseenter="showFormula(event, '=MAX(0, ${formatNum(d.net_assets_at_acquisition)} - ${formatNum(d.investment_amount)})', 'Capital Reserve (Bargain Purchase Gain)')"
@@ -5364,49 +5364,48 @@ async function renderStep5(el) {
                     <h3 class="font-bold text-base text-kpmg-navy">Goodwill & Acquisition Accounting Matrix</h3>
                     <p class="text-xs text-kpmg-muted">Ind AS 103 / IFRS 3: Computes Goodwill and Capital Reserve by comparing Purchase Consideration (Investment) against Net Assets at Acquisition.</p>
                 </div>
-                <div class="flex items-center space-x-2.5 text-xs">
-                    <div class="flex items-center space-x-2 px-3 py-1 rounded-md bg-emerald-50 border border-emerald-200">
-                        <span class="text-[11px] font-semibold text-emerald-800">Total Goodwill:</span>
-                        <span class="font-mono font-bold text-xs text-emerald-900" id="goodwill-total-gw-badge">${formatNum(sched.total_goodwill)}</span>
-                    </div>
-                    <div class="flex items-center space-x-2 px-3 py-1 rounded-md bg-amber-50 border border-amber-200">
-                        <span class="text-[11px] font-semibold text-amber-800">Total Reserves:</span>
-                        <span class="font-mono font-bold text-xs text-amber-900" id="goodwill-total-cr-badge">${formatNum(sched.total_capital_reserve)}</span>
-                    </div>
-                    <button onclick="confirmGoodwillSchedule()"
-                        class="h-7 px-3.5 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
-                        title="Confirm Goodwill schedule and advance to Step 6 Consolidation">
-                        <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                <div class="flex items-center space-x-1.5">
+                    <!-- 1. Save Action Button (borderless ghost button) -->
+                    <button id="btn-goodwill-save" onclick="saveGoodwillScheduleManual()"
+                        class="h-7 px-2.5 rounded text-slate-600 hover:text-kpmg-blue hover:bg-slate-100 transition flex items-center space-x-1 text-[11px] font-semibold cursor-pointer btn-tactile select-none"
+                        title="Save Changes">
+                        <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                         </svg>
-                        <span>Proceed to Consolidation</span>
+                        <span>Save</span>
+                    </button>
+
+                    <!-- 2. Consolidate Primary Action Button (identical to Ingestion tab) -->
+                    <button id="btn-run-pipeline" onclick="confirmGoodwillSchedule()"
+                        class="h-7 px-3 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
+                        title="Consolidate">
+                        <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Consolidate</span>
                     </button>
                 </div>
             </div>
 
             <!-- 2. Master Goodwill Financial Schedule Table -->
-            <div class="border border-kpmg-border rounded-lg bg-white shadow-2xs overflow-hidden">
-                <table class="fin-table w-full" style="table-layout: fixed; width: 100%;">
-                    <colgroup>
-                        <col style="width: 220px;">
-                        ${entities.map(() => '<col>').join('')}
-                        <col style="width: 180px;">
-                    </colgroup>
-                    <thead class="bg-slate-100 z-10 shadow-xs border-b border-slate-200">
+            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-270px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
+                <table class="fin-table min-w-full">
+                    <thead class="sticky top-0 bg-slate-100 z-20 shadow-xs border-b border-slate-200">
                         <tr>
-                            <th class="text-left px-3 py-2.5 text-xs font-bold text-kpmg-navy">Particulars</th>
+                            <th class="text-left px-3 py-2.5 text-xs font-bold text-kpmg-navy w-[220px] min-w-[220px] max-w-[220px] sticky left-0 z-30 bg-slate-100 shadow-[inset_-1px_-1px_0_var(--kpmg-border)]">Particulars</th>
                             ${entHeaders}
-                            <th class="text-left px-3 py-2.5 text-xs font-bold text-kpmg-navy">Remarks</th>
+                            <th class="text-center px-3 py-2.5 text-xs font-bold text-kpmg-navy min-w-[180px]">Remarks</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         <!-- ROW 1: Share capital -->
                         <tr class="hover:bg-slate-50/70 transition">
-                            <td class="py-2.5 px-3 text-xs align-top border-r border-slate-100 overflow-hidden">
+                            <td class="py-2.5 px-3 text-xs align-top w-[220px] min-w-[220px] max-w-[220px] sticky left-0 z-10 bg-white shadow-[inset_-1px_0_0_var(--kpmg-border)] border-r border-slate-100">
                                 <span class="font-bold text-xs text-slate-900">Share capital</span>
                             </td>
                             ${shareCapCells}
-                            <td class="py-2 px-3 text-xs align-middle text-center text-slate-300 font-mono select-none">—</td>
+                            <td class="py-2 px-3 text-xs align-middle text-center text-slate-300 font-mono select-none min-w-[180px]">—</td>
                         </tr>
 
                         <!-- ROW 2: Adjustments -->
@@ -5414,47 +5413,47 @@ async function renderStep5(el) {
 
                         <!-- ROW 3: Retained earnings and addition -->
                         <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
-                            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100 overflow-hidden">
+                            <td class="py-2.5 px-3 text-xs align-middle w-[220px] min-w-[220px] max-w-[220px] sticky left-0 z-10 bg-white shadow-[inset_-1px_0_0_var(--kpmg-border)] border-r border-slate-100">
                                 <span class="font-bold text-xs text-slate-900">Retained earnings and addition</span>
                             </td>
                             ${reCells}
-                            <td class="py-2 px-3 text-xs align-middle text-center text-slate-300 font-mono select-none">—</td>
+                            <td class="py-2 px-3 text-xs align-middle text-center text-slate-300 font-mono select-none min-w-[180px]">—</td>
                         </tr>
 
                         <!-- ROW 4: Net asset acquisition -->
                         <tr class="bg-blue-50/30 border-b-2 border-kpmg-border font-bold">
-                            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100 overflow-hidden">
+                            <td class="py-2.5 px-3 text-xs align-middle w-[220px] min-w-[220px] max-w-[220px] sticky left-0 z-10 bg-blue-50/90 shadow-[inset_-1px_0_0_var(--kpmg-border)] border-r border-slate-100">
                                 <span class="font-bold text-xs text-kpmg-navy">Net asset acquisition</span>
                             </td>
                             ${netAssetCells}
-                            <td class="py-2 px-3 text-xs align-middle text-center text-slate-300 font-mono select-none">—</td>
+                            <td class="py-2 px-3 text-xs align-middle text-center text-slate-300 font-mono select-none min-w-[180px]">—</td>
                         </tr>
 
                         <!-- ROW 5: Investment by company -->
                         <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
-                            <td class="py-2.5 px-3 text-xs align-top border-r border-slate-100 overflow-hidden">
+                            <td class="py-2.5 px-3 text-xs align-top w-[220px] min-w-[220px] max-w-[220px] sticky left-0 z-10 bg-white shadow-[inset_-1px_0_0_var(--kpmg-border)] border-r border-slate-100">
                                 <span class="font-bold text-xs text-slate-900">Investment by company</span>
                             </td>
                             ${investCells}
-                            <td class="py-2 px-3 text-xs align-middle text-center text-slate-300 font-mono select-none">—</td>
+                            <td class="py-2 px-3 text-xs align-middle text-center text-slate-300 font-mono select-none min-w-[180px]">—</td>
                         </tr>
 
                         <!-- ROW 6: Goodwill -->
                         <tr class="hover:bg-emerald-50/30 border-b border-emerald-100 font-bold transition">
-                            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100 overflow-hidden">
+                            <td class="py-2.5 px-3 text-xs align-middle w-[220px] min-w-[220px] max-w-[220px] sticky left-0 z-10 bg-emerald-50/90 shadow-[inset_-1px_0_0_var(--kpmg-border)] border-r border-slate-100">
                                 <span class="font-bold text-xs text-emerald-800">Goodwill</span>
                             </td>
                             ${goodwillCells}
-                            <td class="py-2 px-3 text-xs align-middle text-center text-slate-300 font-mono select-none">—</td>
+                            <td class="py-2 px-3 text-xs align-middle text-center text-slate-300 font-mono select-none min-w-[180px]">—</td>
                         </tr>
 
                         <!-- ROW 7: Reserves -->
                         <tr class="hover:bg-amber-50/30 border-b border-amber-100 font-bold transition">
-                            <td class="py-2.5 px-3 text-xs align-middle border-r border-slate-100 overflow-hidden">
+                            <td class="py-2.5 px-3 text-xs align-middle w-[220px] min-w-[220px] max-w-[220px] sticky left-0 z-10 bg-amber-50/90 shadow-[inset_-1px_0_0_var(--kpmg-border)] border-r border-slate-100">
                                 <span class="font-bold text-xs text-amber-900">Reserves</span>
                             </td>
                             ${reserveCells}
-                            <td class="py-2 px-3 text-xs align-middle text-center text-slate-300 font-mono select-none">—</td>
+                            <td class="py-2 px-3 text-xs align-middle text-center text-slate-300 font-mono select-none min-w-[180px]">—</td>
                         </tr>
                     </tbody>
                 </table>
@@ -5559,22 +5558,15 @@ async function selectGoodwillL0(entityCode, l0Code) {
     const p = document.getElementById("step5-goodwill-l0-popover");
     if (p) p.classList.add("hidden");
 
-    try {
-        const res = await fetch("/api/pipeline/goodwill/update", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                share_capital_l0_codes: { [entityCode]: l0Code }
-            })
-        });
-        const data = await res.json();
-        if (data.success && data.schedule) {
-            goodwillScheduleData.schedule = data.schedule;
-            renderStep5(document.getElementById("step-content"));
-            showToast("Share Capital Updated", `Level 0 ${l0Code} mapped for ${entityCode}.`, "success");
-        }
-    } catch (e) {
-        showToast("Update Error", "Failed to update Share Capital mapping: " + e, "error");
+    if (goodwillScheduleData && goodwillScheduleData.schedule) {
+        const d = (goodwillScheduleData.schedule.data_by_entity || {})[entityCode];
+        if (d) d.share_capital_l0_code = l0Code;
+    }
+
+    const saved = await saveGoodwillScheduleManual(true);
+    if (saved) {
+        renderStep5(document.getElementById("step-content"));
+        showToast("Share Capital Updated", `Level 0 ${l0Code} mapped for ${entityCode}.`, "success");
     }
 }
 
@@ -5682,7 +5674,6 @@ function selectGoodwillInvestAccount(entityCode, accountCode) {
 
     renderStep5(document.getElementById("step-content"));
     recalcGoodwillClientSide();
-    syncGoodwillDebounced();
 }
 
 function recalcGoodwillClientSide() {
@@ -5753,44 +5744,77 @@ function recalcGoodwillClientSide() {
     if (bCr) bCr.textContent = formatNum(sched.total_capital_reserve);
 }
 
-function syncGoodwillDebounced() {
-    clearTimeout(goodwillDebounceTimer);
-    goodwillDebounceTimer = setTimeout(async () => {
-        if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
-        const sched = goodwillScheduleData.schedule;
-        const payload = {
-            share_capital_l0_codes: {},
-            retained_earnings: {},
-            retained_earnings_remarks: {},
-            investments: {},
-            investment_accounts: {},
-            investment_remarks: {},
-            adjustments: sched.adjustments || []
-        };
-        sched.entities.forEach(ent => {
-            const d = sched.data_by_entity[ent] || {};
-            if (d.share_capital_l0_code) payload.share_capital_l0_codes[ent] = d.share_capital_l0_code;
-            payload.retained_earnings[ent] = d.retained_earnings_amount || 0.0;
-            payload.retained_earnings_remarks[ent] = d.retained_earnings_remarks || "";
-            payload.investments[ent] = d.investment_amount || 0.0;
-            if (d.investment_account_code) payload.investment_accounts[ent] = d.investment_account_code;
-            payload.investment_remarks[ent] = d.investment_remarks || "";
-        });
+async function saveGoodwillScheduleManual(silent = false) {
+    if (!goodwillScheduleData || !goodwillScheduleData.schedule) return false;
+    const sched = goodwillScheduleData.schedule;
+    const saveBtn = document.getElementById("btn-goodwill-save");
 
-        try {
-            const res = await fetch("/api/pipeline/goodwill/update", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (data.success && data.schedule) {
-                goodwillScheduleData.schedule = data.schedule;
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `
+            <svg class="w-3.5 h-3.5 animate-spin text-kpmg-blue" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            <span>Saving...</span>
+        `;
+    }
+
+    const payload = {
+        share_capital_l0_codes: {},
+        retained_earnings: {},
+        retained_earnings_remarks: {},
+        investments: {},
+        investment_accounts: {},
+        investment_remarks: {},
+        adjustments: sched.adjustments || []
+    };
+    sched.entities.forEach(ent => {
+        const d = sched.data_by_entity[ent] || {};
+        if (d.share_capital_l0_code) payload.share_capital_l0_codes[ent] = d.share_capital_l0_code;
+        payload.retained_earnings[ent] = d.retained_earnings_amount || 0.0;
+        payload.retained_earnings_remarks[ent] = d.retained_earnings_remarks || "";
+        payload.investments[ent] = d.investment_amount || 0.0;
+        if (d.investment_account_code) payload.investment_accounts[ent] = d.investment_account_code;
+        payload.investment_remarks[ent] = d.investment_remarks || "";
+    });
+
+    try {
+        const res = await fetch("/api/pipeline/goodwill/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success && data.schedule) {
+            goodwillScheduleData.schedule = data.schedule;
+            recalcGoodwillClientSide();
+            if (!silent) {
+                showToast("Saved", "Goodwill and acquisition parameters saved successfully.", "success");
             }
-        } catch (e) {
-            console.error("Goodwill sync error:", e);
+            return true;
+        } else {
+            if (!silent) {
+                showToast("Save Error", data.detail || "Failed to save schedule.", "error");
+            }
+            return false;
         }
-    }, 400);
+    } catch (e) {
+        if (!silent) {
+            showToast("Network Error", "Save failed: " + e, "error");
+        }
+        return false;
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = `
+                <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                </svg>
+                <span>Save</span>
+            `;
+        }
+    }
 }
 
 function onGoodwillAdjustmentAmountInput(adjId, entityCode, value) {
@@ -5801,24 +5825,22 @@ function onGoodwillAdjustmentAmountInput(adjId, entityCode, value) {
         adj.amounts_by_entity[entityCode] = parseFloat(value) || 0.0;
     }
     recalcGoodwillClientSide();
-    syncGoodwillDebounced();
 }
 
 function onGoodwillAdjustmentNameChange(adjId, value) {
     if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
     const adj = (goodwillScheduleData.schedule.adjustments || []).find(a => a.id === adjId);
     if (adj) adj.name = value || "Adjustment";
-    syncGoodwillDebounced();
 }
 
 function onGoodwillAdjustmentRemarksChange(adjId, value) {
     if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
     const adj = (goodwillScheduleData.schedule.adjustments || []).find(a => a.id === adjId);
     if (adj) adj.remarks = value || "";
-    syncGoodwillDebounced();
 }
 
 async function addGoodwillAdjustmentRow() {
+    await saveGoodwillScheduleManual(true);
     try {
         const res = await fetch("/api/pipeline/goodwill/add-adjustment", {
             method: "POST",
@@ -5837,6 +5859,7 @@ async function addGoodwillAdjustmentRow() {
 }
 
 async function deleteGoodwillAdjustmentRow(adjId) {
+    await saveGoodwillScheduleManual(true);
     try {
         const res = await fetch("/api/pipeline/goodwill/delete-adjustment", {
             method: "POST",
@@ -5859,14 +5882,12 @@ function onGoodwillRetainedEarningsInput(entityCode, value) {
     const d = (goodwillScheduleData.schedule.data_by_entity || {})[entityCode];
     if (d) d.retained_earnings_amount = parseFloat(value) || 0.0;
     recalcGoodwillClientSide();
-    syncGoodwillDebounced();
 }
 
 function onGoodwillRetainedEarningsRemarksChange(entityCode, value) {
     if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
     const d = (goodwillScheduleData.schedule.data_by_entity || {})[entityCode];
     if (d) d.retained_earnings_remarks = value || "";
-    syncGoodwillDebounced();
 }
 
 function onGoodwillInvestmentInput(entityCode, value) {
@@ -5877,7 +5898,6 @@ function onGoodwillInvestmentInput(entityCode, value) {
         d.needs_hitl = false;
     }
     recalcGoodwillClientSide();
-    syncGoodwillDebounced();
 }
 
 function onGoodwillInvestmentAccountSelect(entityCode, accountCode) {
@@ -5895,17 +5915,21 @@ function onGoodwillInvestmentAccountSelect(entityCode, accountCode) {
         d.investment_account_code = accountCode;
     }
     renderStep5(document.getElementById("step-content"));
-    syncGoodwillDebounced();
 }
 
 function onGoodwillInvestmentRemarksChange(entityCode, value) {
     if (!goodwillScheduleData || !goodwillScheduleData.schedule) return;
     const d = (goodwillScheduleData.schedule.data_by_entity || {})[entityCode];
     if (d) d.investment_remarks = value || "";
-    syncGoodwillDebounced();
 }
 
 async function confirmGoodwillSchedule() {
+    const btn = document.getElementById("btn-run-pipeline");
+    if (btn) btn.disabled = true;
+
+    // First ensure any in-memory inputs are persisted cleanly
+    await saveGoodwillScheduleManual(true);
+
     try {
         const res = await fetch("/api/pipeline/goodwill/confirm", {
             method: "POST"
@@ -5913,7 +5937,7 @@ async function confirmGoodwillSchedule() {
         const data = await res.json();
         if (data.success) {
             appStatus.completed_steps = data.completed_steps || [];
-            showToast("Goodwill Verified", `Total Goodwill: ₹${formatNum(data.total_goodwill)} | Total Reserves: ₹${formatNum(data.total_capital_reserve)}`, "success");
+            showToast("Goodwill Verified", `Consolidation schedule updated.`, "success");
             await loadPipelineData();
             switchStep(6);
         } else {
@@ -5921,6 +5945,8 @@ async function confirmGoodwillSchedule() {
         }
     } catch (e) {
         showToast("Error", "Failed to confirm Goodwill schedule: " + e, "error");
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 

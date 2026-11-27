@@ -6,6 +6,29 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-27 13:10] Milestone: Step 5 Goodwill Matrix - N-Column Sticky Scrolling, Center Headers, Manual Save Action & Ingestion Button Parity
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **N-Column Horizontal Scrolling & Fixed Particulars Column**:
+     - Upgraded the Goodwill table to support any scale of subsidiaries ($N = 1$ to $30+$ subsidiaries).
+     - Applied smooth horizontal overflow (`overflow-x-auto min-h-[460px] max-h-[calc(100vh-270px)] border border-kpmg-border rounded-lg bg-white shadow-2xs`).
+     - Permanently pinned the first column (**Particulars**) across the table header and all 7 data rows (`w-[220px] min-w-[220px] max-w-[220px] sticky left-0 z-10/z-30 bg-white/bg-slate-100 shadow-[inset_-1px_0_0_var(--kpmg-border)] border-r border-slate-100`).
+  2. **Center-Aligned Entity & Remarks Headers**:
+     - Center-aligned headers for the Parent Company, all Subsidiaries, and the Remarks column (`text-center px-3 py-2.5 min-w-[160px]/min-w-[180px]`).
+     - Kept the Particulars header left-aligned for clear tabular hierarchy.
+  3. **Removed Top Badge Boxes**:
+     - Stripped out the `Total Goodwill` (green badge) and `Total Reserves` (yellow badge) summary cards from the top card, maintaining a clean executive layout.
+  4. **Primary Consolidate Button Parity**:
+     - Aligned the primary action button on Step 5 Goodwill to match Step 1 Ingestion: exact position, dimensions (`h-7 px-3 rounded`), styling (`bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold`), tactile spring animation (`btn-tactile`), play-circle icon with `#ACEAFF`, and identical text (`Consolidate`).
+  5. **Borderless Ghost Save Button**:
+     - Introduced `#btn-goodwill-save` directly to the left of the Consolidate button matching Ingestion ghost action styling (`h-7 px-2.5 rounded text-slate-600 hover:text-kpmg-blue hover:bg-slate-100 transition flex items-center space-x-1 text-[11px] font-semibold cursor-pointer btn-tactile select-none`).
+     - Replaced keystroke auto-syncing with manual Save execution (`saveGoodwillScheduleManual`), persisting values to `/api/pipeline/goodwill/update` with loading state and confirmation toast.
+     - Hardened dynamic row operations (`addGoodwillAdjustmentRow`, `deleteGoodwillAdjustmentRow`) and `confirmGoodwillSchedule` to automatically persist pending in-memory edits before execution.
+  6. **Verification & Hardening**:
+     - JavaScript syntax check: `node -c fs_conso/web/static/js/app.js` passed (0 errors).
+     - Goodwill unit tests: `tests/test_goodwill_engine.py` 6/6 passed (100%).
+     - Full suite verification: 106 passed.
+
 ### [2026-11-27 12:45] Milestone: Step 5 Goodwill Matrix Polish - Fixed Column Layout, Zero Horizontal Scroll & Compact Code-Only Dropdowns
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:
