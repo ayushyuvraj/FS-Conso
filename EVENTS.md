@@ -6,6 +6,33 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-27 12:45] Milestone: Step 5 Goodwill Matrix Polish - Fixed Column Layout, Zero Horizontal Scroll & Compact Code-Only Dropdowns
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Clean Particulars & Header Styling**:
+     - Stripped out all redundant descriptive subtitles across all 7 row types:
+       - Row 1: `Share capital` (clean bold text; removed "From Group COA Level 0 (Translated)").
+       - Row 2: `Adjustments` (removed separate subheader banner row spanning all columns; default 1 row with small tactile `+` button in Particulars cell to append dynamic adjustment rows).
+       - Row 3: `Retained earnings and addition` (clean bold text; removed "At Acquisition Date").
+       - Row 4: `Net asset acquisition` (clean bold text; removed "Sum of rows 1 + 2 + 3").
+       - Row 5: `Investment by company` (clean bold text; removed "Purchase Consideration (Deterministic / LLM / HITL)").
+       - Row 6: `Goodwill` (clean bold text; removed subtitle).
+       - Row 7: `Reserves` (clean bold text; removed subtitle).
+  2. **Table Grid & Fixed Column Widths (Zero Horizontal Scroll)**:
+     - Configured `<table class="fin-table w-full" style="table-layout: fixed; width: 100%;">` with explicit `<colgroup>` (Particulars: 220px, Entities: evenly distributed `width: auto`, Remarks: 180px).
+     - Applied `overflow-hidden` on table container and cells, eliminating unwanted horizontal scrollbars.
+  3. **Space-Saving Compact Code-Only Dropdowns**:
+     - Configured closed dropdown triggers for Share Capital Level 0 and Parent Investment Accounts to display **ONLY the account code** (e.g. `E210101`, `A120101`), capped at `max-w-[130px]`.
+     - Created interactive floating popovers (`openGoodwillInvestDropdown`, `renderGoodwillInvestPopoverContent`, `selectGoodwillInvestAccount`) matching the Level 0 popover with real-time search, account descriptions, and balances.
+  4. **Targeted Remarks Column**:
+     - Input field active strictly on dynamic Adjustments rows for recordkeeping.
+     - Centered `—` rendered across all other rows.
+  5. **Verification & Hardening**:
+     - Syntax verification: `node -c fs_conso/web/static/js/app.js` passed with zero errors.
+     - Goodwill engine & API tests: `tests/test_goodwill_engine.py` 6/6 passed (100%).
+     - Full test suite: 106 passed, 1 skipped, 0 failed in 30.90s.
+
+
 ### [2026-11-27 02:05] Milestone: Universal Level 0 Leaf Account Mapping, Rollup Header Exclusion, Ind AS 21 Entity Tabs & Bottom-Right Toast Removal
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:
