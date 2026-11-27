@@ -5178,12 +5178,17 @@ async function renderStep5(el) {
         const d = dataByEnt[ent] || {};
         const isParent = d.is_parent || (ent === sched.parent_entity_code);
         const displayName = d.entity_name || ent;
+        const repCurr = (sched.reporting_currency || (appStatus && appStatus.reporting_currency) || 'INR').trim().toUpperCase();
+        const entCurr = (d.currency || repCurr).trim().toUpperCase();
+        const isDiffCurr = (entCurr !== repCurr);
+        const currDisplay = isDiffCurr ? `${escapeHtml(entCurr)} &rarr; ${escapeHtml(repCurr)}` : escapeHtml(entCurr);
+
         return `
             <th class="text-center px-3 py-2.5 min-w-[160px]">
                 <div class="font-bold text-xs text-kpmg-navy truncate text-center" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</div>
                 <div class="text-[10px] font-mono text-slate-500 font-normal flex items-center justify-center space-x-1 mt-0.5">
                     ${isParent ? '<span class="px-1.5 py-0.2 rounded bg-blue-100 text-kpmg-blue font-bold text-[9px]">PARENT</span>' : '<span class="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-bold text-[9px]">SUBSIDIARY</span>'}
-                    <span class="text-[9px] text-slate-500">${escapeHtml(d.currency || sched.reporting_currency || 'INR')}</span>
+                    <span class="text-[9px] ${isDiffCurr ? 'text-kpmg-blue font-semibold' : 'text-slate-500'}">${currDisplay}</span>
                 </div>
             </th>
         `;
@@ -5365,14 +5370,15 @@ async function renderStep5(el) {
                     <p class="text-xs text-kpmg-muted">Ind AS 103 / IFRS 3: Computes Goodwill and Capital Reserve by comparing Purchase Consideration (Investment) against Net Assets at Acquisition.</p>
                 </div>
                 <div class="flex items-center space-x-1.5">
-                    <!-- 1. Save Action Button (borderless ghost button) -->
+                    <!-- 1. Save Action Button (Floppy disk icon ghost button, matching Ingestion toolbar) -->
                     <button id="btn-goodwill-save" onclick="saveGoodwillScheduleManual()"
-                        class="h-7 px-2.5 rounded text-slate-600 hover:text-kpmg-blue hover:bg-slate-100 transition flex items-center space-x-1 text-[11px] font-semibold cursor-pointer btn-tactile select-none"
+                        class="w-8 h-8 rounded text-slate-500 hover:text-kpmg-blue hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none"
                         title="Save Changes">
-                        <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                            <polyline stroke-linecap="round" stroke-linejoin="round" points="17 21 17 13 7 13 7 21" />
+                            <polyline stroke-linecap="round" stroke-linejoin="round" points="7 3 7 8 15 8" />
                         </svg>
-                        <span>Save</span>
                     </button>
 
                     <!-- 2. Consolidate Primary Action Button (identical to Ingestion tab) -->
@@ -5752,11 +5758,10 @@ async function saveGoodwillScheduleManual(silent = false) {
     if (saveBtn) {
         saveBtn.disabled = true;
         saveBtn.innerHTML = `
-            <svg class="w-3.5 h-3.5 animate-spin text-kpmg-blue" fill="none" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 animate-spin text-kpmg-blue" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
             </svg>
-            <span>Saving...</span>
         `;
     }
 
@@ -5808,10 +5813,11 @@ async function saveGoodwillScheduleManual(silent = false) {
         if (saveBtn) {
             saveBtn.disabled = false;
             saveBtn.innerHTML = `
-                <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                    <polyline stroke-linecap="round" stroke-linejoin="round" points="17 21 17 13 7 13 7 21" />
+                    <polyline stroke-linecap="round" stroke-linejoin="round" points="7 3 7 8 15 8" />
                 </svg>
-                <span>Save</span>
             `;
         }
     }

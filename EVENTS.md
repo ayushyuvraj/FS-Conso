@@ -6,6 +6,20 @@ This document tracks all autonomous verification runs, edge-case hardening audit
 
 ## Event Log
 
+### [2026-11-27 13:20] Milestone: Step 5 Goodwill - Floppy Disk Icon Save Button & FX Transition Header Indicators
+- **Branch**: `feature/profile-v2`
+- **Resolution Applied**:
+  1. **Floppy Disk Save Button Parity**:
+     - Replaced text "Save" and previous icon with a dedicated floppy disk SVG icon (`w-4 h-4`, `M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z`).
+     - Aligned button footprint to match Ingestion toolbar ghost icon buttons (`w-8 h-8 rounded text-slate-500 hover:text-kpmg-blue hover:bg-slate-100 transition flex items-center justify-center cursor-pointer btn-tactile relative select-none`, `title="Save Changes"`).
+     - Removed all inner text labels across idle and saving states (spinner appears in-place within the button).
+  2. **Multi-Currency FX Transition Header Indicators**:
+     - In the table header for every subsidiary whose currency differs from the base reporting currency (e.g. `B` in `USD` and `C` in `EUR` with `INR` base), rendered the conversion path indicator (`USD &rarr; INR`, `EUR &rarr; INR`).
+     - Retained standard single currency badge for entities matching base reporting currency (`INR`).
+  3. **Verification & Hardening**:
+     - JavaScript syntax validated (`node -c fs_conso/web/static/js/app.js`: 0 errors).
+     - Unit test suite (`tests/test_goodwill_engine.py`): 6/6 passed (100%).
+
 ### [2026-11-27 13:10] Milestone: Step 5 Goodwill Matrix - N-Column Sticky Scrolling, Center Headers, Manual Save Action & Ingestion Button Parity
 - **Branch**: `feature/profile-v2`
 - **Resolution Applied**:
