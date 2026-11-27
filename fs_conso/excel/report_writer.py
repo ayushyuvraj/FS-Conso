@@ -363,17 +363,25 @@ class ExcelReportWriter:
         self._auto_fit_columns(ws)
 
     def _resolve_column_layout(self, consolidated_tb: ConsolidatedTrialBalance):
-        """Resolves entity and elimination column ordering strictly matching Conso.xlsx:
-        [Entity 1 ... Entity N, Parent, Entity 1 Elim ... Entity N Elim, Elim Total, Consolidation, Net Total]
+        """Resolves entity and elimination column ordering:
+        [Entity 1 ... Entity N, Parent, Entity 1 Elim ... Entity N Elim, Parent Elim, Elim Total, Consolidation, Net Total]
         """
         parent_code = self.hierarchy.parent_code if self.hierarchy else None
+        if not parent_code and getattr(consolidated_tb, "parent_entity_code", None):
+            parent_code = consolidated_tb.parent_entity_code
+        if not parent_code and consolidated_tb.entity_codes:
+            parent_code = next(
+                (e for e in consolidated_tb.entity_codes if "parent" in e.lower() or e.upper() in ("P", "C2", "COMPANY_P")),
+                consolidated_tb.entity_codes[0]
+            )
+
         if parent_code and parent_code in consolidated_tb.entity_codes:
             subs = [e for e in consolidated_tb.entity_codes if e != parent_code]
             entity_display = subs + [parent_code]
-            elim_display = subs
+            elim_display = subs + [parent_code]
         else:
-            entity_display = consolidated_tb.entity_codes
-            elim_display = consolidated_tb.entity_codes
+            entity_display = list(consolidated_tb.entity_codes)
+            elim_display = list(consolidated_tb.entity_codes)
         return entity_display, elim_display
 
     def _write_consolidated_tb_sheet(self, wb: openpyxl.Workbook, consolidated_tb: ConsolidatedTrialBalance) -> None:

@@ -60,6 +60,8 @@ class ConsolidatedTrialBalance(BaseModel):
     period: str
     currency: str = "INR"
     entity_codes: List[str] = Field(default_factory=list)
+    parent_entity_code: Optional[str] = None
+    subsidiary_codes: List[str] = Field(default_factory=list)
     rows: List[ConsolidatedTBRow] = Field(default_factory=list)
     acquisition_accounting: Optional[AcquisitionAccountingResult] = None
 
@@ -105,20 +107,40 @@ class TBAggregator:
         goodwill_schedule: Optional[GoodwillSchedule] = None
     ) -> ConsolidatedTrialBalance:
         entity_codes = [tb.entity_code for tb in translated_tbs]
+        parent_code = None
+        if entity_hierarchy and getattr(entity_hierarchy, "parent_code", None):
+            parent_code = entity_hierarchy.parent_code
+        if not parent_code and entity_codes:
+            parent_code = next(
+                (e for e in entity_codes if "parent" in e.lower() or e.upper() in ("P", "C2", "COMPANY_P")),
+                entity_codes[0]
+            )
+        subsidiary_codes = [e for e in entity_codes if e != parent_code]
+
         all_accounts: Dict[str, str] = {}
 
-        # 1. Collect all active accounts from TBs
+        # 1. Populate all Level 0 items from Group COA (matching mapping dropdown)
+        if coa and getattr(coa, "items", None):
+            for it in coa.get_level_0_items():
+                all_accounts[it.account_code] = it.level_0_account or it.account_name
+
+        # 2. Also ensure any accounts appearing in translated TBs are preserved
         for tb in translated_tbs:
             for r in tb.rows:
-                all_accounts[r.account_code] = r.account_description
+                if r.account_code not in all_accounts:
+                    all_accounts[r.account_code] = r.account_description
 
-        # Ensure Goodwill, Capital Reserve, NCI, and FCTR standard accounts exist in map
-        all_accounts["A110301"] = "Goodwill on Consolidation"
-        all_accounts["E210103"] = "Capital Reserve on Consolidation"
-        all_accounts["E210301"] = "Non-Controlling Interests (NCI)"
-        all_accounts["O620102"] = "Foreign Currency Translation Differences (FCTR)"
+        # 3. Ensure Goodwill, Capital Reserve, NCI, and FCTR standard accounts exist in map
+        if "A110301" not in all_accounts:
+            all_accounts["A110301"] = "Goodwill on Consolidation"
+        if "E210103" not in all_accounts:
+            all_accounts["E210103"] = "Capital Reserve on Consolidation"
+        if "E210301" not in all_accounts:
+            all_accounts["E210301"] = "Non-Controlling Interests (NCI)"
+        if "O620102" not in all_accounts:
+            all_accounts["O620102"] = "Foreign Currency Translation Differences (FCTR)"
 
-        # 2. Compute elimination impacts and entity-specific allocations
+        # 4. Compute elimination impacts and entity-specific allocations
         elim_map: Dict[str, float] = {}
         entity_elim_map: Dict[str, Dict[str, float]] = {}  # { acc_code: { entity_code: elim_amount } }
 
@@ -130,12 +152,24 @@ class TBAggregator:
                 elim_map[v.credit_account] = elim_map.get(v.credit_account, 0.0) - v.eliminated_amount
 
                 # Entity-specific allocations
-                for ent, alloc in v.entity_allocations.items():
-                    target_acc = v.debit_account if alloc > 0 else v.credit_account
-                    if target_acc not in entity_elim_map:
-                        entity_elim_map[target_acc] = {}
-                    entity_elim_map[target_acc][ent] = round(
-                        entity_elim_map[target_acc].get(ent, 0.0) + alloc, 2
+                if v.entity_allocations:
+                    for ent, alloc in v.entity_allocations.items():
+                        target_acc = v.debit_account if alloc > 0 else v.credit_account
+                        if target_acc not in entity_elim_map:
+                            entity_elim_map[target_acc] = {}
+                        entity_elim_map[target_acc][ent] = round(
+                            entity_elim_map[target_acc].get(ent, 0.0) + alloc, 2
+                        )
+                else:
+                    if v.debit_account not in entity_elim_map:
+                        entity_elim_map[v.debit_account] = {}
+                    if v.credit_account not in entity_elim_map:
+                        entity_elim_map[v.credit_account] = {}
+                    entity_elim_map[v.debit_account][v.counterparty_code] = round(
+                        entity_elim_map[v.debit_account].get(v.counterparty_code, 0.0) + v.eliminated_amount, 2
+                    )
+                    entity_elim_map[v.credit_account][v.entity_code] = round(
+                        entity_elim_map[v.credit_account].get(v.entity_code, 0.0) - v.eliminated_amount, 2
                     )
 
         # 3. Ind AS 103 Acquisition Accounting (Goodwill, Capital Reserve, NCI)
@@ -218,6 +252,8 @@ class TBAggregator:
             period=period,
             currency=currency,
             entity_codes=entity_codes,
+            parent_entity_code=parent_code,
+            subsidiary_codes=subsidiary_codes,
             rows=rows,
             acquisition_accounting=acq_result
         )

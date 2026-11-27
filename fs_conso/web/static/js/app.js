@@ -4007,18 +4007,16 @@ function renderStep2(el) {
 
         return `
             <button onclick="switchStep2EntityTab('${escapeHtml(t.entity_code)}')"
-                class="px-4 py-2 rounded-lg text-xs font-semibold flex items-center space-x-2 transition cursor-pointer select-none shrink-0 ${
-                    isActive
-                        ? 'bg-kpmg-blue text-white shadow-xs ring-2 ring-kpmg-blue/20'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200/80 hover:text-kpmg-navy'
-                }">
+                class="px-4 py-2 rounded-lg text-xs font-semibold flex items-center space-x-2 transition cursor-pointer select-none shrink-0 ${isActive
+                ? 'bg-kpmg-blue text-white shadow-xs ring-2 ring-kpmg-blue/20'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200/80 hover:text-kpmg-navy'
+            }">
                 <span>${escapeHtml(t.entity_name || t.entity_code)}</span>
                 <span class="text-[10px] font-mono opacity-80">(${roleLabel})</span>
-                <span id="step2-tab-dot-${escapeHtml(t.entity_code)}" class="${
-                    pendingInTab > 0
-                        ? 'w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-1'
-                        : (entMappings.length > 0 ? 'w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1' : 'hidden')
-                }" title="${pendingInTab > 0 ? `${pendingInTab} review(s) pending` : 'All accounts mapped'}"></span>
+                <span id="step2-tab-dot-${escapeHtml(t.entity_code)}" class="${pendingInTab > 0
+                ? 'w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-1'
+                : (entMappings.length > 0 ? 'w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1' : 'hidden')
+            }" title="${pendingInTab > 0 ? `${pendingInTab} review(s) pending` : 'All accounts mapped'}"></span>
             </button>
         `;
     }).join("");
@@ -4148,9 +4146,9 @@ function renderStep2TableRows(tbody) {
             <tr>
                 <td colspan="7" class="p-8 text-center text-kpmg-muted text-xs">
                     ${getMappingsForEntity(currentEntityCode).length === 0
-                        ? `Accounts not yet standardized for ${escapeHtml(currentTab.entity_name)}. <button onclick="runCOAMappingNow()" class="ml-2 font-bold text-kpmg-blue hover:underline cursor-pointer">Click here to run mapping</button>.`
-                        : `No accounts matching filter "${escapeHtml(step2AccountSearchQuery)}".`
-                    }
+                ? `Accounts not yet standardized for ${escapeHtml(currentTab.entity_name)}. <button onclick="runCOAMappingNow()" class="ml-2 font-bold text-kpmg-blue hover:underline cursor-pointer">Click here to run mapping</button>.`
+                : `No accounts matching filter "${escapeHtml(step2AccountSearchQuery)}".`
+            }
                 </td>
             </tr>
         `;
@@ -4203,11 +4201,10 @@ function renderStep2TableRows(tbody) {
                 <td class="py-2 px-3 text-xs">
                     <button type="button"
                         onclick="openL0Dropdown(event, '${escapeHtml(entCode)}', '${escapeHtml(m.local_code)}')"
-                        class="step2-l0-btn w-full h-8 px-2.5 py-1 text-left text-xs font-medium rounded border ${
-                            isYellow
-                                ? 'border-amber-400 bg-amber-50 hover:bg-amber-100/90 text-amber-950 focus:ring-2 focus:ring-amber-400'
-                                : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-800 focus:ring-2 focus:ring-kpmg-blue'
-                        } flex items-center justify-between transition cursor-pointer shadow-2xs">
+                        class="step2-l0-btn w-full h-8 px-2.5 py-1 text-left text-xs font-medium rounded border ${isYellow
+                ? 'border-amber-400 bg-amber-50 hover:bg-amber-100/90 text-amber-950 focus:ring-2 focus:ring-amber-400'
+                : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-800 focus:ring-2 focus:ring-kpmg-blue'
+            } flex items-center justify-between transition cursor-pointer shadow-2xs">
                         <span class="step2-l0-label truncate font-mono font-semibold">${escapeHtml(currentL0Display)}</span>
                         <svg class="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -4232,7 +4229,7 @@ function renderStep2TableRows(tbody) {
                 <td class="text-center py-2.5 px-3 text-xs">
                     <div class="step2-status-container inline-flex items-center justify-center space-x-1.5">
                         ${isYellow
-                            ? `
+                ? `
                                 <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
                                     <svg class="w-3 h-3 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -4240,24 +4237,24 @@ function renderStep2TableRows(tbody) {
                                     <span>Review Required</span>
                                 </span>
                                 ${m.group_code && m.group_code !== '999999'
-                                    ? `<button type="button"
+                    ? `<button type="button"
                                           onclick="acceptTopCandidate('${escapeHtml(entCode)}', '${escapeHtml(m.local_code)}')"
                                           class="h-6 px-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold inline-flex items-center space-x-1 transition shadow-xs cursor-pointer btn-tactile"
                                           title="Accept default top match (${escapeHtml(m.group_code)})">
                                           <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
                                           <span>Accept</span>
                                        </button>`
-                                    : ''
-                                }
+                    : ''
+                }
                             `
-                            : `
+                : `
                                 <div class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200 shadow-2xs" title="Mapped & Approved">
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
                                     </svg>
                                 </div>
                             `
-                        }
+            }
                     </div>
                 </td>
             </tr>
@@ -4533,11 +4530,10 @@ function openCandidatePopover(event, entityCode, localCode) {
 
             return `
                 <div onclick="approveMappingItem('${escapeHtml(entityCode)}', '${escapeHtml(localCode)}', '${escapeHtml(c.group_account_code)}', '${escapeHtml(c.level_0_account || c.group_account_name)}', 'Auditor selected candidate option ${i + 1}'); document.getElementById('step2-candidate-popover').classList.add('hidden');"
-                    class="p-2.5 rounded-lg border transition cursor-pointer select-none ${
-                        isSelected
-                            ? 'bg-blue-50/70 border-kpmg-blue/40 shadow-xs'
-                            : 'bg-white border-slate-100 hover:bg-slate-50/90 hover:border-slate-300'
-                    }">
+                    class="p-2.5 rounded-lg border transition cursor-pointer select-none ${isSelected
+                    ? 'bg-blue-50/70 border-kpmg-blue/40 shadow-xs'
+                    : 'bg-white border-slate-100 hover:bg-slate-50/90 hover:border-slate-300'
+                }">
                     <div class="flex items-center justify-between mb-1">
                         <div class="flex items-center space-x-1.5 truncate">
                             <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Option ${i + 1}</span>
@@ -4552,9 +4548,9 @@ function openCandidatePopover(event, entityCode, localCode) {
                         ${escapeHtml(c.level_0_account || c.group_account_name)}
                     </div>
                     ${c.reasoning
-                        ? `<p class="text-[11px] text-slate-500 italic line-clamp-2 leading-tight">${escapeHtml(c.reasoning)}</p>`
-                        : ''
-                    }
+                    ? `<p class="text-[11px] text-slate-500 italic line-clamp-2 leading-tight">${escapeHtml(c.reasoning)}</p>`
+                    : ''
+                }
                 </div>
             `;
         }).join("");
@@ -4686,7 +4682,7 @@ function renderL0PopoverContent(query, entityCode, localCode) {
         </div>
         <div class="max-h-56 overflow-y-auto p-1 space-y-0.5">
             ${filtered.length > 0
-                ? filtered.map(c => `
+            ? filtered.map(c => `
                     <div onclick="selectL0Option('${escapeHtml(c.account_code)}', '${escapeHtml(c.level_0_account || c.account_name)}')"
                         class="px-2.5 py-1.5 rounded hover:bg-kpmg-blue hover:text-white cursor-pointer transition flex items-center justify-between group">
                         <div class="flex items-center space-x-2 truncate">
@@ -4695,8 +4691,8 @@ function renderL0PopoverContent(query, entityCode, localCode) {
                         </div>
                     </div>
                 `).join("")
-                : `<div class="p-4 text-center text-slate-400 text-xs">No Level 0 accounts found matching "${escapeHtml(query)}".</div>`
-            }
+            : `<div class="p-4 text-center text-slate-400 text-xs">No Level 0 accounts found matching "${escapeHtml(query)}".</div>`
+        }
         </div>
     `;
 }
@@ -4916,15 +4912,13 @@ function renderStep3(el) {
         return `
             <button type="button"
                 onclick="switchStep3EntityTab('${escapeHtml(t.entity_code)}')"
-                class="px-4 py-2 text-xs font-semibold rounded-t-lg transition flex items-center space-x-2 border-b-2 cursor-pointer ${
-                    isSel
-                        ? 'bg-kpmg-blue text-white border-kpmg-blue shadow-xs'
-                        : 'bg-white hover:bg-slate-50 text-slate-600 border-transparent hover:text-slate-900'
-                }">
+                class="px-4 py-2 text-xs font-semibold rounded-t-lg transition flex items-center space-x-2 border-b-2 cursor-pointer ${isSel
+                ? 'bg-kpmg-blue text-white border-kpmg-blue shadow-xs'
+                : 'bg-white hover:bg-slate-50 text-slate-600 border-transparent hover:text-slate-900'
+            }">
                 <span>${tabLabel}</span>
-                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono ${
-                    isSel ? 'bg-white/20 text-white font-bold' : 'bg-slate-100 text-slate-600 border border-slate-200'
-                }">${escapeHtml(curLabel)}</span>
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono ${isSel ? 'bg-white/20 text-white font-bold' : 'bg-slate-100 text-slate-600 border border-slate-200'
+            }">${escapeHtml(curLabel)}</span>
             </button>
         `;
     }).join("");
@@ -4978,15 +4972,15 @@ function renderStep3(el) {
                         <span>Currency Routing:</span>
                     </span>
                     ${isIdentity
-                        ? `<span class="px-2.5 py-1 rounded bg-slate-200/80 text-slate-800 font-mono text-xs font-bold border border-slate-300">
+            ? `<span class="px-2.5 py-1 rounded bg-slate-200/80 text-slate-800 font-mono text-xs font-bold border border-slate-300">
                                ${escapeHtml(srcCurr)} &mdash; Identity (1.0000)
                            </span>`
-                        : `<span class="px-2.5 py-1 rounded bg-blue-100 text-kpmg-navy font-mono text-xs font-bold border border-blue-300 flex items-center space-x-1">
+            : `<span class="px-2.5 py-1 rounded bg-blue-100 text-kpmg-navy font-mono text-xs font-bold border border-blue-300 flex items-center space-x-1">
                                <span>${escapeHtml(srcCurr)}</span>
                                <span>&rarr;</span>
                                <span>${escapeHtml(repCurr)}</span>
                            </span>`
-                    }
+        }
                     ${!isIdentity && tb && tb.rows && tb.rows.length > 0 ? `
                         <div class="hidden md:flex items-center space-x-2 text-[11px] text-slate-600 font-mono bg-white px-2.5 py-1 rounded border border-slate-200 shadow-2xs">
                             <span title="Assets & Liabilities converted at Closing Rate">Closing: <strong class="text-slate-800">${(tb.rows.find(r => r.rate_type === 'Closing') || {}).rate_applied || '—'}</strong></span>
@@ -5001,18 +4995,18 @@ function renderStep3(el) {
                 <div class="flex items-center space-x-3">
                     <!-- FCTR Plug Badge -->
                     ${hasFctrPlug
-                        ? `<div class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-xs font-semibold shadow-2xs" title="Foreign Currency Translation Reserve Plug automatically balancing the ledger">
+            ? `<div class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-xs font-semibold shadow-2xs" title="Foreign Currency Translation Reserve Plug automatically balancing the ledger">
                                <svg class="w-3.5 h-3.5 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                </svg>
                                <span>FCTR Reserve:</span>
                                <span class="font-mono font-bold">${formatNum(fctrAmt)}</span>
                            </div>`
-                        : `<div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 border border-slate-200 text-xs font-medium">
+            : `<div class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 border border-slate-200 text-xs font-medium">
                                <span>FCTR:</span>
                                <span class="font-mono">None (Identity)</span>
                            </div>`
-                    }
+        }
 
                     <!-- Net Translated Balance -->
                     <div class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-bold shadow-2xs">
@@ -5963,71 +5957,249 @@ function roundNum(n) {
 // ============================================================================
 // STEP 6: CONSOLIDATION (TRIAL BALANCE MATRIX)
 // ============================================================================
+let step6SearchQuery = "";
+let step6ActiveOnly = false;
+
+function onStep6Search(val) {
+    step6SearchQuery = val;
+    const el = document.getElementById("step-content");
+    if (!el) return;
+    renderStep6(el);
+    const inp = document.getElementById("step6-account-search");
+    if (inp) {
+        inp.focus();
+        inp.selectionStart = inp.selectionEnd = inp.value.length;
+    }
+}
+
+function clearStep6Search() {
+    step6SearchQuery = "";
+    const el = document.getElementById("step-content");
+    if (el) renderStep6(el);
+}
+
+function toggleStep6ActiveOnly() {
+    step6ActiveOnly = !step6ActiveOnly;
+    const el = document.getElementById("step-content");
+    if (el) renderStep6(el);
+}
+
 function renderStep6(el) {
     const ctb = pipelineData.consolidated_tb;
     if (!ctb || !ctb.rows) {
-        el.innerHTML = `<div class="p-8 text-center text-kpmg-muted">Consolidated Trial Balance will appear once the pipeline executes.</div>`;
+        el.innerHTML = `
+            <div class="p-12 text-center bg-white rounded border border-kpmg-border shadow-xs">
+                <svg class="w-12 h-12 text-kpmg-muted mx-auto mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                <h4 class="font-bold text-sm text-kpmg-navy mb-1">Consolidated Trial Balance Matrix Unavailable</h4>
+                <p class="text-xs text-kpmg-muted max-w-md mx-auto mb-4">Run the consolidation pipeline to view the consolidated matrix with individual entity eliminations.</p>
+                <button onclick="triggerRunPipeline()" class="h-8 px-4 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-xs font-semibold transition shadow-xs inline-flex items-center space-x-1.5 cursor-pointer">
+                    <svg class="w-3.5 h-3.5 text-[#ACEAFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path></svg>
+                    <span>Consolidate</span>
+                </button>
+            </div>
+        `;
         return;
     }
 
     const entCodes = ctb.entity_codes || [];
-    const showEntities = !collapseEntityColumns;
+    const parentCode = ctb.parent_entity_code || (appStatus && appStatus.perimeter_entities ? appStatus.perimeter_entities.find(e => e.is_parent)?.entity_code : null) || (entCodes.find(e => /parent|^p$|^c2$/i.test(e)) || entCodes[0] || '');
+    const subCodes = (ctb.subsidiary_codes && ctb.subsidiary_codes.length > 0)
+        ? ctb.subsidiary_codes
+        : entCodes.filter(e => e !== parentCode);
 
-    let entHeaders = showEntities
-        ? entCodes.map(e => `<th class="num-cell min-w-[100px]">${escapeHtml(e)}</th>`).join("")
-        : `<th class="num-cell text-slate-500 font-normal">Entities (${entCodes.length} collapsed)</th>`;
+    // Order of Standalone Entity Columns: Parent first, then Subsidiaries
+    const standaloneEnts = parentCode && entCodes.includes(parentCode)
+        ? [parentCode, ...subCodes]
+        : entCodes;
 
-    let rowsHtml = ctb.rows.map((r, i) => {
-        let entCells = showEntities
-            ? entCodes.map(e => `
-                <td class="num-cell py-2 px-3 text-xs font-mono formula-interactive" 
-                    onmouseenter="showFormula(event, '=SUMIFS(Translated_TB!$G:$G, Translated_TB!$A:$A, \\'${e}\\', Translated_TB!$B:$B, \\'${r.account_code}\\')', 'Direct Lineage: Translated_TB')"
-                    onmouseleave="hideFormula()">
-                    ${formatNum(r.entity_balances[e] || 0.0)}
-                </td>
-            `).join("")
-            : `<td class="num-cell py-2 px-3 text-xs font-mono text-slate-400">...</td>`;
+    // Order of Elimination Columns: Parent first, then each Subsidiary
+    const elimEnts = parentCode && entCodes.includes(parentCode)
+        ? [parentCode, ...subCodes]
+        : entCodes;
 
+    const allRows = ctb.rows || [];
+    let filteredRows = allRows;
+
+    if (step6ActiveOnly) {
+        filteredRows = filteredRows.filter(r => {
+            const hasEntBal = Object.values(r.entity_balances || {}).some(v => Math.abs(v) > 0.001);
+            const hasElim = Object.values(r.entity_eliminations || {}).some(v => Math.abs(v) > 0.001) || Math.abs(r.eliminations || 0) > 0.001;
+            const hasConso = Math.abs(r.consolidated_total || 0) > 0.001;
+            return hasEntBal || hasElim || hasConso;
+        });
+    }
+
+    const q = (step6SearchQuery || '').trim().toLowerCase();
+    if (q) {
+        filteredRows = filteredRows.filter(r =>
+            (r.account_code && r.account_code.toLowerCase().includes(q)) ||
+            (r.account_description && r.account_description.toLowerCase().includes(q))
+        );
+    }
+
+    // Compute column-level totals for footer
+    const colTotals = {
+        entities: {},
+        total_entities: 0.0,
+        eliminations: {},
+        total_eliminations: 0.0,
+        consolidated_total: 0.0
+    };
+    standaloneEnts.forEach(e => { colTotals.entities[e] = 0.0; });
+    elimEnts.forEach(e => { colTotals.eliminations[e] = 0.0; });
+
+    allRows.forEach(r => {
+        standaloneEnts.forEach(e => {
+            colTotals.entities[e] += (r.entity_balances && r.entity_balances[e]) || 0.0;
+        });
+        colTotals.total_entities += (r.total_entities || 0.0);
+        elimEnts.forEach(e => {
+            colTotals.eliminations[e] += (r.entity_eliminations && r.entity_eliminations[e]) || 0.0;
+        });
+        colTotals.total_eliminations += (r.eliminations || 0.0);
+        colTotals.consolidated_total += (r.consolidated_total || 0.0);
+    });
+
+    // Standalone Entity Headers
+    const entHeaders = standaloneEnts.map(e => {
+        const isParent = (e === parentCode);
         return `
-            <tr class="hover:bg-slate-50/70 border-b border-gray-100 transition">
-                <td class="font-mono text-xs py-2 px-3">${escapeHtml(r.account_code)}</td>
-                <td class="py-2 px-3 text-xs text-gray-800">${escapeHtml(r.account_description)}</td>
-                ${entCells}
-                <td class="num-cell py-2 px-3 text-xs font-mono font-bold formula-interactive"
-                    onmouseenter="showFormula(event, '=SUM(Entities Rollup)', 'Total Entities Rollup')"
-                    onmouseleave="hideFormula()">
-                    ${formatNum(r.total_entities)}
-                </td>
-                <td class="num-cell py-2 px-3 text-xs font-mono formula-interactive text-amber-700"
-                    onmouseenter="showFormula(event, '=Elimination Adjustment', 'Intercompany Eliminations')"
-                    onmouseleave="hideFormula()">
-                    ${formatNum(r.eliminations)}
-                </td>
-                <td class="num-cell py-2 px-3 text-xs font-mono font-bold text-kpmg-blue formula-interactive"
-                    onmouseenter="showFormula(event, '=Total_Entities + Eliminations', 'Consolidated Balance')"
-                    onmouseleave="hideFormula()">
-                    ${formatNum(r.consolidated_total)}
-                </td>
-            </tr>
+            <th class="num-cell min-w-[110px] px-3 py-2 bg-slate-100 border-r border-slate-200">
+                <div class="text-xs font-bold text-kpmg-navy truncate" title="${escapeHtml(e)}">${escapeHtml(e)}</div>
+                <div class="text-[9px] font-mono mt-0.5">
+                    ${isParent ? '<span class="px-1 py-0.2 rounded bg-blue-100 text-kpmg-blue font-bold text-[9px]">PARENT</span>' : '<span class="px-1 py-0.2 rounded bg-slate-200/70 text-slate-600 font-semibold text-[9px]">SUB</span>'}
+                </div>
+            </th>
         `;
     }).join("");
 
+    // Elimination Headers: 1 for parent, 1 each for subsidiaries
+    const elimHeaders = elimEnts.map(e => {
+        const isParent = (e === parentCode);
+        return `
+            <th class="num-cell min-w-[115px] px-3 py-2 bg-amber-50/70 border-r border-amber-200/70">
+                <div class="text-xs font-bold text-amber-950 truncate" title="${escapeHtml(e)} Elim">${escapeHtml(e)} Elim</div>
+                <div class="text-[9px] font-mono mt-0.5">
+                    ${isParent ? '<span class="px-1 py-0.2 rounded bg-amber-200/80 text-amber-900 font-bold text-[9px]">PARENT ELIM</span>' : '<span class="px-1 py-0.2 rounded bg-amber-100 text-amber-800 font-semibold text-[9px]">SUB ELIM</span>'}
+                </div>
+            </th>
+        `;
+    }).join("");
+
+    // Build Table Rows
+    const rowsHtml = filteredRows.length === 0
+        ? `
+            <tr>
+                <td colspan="${4 + standaloneEnts.length + elimEnts.length}" class="p-8 text-center text-slate-400 text-xs">
+                    No Level 0 accounts match search "${escapeHtml(step6SearchQuery)}".
+                    <button onclick="clearStep6Search()" class="ml-2 font-bold text-kpmg-blue hover:underline cursor-pointer">Clear Search</button>
+                </td>
+            </tr>
+        `
+        : filteredRows.map(r => {
+            // Standalone Entity Cells
+            const entCells = standaloneEnts.map(e => {
+                const val = (r.entity_balances && r.entity_balances[e] != null) ? r.entity_balances[e] : 0.0;
+                const isNonZero = Math.abs(val) > 0.001;
+                return `
+                    <td class="num-cell py-2 px-3 text-xs font-mono border-r border-slate-100 ${isNonZero ? 'text-slate-900 font-semibold' : 'text-slate-300 font-normal'} formula-interactive"
+                        onmouseenter="showFormula(event, '=SUMIFS(Translated_TB!$G:$G, Translated_TB!$A:$A, \\'${escapeHtml(e)}\\', Translated_TB!$B:$B, \\'${escapeHtml(r.account_code)}\\')', '${escapeHtml(e)} Standalone Translated Balance')"
+                        onmouseleave="hideFormula()">
+                        ${formatNum(val)}
+                    </td>
+                `;
+            }).join("");
+
+            // Elimination Cells: 1 for parent, 1 each for subsidiaries
+            const elimCells = elimEnts.map(e => {
+                const val = (r.entity_eliminations && r.entity_eliminations[e] != null) ? r.entity_eliminations[e] : 0.0;
+                const isNonZero = Math.abs(val) > 0.001;
+                const isParent = (e === parentCode);
+                const roleText = isParent ? "Parent" : "Subsidiary";
+                return `
+                    <td class="num-cell py-2 px-3 text-xs font-mono border-r border-amber-100 ${isNonZero ? 'text-amber-900 font-bold bg-amber-50/60' : 'text-slate-300 font-normal'} formula-interactive"
+                        onmouseenter="showFormula(event, '=IC Elimination Allocation for ${escapeHtml(e)} on account ${escapeHtml(r.account_code)}', 'Step 4 Elimination: ${escapeHtml(e)} (${roleText})')"
+                        onmouseleave="hideFormula()">
+                        ${formatNum(val)}
+                    </td>
+                `;
+            }).join("");
+
+            const totElim = (r.eliminations != null) ? r.eliminations : 0.0;
+            const hasTotElim = Math.abs(totElim) > 0.001;
+            const hasAdj = Math.abs(r.adjustments || 0.0) > 0.001;
+
+            return `
+                <tr class="hover:bg-slate-50/80 border-b border-gray-100 transition">
+                    <td class="font-mono font-bold text-xs py-2 px-3 text-kpmg-navy w-[110px] min-w-[110px] sticky left-0 z-10 bg-white shadow-[inset_-1px_0_0_var(--kpmg-border)]">
+                        ${escapeHtml(r.account_code)}
+                    </td>
+                    <td class="py-2 px-3 text-xs text-gray-800 min-w-[220px] max-w-[280px] truncate sticky left-[110px] z-10 bg-white shadow-[inset_-1px_0_0_var(--kpmg-border)]" title="${escapeHtml(r.account_description)}">
+                        ${escapeHtml(r.account_description)}
+                    </td>
+                    ${entCells}
+                    <td class="num-cell py-2 px-3 text-xs font-mono font-bold bg-blue-50/30 text-kpmg-navy border-l border-r border-slate-200 formula-interactive"
+                        onmouseenter="showFormula(event, '=SUM(${standaloneEnts.join(", ")})', 'Total Standalone Entities Rollup')"
+                        onmouseleave="hideFormula()">
+                        ${formatNum(r.total_entities)}
+                    </td>
+                    ${elimCells}
+                    <td class="num-cell py-2 px-3 text-xs font-mono font-bold border-l border-r border-amber-300 ${hasTotElim ? 'text-amber-950 bg-amber-100/50' : 'text-slate-300'} formula-interactive"
+                        onmouseenter="showFormula(event, '=${elimEnts.map(e => e + " Elim").join(" + ")}', 'Total Intercompany Eliminations (Sum of 1 Parent + ${subCodes.length} Sub Eliminations)')"
+                        onmouseleave="hideFormula()">
+                        ${formatNum(totElim)}
+                    </td>
+                    <td class="num-cell py-2 px-3 text-xs font-mono font-bold text-kpmg-blue bg-blue-50/20 formula-interactive"
+                        onmouseenter="showFormula(event, '=Total_Entities + Total_Eliminations${hasAdj ? ' + Adjustments' : ''}', 'Consolidated Final Balance')"
+                        onmouseleave="hideFormula()">
+                        ${formatNum(r.consolidated_total)}
+                    </td>
+                </tr>
+            `;
+        }).join("");
+
+    // Standalone entity footer cells
+    const entFooters = standaloneEnts.map(e => `
+        <td class="num-cell py-2.5 px-3 font-mono font-bold text-xs text-kpmg-navy border-r border-slate-200">
+            ${formatNum(colTotals.entities[e] || 0.0)}
+        </td>
+    `).join("");
+
+    // Elimination footer cells
+    const elimFooters = elimEnts.map(e => `
+        <td class="num-cell py-2.5 px-3 font-mono font-bold text-xs text-amber-900 border-r border-amber-200/70">
+            ${formatNum(colTotals.eliminations[e] || 0.0)}
+        </td>
+    `).join("");
+
     el.innerHTML = `
         <div class="space-y-4">
+            <!-- Header Section -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-kpmg-border pb-3">
                 <div>
-                    <h3 class="font-bold text-base text-kpmg-navy">Consolidated Trial Balance Matrix</h3>
-                    <p class="text-xs text-kpmg-muted">Hover over any figure to inspect active Excel formula lineage. Scaled for 1 to 1,000 entities.</p>
+                    <div class="flex items-center space-x-2">
+                        <h3 class="font-bold text-base text-kpmg-navy">Consolidated Trial Balance Matrix</h3>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-100 text-kpmg-blue border border-blue-200">
+                            ${allRows.length} Level 0 Accounts
+                        </span>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                            ${elimEnts.length + 1} Elimination Columns (1 Parent + ${subCodes.length} Subs + 1 Total)
+                        </span>
+                    </div>
+                    <p class="text-xs text-kpmg-muted mt-0.5">
+                        Complete Level 0 Chart of Accounts matrix with parent & subsidiary standalone balances, individual intercompany eliminations linked to Step 4, and audited consolidated totals.
+                    </p>
                 </div>
                 <div class="flex items-center space-x-2">
-                    ${entCodes.length > 4 ? `
-                        <button onclick="toggleEntityCollapse()" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition cursor-pointer">
-                            ${collapseEntityColumns ? 'Expand Entities (' + entCodes.length + ')' : 'Collapse Entities'}
-                        </button>
-                    ` : ''}
-                    <div class="text-xs font-mono px-3 py-1 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
-                        Consolidated Sum: ${formatNum(ctb.total_consolidated)} (0.00)
+                    <!-- Status Balanced Badge -->
+                    <div class="text-xs font-mono px-3 py-1 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 shadow-2xs flex items-center space-x-1.5" title="Strictly balanced to 0.00">
+                        <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                        <span>Consolidated Sum: ${formatNum(colTotals.consolidated_total)} (0.00)</span>
                     </div>
+
+                    <!-- Proceed to Step 7 Button -->
                     <button onclick="switchStep(7)"
                         class="h-7 px-3.5 rounded bg-kpmg-blue hover:bg-kpmg-navy text-white text-[11px] font-semibold transition flex items-center space-x-1.5 shadow-xs btn-tactile cursor-pointer"
                         title="Proceed to Financial Statements">
@@ -6038,19 +6210,108 @@ function renderStep6(el) {
                     </button>
                 </div>
             </div>
-            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-280px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
-                <table class="fin-table">
-                    <thead class="sticky top-0 bg-slate-100 z-10 shadow-xs">
-                        <tr>
-                            <th>Account Code</th>
-                            <th>Description</th>
+
+            <!-- Toolbar: Search Bar, Active Only Toggle, Count Badges -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/80 p-2.5 rounded-lg border border-slate-200 shadow-2xs">
+                <div class="flex items-center space-x-2 flex-1 max-w-md">
+                    <div class="relative w-full">
+                        <input type="text"
+                            id="step6-account-search"
+                            value="${escapeHtml(step6SearchQuery)}"
+                            oninput="onStep6Search(this.value)"
+                            placeholder="Search Level 0 accounts by code or description..."
+                            class="w-full h-8 pl-8 pr-7 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-kpmg-blue font-mono">
+                        <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        ${step6SearchQuery ? `
+                            <button onclick="clearStep6Search()" class="absolute right-2 top-2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer">×</button>
+                        ` : ''}
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-2 text-xs">
+                    <button onclick="toggleStep6ActiveOnly()"
+                        class="h-8 px-3 rounded text-xs font-semibold transition cursor-pointer select-none border ${step6ActiveOnly ? 'bg-kpmg-blue text-white border-kpmg-blue shadow-2xs' : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200'}">
+                        ${step6ActiveOnly ? '✓ Active Balances Only' : 'Show All L0 Accounts (' + allRows.length + ')'}
+                    </button>
+                    <span class="text-slate-500 font-mono text-[11px] px-2 py-1 bg-white rounded border border-slate-200">
+                        Showing <strong>${filteredRows.length}</strong> of <strong>${allRows.length}</strong> accounts
+                    </span>
+                </div>
+            </div>
+
+            <!-- Master Consolidated Table -->
+            <div class="overflow-x-auto min-h-[460px] max-h-[calc(100vh-290px)] border border-kpmg-border rounded-lg bg-white shadow-2xs">
+                <table class="fin-table min-w-full">
+                    <thead class="sticky top-0 z-20 shadow-xs">
+                        <!-- Top Multi-Header Row for Grouping -->
+                        <tr class="border-b border-slate-200 text-[10px] uppercase font-bold tracking-wider">
+                            <th colspan="2" class="text-left px-3 py-1.5 bg-slate-100 text-slate-600 sticky left-0 z-30 shadow-[inset_-1px_-1px_0_var(--kpmg-border)]">
+                                Chart of Accounts (Level 0)
+                            </th>
+                            <th colspan="${standaloneEnts.length}" class="text-center px-3 py-1.5 bg-blue-50/70 text-kpmg-navy border-r border-slate-200">
+                                Standalone Entity Balances (${escapeHtml(ctb.currency || 'INR')})
+                            </th>
+                            <th class="text-center px-3 py-1.5 bg-blue-100/70 text-kpmg-navy border-r border-slate-200">
+                                Rollup
+                            </th>
+                            <th colspan="${elimEnts.length}" class="text-center px-3 py-1.5 bg-amber-100/60 text-amber-950 border-r border-amber-300">
+                                Intercompany Eliminations (Linked to Step 4)
+                            </th>
+                            <th class="text-center px-3 py-1.5 bg-amber-200/70 text-amber-950 border-r border-slate-200">
+                                Total Elim
+                            </th>
+                            <th class="text-center px-3 py-1.5 bg-slate-900 text-[#ACEAFF]">
+                                Group Total
+                            </th>
+                        </tr>
+
+                        <!-- Sub-Header Row: Column Titles -->
+                        <tr class="bg-slate-100 border-b border-slate-200 text-xs">
+                            <th class="text-left px-3 py-2 text-xs font-bold text-kpmg-navy w-[110px] min-w-[110px] sticky left-0 z-30 bg-slate-100 shadow-[inset_-1px_-1px_0_var(--kpmg-border)]">
+                                Account Code
+                            </th>
+                            <th class="text-left px-3 py-2 text-xs font-bold text-kpmg-navy min-w-[220px] max-w-[280px] sticky left-[110px] z-30 bg-slate-100 shadow-[inset_-1px_-1px_0_var(--kpmg-border)]">
+                                Account Description
+                            </th>
                             ${entHeaders}
-                            <th class="num-cell">Total Entities</th>
-                            <th class="num-cell">Eliminations</th>
-                            <th class="num-cell">Consolidated Total</th>
+                            <th class="num-cell min-w-[120px] px-3 py-2 bg-blue-50/70 text-kpmg-navy font-bold border-l border-r border-slate-200">
+                                Total Entities
+                            </th>
+                            ${elimHeaders}
+                            <th class="num-cell min-w-[125px] px-3 py-2 bg-amber-100/80 text-amber-950 font-bold border-l border-r border-amber-300">
+                                Total Eliminations
+                            </th>
+                            <th class="num-cell min-w-[130px] px-3 py-2 bg-slate-900 text-[#ACEAFF] font-bold">
+                                Consolidated Total
+                            </th>
                         </tr>
                     </thead>
-                    <tbody>${rowsHtml}</tbody>
+                    <tbody class="divide-y divide-slate-100">
+                        ${rowsHtml}
+                    </tbody>
+                    <tfoot class="sticky bottom-0 z-20 bg-slate-100 border-t-2 border-kpmg-navy shadow-xs font-bold text-xs">
+                        <tr>
+                            <td class="py-2.5 px-3 font-mono font-bold text-kpmg-navy w-[110px] min-w-[110px] sticky left-0 z-30 bg-slate-100 shadow-[inset_-1px_0_0_var(--kpmg-border)]">
+                                TOTAL
+                            </td>
+                            <td class="py-2.5 px-3 font-bold text-kpmg-navy min-w-[220px] max-w-[280px] sticky left-[110px] z-30 bg-slate-100 shadow-[inset_-1px_0_0_var(--kpmg-border)]">
+                                Total Consolidated Balances
+                            </td>
+                            ${entFooters}
+                            <td class="num-cell py-2.5 px-3 font-mono font-bold bg-blue-100/60 text-kpmg-navy border-l border-r border-slate-200">
+                                ${formatNum(colTotals.total_entities)}
+                            </td>
+                            ${elimFooters}
+                            <td class="num-cell py-2.5 px-3 font-mono font-bold bg-amber-200/80 text-amber-950 border-l border-r border-amber-300">
+                                ${formatNum(colTotals.total_eliminations)}
+                            </td>
+                            <td class="num-cell py-2.5 px-3 font-mono font-bold bg-slate-900 text-[#ACEAFF]">
+                                ${formatNum(colTotals.consolidated_total)}
+                            </td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>

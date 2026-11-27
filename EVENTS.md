@@ -879,6 +879,37 @@ This document tracks all autonomous verification runs, edge-case hardening audit
   - Node.js syntax audit: `node -c "fs_conso/web/static/js/app.js"`: EXIT 0.
   - Live server verification on `http://127.0.0.1:8000`: HTTP 200 OK.
 
+---
+
+### Production Audit & Consolidation Page Architecture Milestone (2026-11-27)
+- **Consolidation Matrix Full Level 0 COA Mapping Integration (`fs_conso/core/aggregator.py`)**:
+  - Augmented `TBAggregator.aggregate` so that the Consolidated Trial Balance Matrix always displays all leaf Level 0 accounts from the Group Chart of Accounts (`coa.get_level_0_items()`), exactly matching the items presented in the mapping and goodwill selection dropdowns (e.g. all 174 accounts).
+  - Mapped amounts from translated trial balances are accurately populated per entity; unmapped or inactive accounts cleanly display 0.00 without breaking the strict 0.00 mathematical balance of the consolidation ledger.
+  - Explicitly attached `parent_entity_code` and `subsidiary_codes` to `ConsolidatedTrialBalance` for deterministic column layout resolution.
+
+- **Multi-Column Entity-by-Entity Intercompany Eliminations (`fs_conso/core/aggregator.py`, `fs_conso/excel/report_writer.py`, `fs_conso/web/static/js/app.js`)**:
+  - Replaced the single legacy elimination column with granular entity-level elimination columns linked directly to Step 4 elimination vouchers:
+    - 1 elimination column for the Parent company.
+    - 1 elimination column each for all Subsidiaries.
+    - 1 Total Elimination column summing all individual elimination columns.
+  - Scaling verification:
+    - 1 Parent + 3 Subsidiaries (Client 2) $\rightarrow$ 3 Sub Elim + 1 Parent Elim + 1 Total Elim = **5 Elimination Columns**.
+    - 1 Parent + 7 Subsidiaries $\rightarrow$ 7 Sub Elim + 1 Parent Elim + 1 Total Elim = **9 Elimination Columns**.
+  - Synchronized Excel deliverable report writer (`_resolve_column_layout` & `_write_consolidated_tb_sheet`) to output dynamic individual elimination columns with formula sum `=SUM(first_elim:last_elim)`.
+
+- **Frontend Institutional Matrix UX & Accessibility (`fs_conso/web/static/js/app.js`)**:
+  - Responsive multi-tiered sticky headers grouping `Chart of Accounts (Level 0)`, `Standalone Entity Balances`, `Total Entities`, `Intercompany Eliminations (Linked to Step 4)`, `Total Eliminations`, and `Consolidated Total`.
+  - Added live search bar with instant debounce filtering by GL code and account description.
+  - Added "Show All L0 Accounts" vs. "Active Balances Only" toggle button and count pill.
+  - Tabular monospace numbers with formula tooltips explaining direct lineage into Step 4 vouchers and translated TBs.
+  - Sticky footer displaying column-level totals, confirming strict 0.00 net balance across all columns.
+
+- **Verification & Test Coverage**:
+  - `tests/test_consolidation_matrix_l0_and_eliminations.py`: 3/3 tests PASSED (Full L0 population, Client 2 5-column eliminations, 7-subsidiary 9-column eliminations).
+  - Full project test suite: 110 tests (109 passed, 1 skipped, 0 failed - 100% pass rate).
+  - JavaScript syntax audit: `node -c "fs_conso/web/static/js/app.js"` passed with 0 errors.
+  - Live server verification: `http://127.0.0.1:8000/api/pipeline-data` responding with HTTP 200 OK.
+
 
 
 

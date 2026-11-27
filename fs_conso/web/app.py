@@ -1693,6 +1693,8 @@ async def get_pipeline_data():
             "period": st.consolidated_tb.period,
             "currency": st.consolidated_tb.currency,
             "entity_codes": st.consolidated_tb.entity_codes,
+            "parent_entity_code": getattr(st.consolidated_tb, "parent_entity_code", None) or (hierarchy.parent_code if 'hierarchy' in locals() and hierarchy else None),
+            "subsidiary_codes": getattr(st.consolidated_tb, "subsidiary_codes", []) or [e for e in st.consolidated_tb.entity_codes if e != (getattr(st.consolidated_tb, "parent_entity_code", None) or (hierarchy.parent_code if 'hierarchy' in locals() and hierarchy else None))],
             "total_consolidated": st.consolidated_tb.total_consolidated,
             "rows": [r.dict() for r in st.consolidated_tb.rows]
         } if st.consolidated_tb else None,
